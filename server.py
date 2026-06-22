@@ -1,10 +1,13 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import csv
+import io
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Dict, Any
@@ -17,15 +20,13 @@ import jwt as pyjwt
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# JWT config
 JWT_SECRET = os.environ.get('JWT_SECRET', 'naf-inspection-secret-change-in-prod')
 JWT_ALGORITHM = 'HS256'
-JWT_EXPIRE_HOURS = 24 * 30  # 30 days for field workers
+JWT_EXPIRE_HOURS = 24 * 30
 
 app = FastAPI(title="NAF Inspección 19 Puntos API")
 api_router = APIRouter(prefix="/api")
@@ -37,6 +38,7 @@ class UserRegister(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6)
     name: str
+    role: Optional[str] = "inspector"  # inspector | supervisor (only supervisors can register supervisors)
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -46,6 +48,8 @@ class UserPublic(BaseModel):
     id: str
     email: str
     name: str
+    role: str = "inspector"
+    active: bool = True
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -56,7 +60,7 @@ class TokenResponse(BaseModel):
 class InspectionPoint(BaseModel):
     number: int
     name: str
-    estado: str  # "bueno" | "malo" | "na"
+    estado: str
     comentarios: str = ""
 
 class InspectionCreate(BaseModel):
@@ -69,15 +73,16 @@ class InspectionCreate(BaseModel):
     points: List[InspectionPoint]
     actividad_sospechosa: str = ""
     inspector_nombre: str
-    inspector_firma: str = ""  # base64 png
+    inspector_firma: str = ""
     verificador_nombre: str = ""
-    verificador_firma: str = ""  # base64 png
+    verificador_firma: str = ""
     fecha_hora: Optional[str] = None
-    client_uuid: Optional[str] = None  # for offline dedup
+    client_uuid: Optional[str] = None
 
 class Inspection(BaseModel):
     id: str
     user_id: str
+    inspector_email: str = ""
     compania_transportista: str
     placas_unidad: str
     numero_trailer: str
@@ -92,7 +97,14 @@ class Inspection(BaseModel):
     verificador_firma: str
     fecha_hora: str
     created_at: str
-    status_general: str  # "bueno" | "malo"
+    status_general: str
+    approval_status: str = "pendiente"  # pendiente | aprobada | rechazada
+    approval_note: str = ""
+    approved_by_name: str = ""
+    approved_at: str = ""
+
+class ApprovalBody(BaseModel):
+    note: str = ""
 
 
 # ========== Helpers ==========
@@ -126,10 +138,20 @@ async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(securit
     user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
     if not user:
         raise HTTPException(status_code=401, detail="Usuario no encontrado")
+    if not user.get("active", True):
+        raise HTTPException(status_code=403, detail="Cuenta desactivada")
+    # Ensure backward compatibility
+    user.setdefault("role", "inspector")
+    user.setdefault("active", True)
+    return user
+
+async def require_supervisor(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    if user.get("role") != "supervisor":
+        raise HTTPException(status_code=403, detail="Solo supervisores pueden realizar esta acción")
     return user
 
 
-# ========== Routes ==========
+# ========== Auth Routes ==========
 @api_router.get("/")
 async def root():
     return {"message": "NAF Inspección API", "ok": True}
@@ -140,11 +162,18 @@ async def register(body: UserRegister):
     existing = await db.users.find_one({"email": body.email.lower()})
     if existing:
         raise HTTPException(status_code=400, detail="El correo ya está registrado")
+
+    # First user becomes supervisor automatically; subsequent default to inspector.
+    total_users = await db.users.count_documents({})
+    role = "supervisor" if total_users == 0 else "inspector"
+
     user_id = str(uuid.uuid4())
     user_doc = {
         "id": user_id,
         "email": body.email.lower(),
         "name": body.name,
+        "role": role,
+        "active": True,
         "password_hash": hash_password(body.password),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -152,7 +181,7 @@ async def register(body: UserRegister):
     token = create_token(user_id)
     return TokenResponse(
         access_token=token,
-        user=UserPublic(id=user_id, email=body.email.lower(), name=body.name),
+        user=UserPublic(id=user_id, email=body.email.lower(), name=body.name, role=role, active=True),
     )
 
 
@@ -161,28 +190,108 @@ async def login(body: UserLogin):
     user = await db.users.find_one({"email": body.email.lower()})
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+    if not user.get("active", True):
+        raise HTTPException(status_code=403, detail="Cuenta desactivada")
     token = create_token(user["id"])
     return TokenResponse(
         access_token=token,
-        user=UserPublic(id=user["id"], email=user["email"], name=user["name"]),
+        user=UserPublic(
+            id=user["id"], email=user["email"], name=user["name"],
+            role=user.get("role", "inspector"), active=user.get("active", True),
+        ),
     )
 
 
 @api_router.get("/auth/me", response_model=UserPublic)
 async def me(current_user: Dict[str, Any] = Depends(get_current_user)):
-    return UserPublic(id=current_user["id"], email=current_user["email"], name=current_user["name"])
+    return UserPublic(
+        id=current_user["id"], email=current_user["email"], name=current_user["name"],
+        role=current_user.get("role", "inspector"), active=current_user.get("active", True),
+    )
+
+
+# ========== User Management (supervisor) ==========
+@api_router.get("/users", response_model=List[UserPublic])
+async def list_users(current_user: Dict[str, Any] = Depends(require_supervisor)):
+    docs = await db.users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(1000)
+    return [
+        UserPublic(
+            id=d["id"], email=d["email"], name=d["name"],
+            role=d.get("role", "inspector"), active=d.get("active", True),
+        )
+        for d in docs
+    ]
+
+
+@api_router.post("/users/{user_id}/toggle-active", response_model=UserPublic)
+async def toggle_user_active(user_id: str, current_user: Dict[str, Any] = Depends(require_supervisor)):
+    if user_id == current_user["id"]:
+        raise HTTPException(status_code=400, detail="No puedes desactivar tu propia cuenta")
+    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    new_active = not user.get("active", True)
+    await db.users.update_one({"id": user_id}, {"$set": {"active": new_active}})
+    return UserPublic(
+        id=user["id"], email=user["email"], name=user["name"],
+        role=user.get("role", "inspector"), active=new_active,
+    )
+
+
+@api_router.post("/users/create-inspector", response_model=UserPublic)
+async def create_inspector(body: UserRegister, current_user: Dict[str, Any] = Depends(require_supervisor)):
+    existing = await db.users.find_one({"email": body.email.lower()})
+    if existing:
+        raise HTTPException(status_code=400, detail="El correo ya está registrado")
+    user_id = str(uuid.uuid4())
+    role = body.role if body.role in ("inspector", "supervisor") else "inspector"
+    doc = {
+        "id": user_id, "email": body.email.lower(), "name": body.name,
+        "role": role, "active": True,
+        "password_hash": hash_password(body.password),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.users.insert_one(doc)
+    return UserPublic(id=user_id, email=doc["email"], name=doc["name"], role=role, active=True)
+
+
+# ========== Inspections ==========
+def _serialize_inspection(doc: Dict[str, Any]) -> Inspection:
+    return Inspection(
+        id=doc["id"],
+        user_id=doc["user_id"],
+        inspector_email=doc.get("inspector_email", ""),
+        compania_transportista=doc["compania_transportista"],
+        placas_unidad=doc["placas_unidad"],
+        numero_trailer=doc["numero_trailer"],
+        numero_precinto=doc["numero_precinto"],
+        sello_alta_seguridad=doc["sello_alta_seguridad"],
+        sello_verificado=doc.get("sello_verificado", False),
+        points=[InspectionPoint(**p) for p in doc.get("points", [])],
+        actividad_sospechosa=doc.get("actividad_sospechosa", ""),
+        inspector_nombre=doc.get("inspector_nombre", ""),
+        inspector_firma=doc.get("inspector_firma", ""),
+        verificador_nombre=doc.get("verificador_nombre", ""),
+        verificador_firma=doc.get("verificador_firma", ""),
+        fecha_hora=doc.get("fecha_hora", ""),
+        created_at=doc.get("created_at", ""),
+        status_general=doc.get("status_general", "bueno"),
+        approval_status=doc.get("approval_status", "pendiente"),
+        approval_note=doc.get("approval_note", ""),
+        approved_by_name=doc.get("approved_by_name", ""),
+        approved_at=doc.get("approved_at", ""),
+    )
 
 
 @api_router.post("/inspections", response_model=Inspection)
 async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any] = Depends(get_current_user)):
-    # Offline dedup: if client_uuid already exists for this user, return existing
     if body.client_uuid:
         existing = await db.inspections.find_one(
             {"user_id": current_user["id"], "client_uuid": body.client_uuid},
             {"_id": 0}
         )
         if existing:
-            return Inspection(**{k: v for k, v in existing.items() if k != "client_uuid"})
+            return _serialize_inspection(existing)
 
     insp_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -192,6 +301,7 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
     doc = {
         "id": insp_id,
         "user_id": current_user["id"],
+        "inspector_email": current_user["email"],
         "compania_transportista": body.compania_transportista,
         "placas_unidad": body.placas_unidad,
         "numero_trailer": body.numero_trailer,
@@ -207,30 +317,139 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
         "fecha_hora": fecha_hora,
         "created_at": now,
         "status_general": status_general,
+        "approval_status": "pendiente",
+        "approval_note": "",
+        "approved_by_name": "",
+        "approved_at": "",
         "client_uuid": body.client_uuid,
     }
     await db.inspections.insert_one(doc)
-    return Inspection(**{k: v for k, v in doc.items() if k != "client_uuid" and k != "_id"})
+    return _serialize_inspection(doc)
 
 
 @api_router.get("/inspections", response_model=List[Inspection])
-async def list_inspections(current_user: Dict[str, Any] = Depends(get_current_user)):
-    docs = await db.inspections.find(
-        {"user_id": current_user["id"]},
-        {"_id": 0, "client_uuid": 0}
-    ).sort("created_at", -1).to_list(1000)
-    return [Inspection(**d) for d in docs]
+async def list_inspections(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    scope: str = Query("mine", description="mine | all (all requires supervisor)"),
+    inspector_id: Optional[str] = None,
+):
+    filt: Dict[str, Any] = {}
+    if scope == "all":
+        if current_user.get("role") != "supervisor":
+            raise HTTPException(status_code=403, detail="Solo supervisores pueden ver todas las inspecciones")
+        if inspector_id:
+            filt["user_id"] = inspector_id
+    else:
+        filt["user_id"] = current_user["id"]
+
+    docs = await db.inspections.find(filt, {"_id": 0, "client_uuid": 0}).sort("created_at", -1).to_list(2000)
+    return [_serialize_inspection(d) for d in docs]
+
+
+@api_router.get("/inspections/export")
+async def export_csv(
+    mode: str = Query("summary", description="summary | detailed"),
+    scope: str = Query("mine", description="mine | all"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    filt: Dict[str, Any] = {}
+    if scope == "all":
+        if current_user.get("role") != "supervisor":
+            raise HTTPException(status_code=403, detail="Solo supervisores")
+    else:
+        filt["user_id"] = current_user["id"]
+
+    docs = await db.inspections.find(filt, {"_id": 0, "client_uuid": 0}).sort("created_at", -1).to_list(5000)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+
+    if mode == "detailed":
+        writer.writerow([
+            "ID Inspeccion", "Fecha", "Inspector", "Compania", "Placas", "Trailer", "Precinto",
+            "Punto #", "Punto", "Estado", "Comentarios", "Estado General", "Aprobacion"
+        ])
+        for d in docs:
+            for p in d.get("points", []):
+                writer.writerow([
+                    d["id"], d.get("fecha_hora", ""), d.get("inspector_nombre", ""),
+                    d.get("compania_transportista", ""), d.get("placas_unidad", ""),
+                    d.get("numero_trailer", ""), d.get("numero_precinto", ""),
+                    p.get("number"), p.get("name"), p.get("estado"), p.get("comentarios", ""),
+                    d.get("status_general", ""), d.get("approval_status", "pendiente"),
+                ])
+    else:
+        writer.writerow([
+            "ID Inspeccion", "Fecha", "Inspector", "Compania", "Placas", "Trailer",
+            "Precinto", "Sello Alta Seg", "Sello Verificado",
+            "Estado General", "Fallas", "Aprobacion", "Aprobado Por", "Actividad Sospechosa"
+        ])
+        for d in docs:
+            fallas = sum(1 for p in d.get("points", []) if p.get("estado") == "malo")
+            writer.writerow([
+                d["id"], d.get("fecha_hora", ""), d.get("inspector_nombre", ""),
+                d.get("compania_transportista", ""), d.get("placas_unidad", ""),
+                d.get("numero_trailer", ""), d.get("numero_precinto", ""),
+                d.get("sello_alta_seguridad", ""), "SI" if d.get("sello_verificado") else "NO",
+                d.get("status_general", ""), fallas,
+                d.get("approval_status", "pendiente"), d.get("approved_by_name", ""),
+                d.get("actividad_sospechosa", "").replace("\n", " "),
+            ])
+
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="naf_inspecciones_{mode}.csv"'},
+    )
 
 
 @api_router.get("/inspections/{inspection_id}", response_model=Inspection)
 async def get_inspection(inspection_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
-    doc = await db.inspections.find_one(
-        {"id": inspection_id, "user_id": current_user["id"]},
-        {"_id": 0, "client_uuid": 0}
-    )
+    filt: Dict[str, Any] = {"id": inspection_id}
+    if current_user.get("role") != "supervisor":
+        filt["user_id"] = current_user["id"]
+    doc = await db.inspections.find_one(filt, {"_id": 0, "client_uuid": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Inspección no encontrada")
-    return Inspection(**doc)
+    return _serialize_inspection(doc)
+
+
+@api_router.post("/inspections/{inspection_id}/approve", response_model=Inspection)
+async def approve_inspection(
+    inspection_id: str, body: ApprovalBody,
+    current_user: Dict[str, Any] = Depends(require_supervisor),
+):
+    doc = await db.inspections.find_one({"id": inspection_id}, {"_id": 0, "client_uuid": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Inspección no encontrada")
+    update = {
+        "approval_status": "aprobada",
+        "approval_note": body.note,
+        "approved_by_name": current_user["name"],
+        "approved_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.inspections.update_one({"id": inspection_id}, {"$set": update})
+    doc.update(update)
+    return _serialize_inspection(doc)
+
+
+@api_router.post("/inspections/{inspection_id}/reject", response_model=Inspection)
+async def reject_inspection(
+    inspection_id: str, body: ApprovalBody,
+    current_user: Dict[str, Any] = Depends(require_supervisor),
+):
+    doc = await db.inspections.find_one({"id": inspection_id}, {"_id": 0, "client_uuid": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Inspección no encontrada")
+    update = {
+        "approval_status": "rechazada",
+        "approval_note": body.note,
+        "approved_by_name": current_user["name"],
+        "approved_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.inspections.update_one({"id": inspection_id}, {"$set": update})
+    doc.update(update)
+    return _serialize_inspection(doc)
 
 
 app.include_router(api_router)
