@@ -13,6 +13,7 @@ export interface InspectionPoint {
   name: string;
   estado: string;
   comentarios: string;
+  photo?: string;
 }
 
 export interface InspectionPayload {

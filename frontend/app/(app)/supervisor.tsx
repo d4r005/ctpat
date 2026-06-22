@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Pressable, TextInput, RefreshControl, Platform,
   useWindowDimensions, Linking,
@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useInspections } from '@/src/context/InspectionContext';
@@ -24,6 +25,36 @@ export default function Supervisor() {
   const [dateTo, setDateTo] = useState('');
   const { width } = useWindowDimensions();
   const isWide = width >= 900;
+
+  // Restore last filter preset
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem('naf_supervisor_filter');
+        if (raw) {
+          const f = JSON.parse(raw);
+          if (f.query) setQuery(f.query);
+          if (f.filter) setFilter(f.filter);
+          if (f.dateFrom) setDateFrom(f.dateFrom);
+          if (f.dateTo) setDateTo(f.dateTo);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  // Persist on change
+  useEffect(() => {
+    AsyncStorage.setItem('naf_supervisor_filter', JSON.stringify({ query, filter, dateFrom, dateTo }));
+  }, [query, filter, dateFrom, dateTo]);
+
+  const applyDatePreset = (days: number) => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(to.getDate() - days);
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    setDateFrom(fmt(from));
+    setDateTo(fmt(to));
+  };
 
   const filtered = useMemo(() => {
     return allInspections.filter((i) => {
@@ -141,6 +172,18 @@ export default function Supervisor() {
           )}
         </View>
 
+        <View style={styles.presetRowSup}>
+          <Pressable testID="supervisor-preset-7" style={styles.presetChipSup} onPress={() => applyDatePreset(7)}>
+            <Text style={styles.presetTextSup}>7D</Text>
+          </Pressable>
+          <Pressable testID="supervisor-preset-30" style={styles.presetChipSup} onPress={() => applyDatePreset(30)}>
+            <Text style={styles.presetTextSup}>30D</Text>
+          </Pressable>
+          <Pressable testID="supervisor-preset-90" style={styles.presetChipSup} onPress={() => applyDatePreset(90)}>
+            <Text style={styles.presetTextSup}>90D</Text>
+          </Pressable>
+        </View>
+
         <View style={styles.searchBox}>
           <Ionicons name="search" size={18} color={colors.muted} />
           <TextInput
@@ -230,6 +273,9 @@ const styles = StyleSheet.create({
   dateLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, letterSpacing: 1, marginBottom: 4 },
   dateInput: { borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.sm, backgroundColor: colors.surface, color: colors.onSurface, height: 40 },
   clearBtn: { backgroundColor: colors.error, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  presetRowSup: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  presetChipSup: { borderWidth: 2, borderColor: colors.borderStrong, backgroundColor: colors.surface, paddingHorizontal: spacing.md, paddingVertical: 6, flexShrink: 0 },
+  presetTextSup: { fontWeight: '900', fontSize: 11, color: colors.onSurface, letterSpacing: 1 },
   exportBtn: {
     backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
     flexDirection: 'row', alignItems: 'center', gap: 6,

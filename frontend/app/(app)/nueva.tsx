@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import Signature from 'react-native-signature-canvas';
 import { useInspections, InspectionPoint } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
@@ -32,8 +33,28 @@ export default function Nueva() {
 
   // 19 points
   const [points, setPoints] = useState<InspectionPoint[]>(
-    INSPECTION_POINTS.map((p) => ({ number: p.number, name: p.name, estado: '', comentarios: '' }))
+    INSPECTION_POINTS.map((p) => ({ number: p.number, name: p.name, estado: '', comentarios: '', photo: '' }))
   );
+
+  const pickPhoto = async (idx: number, fromCamera: boolean) => {
+    try {
+      if (fromCamera) {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
+        const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true, allowsEditing: false });
+        if (!r.canceled && r.assets[0]?.base64) {
+          updatePoint(idx, { photo: `data:image/jpeg;base64,${r.assets[0].base64}` });
+        }
+      } else {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) { alert('Se necesita acceso a la galería'); return; }
+        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.5, base64: true, allowsEditing: false });
+        if (!r.canceled && r.assets[0]?.base64) {
+          updatePoint(idx, { photo: `data:image/jpeg;base64,${r.assets[0].base64}` });
+        }
+      }
+    } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
+  };
 
   // Suspicious + signatures
   const [actSospechosa, setActSospechosa] = useState('');
@@ -157,15 +178,38 @@ export default function Nueva() {
                     </Pressable>
                   </View>
                   {p.estado === 'malo' && (
-                    <TextInput
-                      testID={`nueva-point-${p.number}-comentarios`}
-                      style={styles.commentInput}
-                      value={p.comentarios}
-                      onChangeText={(t) => updatePoint(idx, { comentarios: t })}
-                      placeholder="Describir falla, daño o observación..."
-                      placeholderTextColor={colors.muted}
-                      multiline
-                    />
+                    <>
+                      <TextInput
+                        testID={`nueva-point-${p.number}-comentarios`}
+                        style={styles.commentInput}
+                        value={p.comentarios}
+                        onChangeText={(t) => updatePoint(idx, { comentarios: t })}
+                        placeholder="Describir falla, daño o observación..."
+                        placeholderTextColor={colors.muted}
+                        multiline
+                      />
+                      <View style={styles.photoRow}>
+                        {p.photo ? (
+                          <View style={styles.photoPreviewWrap}>
+                            <Image source={{ uri: p.photo }} style={styles.photoPreview} />
+                            <Pressable testID={`nueva-point-${p.number}-remove-photo`} style={styles.photoRemove} onPress={() => updatePoint(idx, { photo: '' })}>
+                              <Ionicons name="close-circle" size={24} color={colors.error} />
+                            </Pressable>
+                          </View>
+                        ) : (
+                          <>
+                            <Pressable testID={`nueva-point-${p.number}-camera`} style={styles.photoBtn} onPress={() => pickPhoto(idx, true)}>
+                              <Ionicons name="camera" size={20} color={colors.onBrandPrimary} />
+                              <Text style={styles.photoBtnText}>FOTO</Text>
+                            </Pressable>
+                            <Pressable testID={`nueva-point-${p.number}-gallery`} style={[styles.photoBtn, { backgroundColor: colors.brandSecondary }]} onPress={() => pickPhoto(idx, false)}>
+                              <Ionicons name="images" size={20} color={colors.onBrandSecondary} />
+                              <Text style={[styles.photoBtnText, { color: colors.onBrandSecondary }]}>GALERÍA</Text>
+                            </Pressable>
+                          </>
+                        )}
+                      </View>
+                    </>
                   )}
                 </View>
               ))}
@@ -375,6 +419,12 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: colors.error, padding: spacing.sm, marginTop: spacing.sm,
     minHeight: 80, textAlignVertical: 'top', color: colors.onSurface, backgroundColor: '#FEF2F2',
   },
+  photoRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  photoBtn: { flex: 1, backgroundColor: colors.brandPrimary, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44 },
+  photoBtnText: { color: colors.onBrandPrimary, fontWeight: '900', fontSize: 11, letterSpacing: 1 },
+  photoPreviewWrap: { position: 'relative', width: '100%' },
+  photoPreview: { width: '100%', height: 180, backgroundColor: '#000', resizeMode: 'cover', borderWidth: 2, borderColor: colors.error },
+  photoRemove: { position: 'absolute', top: 8, right: 8, backgroundColor: '#FFF', borderRadius: 16 },
   signatureBox: {
     borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.lg,
     backgroundColor: colors.surfaceSecondary, alignItems: 'center', marginTop: spacing.sm, minHeight: 72, justifyContent: 'center',

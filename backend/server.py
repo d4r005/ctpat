@@ -62,6 +62,7 @@ class InspectionPoint(BaseModel):
     name: str
     estado: str
     comentarios: str = ""
+    photo: str = ""  # base64 data url, optional
 
 class InspectionCreate(BaseModel):
     compania_transportista: str

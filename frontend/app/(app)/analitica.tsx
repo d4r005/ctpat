@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TextInput, Pressable, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TextInput, Pressable, RefreshControl, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -38,6 +40,46 @@ export default function Analitica() {
   };
 
   useEffect(() => { if (user?.role === 'supervisor') load(); }, [token]);
+
+  const applyPreset = (days: number) => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(to.getDate() - days);
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    setDateFrom(fmt(from));
+    setDateTo(fmt(to));
+    setTimeout(load, 50);
+  };
+
+  const exportPdf = async () => {
+    if (!data) return;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head>
+<body style="font-family:Arial,sans-serif;padding:20px;color:#09090B;">
+<h1 style="text-align:center;border-bottom:3px solid #0A2540;padding-bottom:10px;">REPORTE DE ANALÍTICA NAF</h1>
+<p style="text-align:center;color:#666;font-size:11px;">Generado: ${new Date().toLocaleString('es-MX')}${dateFrom || dateTo ? ` · Periodo: ${dateFrom || '...'} → ${dateTo || '...'}` : ''}</p>
+<table style="width:100%;border-collapse:collapse;margin:20px 0;">
+  <tr><td style="padding:10px;border:1px solid #999;background:#F4F4F5;width:50%;"><b>Total inspecciones</b></td><td style="padding:10px;border:1px solid #999;font-size:24px;font-weight:bold;">${data.total}</td></tr>
+  <tr><td style="padding:10px;border:1px solid #999;background:#F4F4F5;"><b>% de aprobación</b></td><td style="padding:10px;border:1px solid #999;font-size:24px;font-weight:bold;color:#16A34A;">${data.approval_rate_pct}%</td></tr>
+  <tr><td style="padding:10px;border:1px solid #999;background:#F4F4F5;"><b>Pendientes</b></td><td style="padding:10px;border:1px solid #999;font-size:18px;color:#F59E0B;">${data.approval_breakdown.pendiente}</td></tr>
+  <tr><td style="padding:10px;border:1px solid #999;background:#F4F4F5;"><b>Con fallas</b></td><td style="padding:10px;border:1px solid #999;font-size:18px;color:#DC2626;">${data.status_breakdown.malo}</td></tr>
+</table>
+<h2 style="background:#0A2540;color:#fff;padding:8px;">Inspecciones por inspector</h2>
+<table style="width:100%;border-collapse:collapse;">
+<tr style="background:#E4E4E7;font-weight:bold;"><td style="padding:8px;border:1px solid #999;">Inspector</td><td style="padding:8px;border:1px solid #999;">Total</td><td style="padding:8px;border:1px solid #999;">Aprob.</td><td style="padding:8px;border:1px solid #999;">Rech.</td><td style="padding:8px;border:1px solid #999;">Fallas</td></tr>
+${data.by_inspector.map((i) => `<tr><td style="padding:8px;border:1px solid #999;">${i.name}</td><td style="padding:8px;border:1px solid #999;font-weight:bold;">${i.total}</td><td style="padding:8px;border:1px solid #999;color:#16A34A;">${i.aprobadas}</td><td style="padding:8px;border:1px solid #999;color:#DC2626;">${i.rechazadas}</td><td style="padding:8px;border:1px solid #999;">${i.fallas}</td></tr>`).join('')}
+</table>
+<h2 style="background:#0A2540;color:#fff;padding:8px;margin-top:20px;">Top 10 puntos con más fallas</h2>
+<table style="width:100%;border-collapse:collapse;">
+${data.top_failed_points.length ? data.top_failed_points.map((p) => `<tr><td style="padding:8px;border:1px solid #999;">${p.name}</td><td style="padding:8px;border:1px solid #999;font-weight:bold;color:#DC2626;text-align:right;">${p.count}</td></tr>`).join('') : '<tr><td style="padding:8px;border:1px solid #999;color:#666;font-style:italic;">Sin fallas registradas</td></tr>'}
+</table>
+</body></html>`;
+    try {
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Reporte Analítica NAF' });
+      }
+    } catch (e: any) { alert(e.message); }
+  };
 
   if (user?.role !== 'supervisor') {
     return (
@@ -78,6 +120,27 @@ export default function Analitica() {
             <Ionicons name="filter" size={16} color={colors.onBrandPrimary} />
             <Text style={styles.applyBtnText}>APLICAR</Text>
           </Pressable>
+        </View>
+
+        <View style={styles.presetRow}>
+          <Pressable testID="analitica-preset-7" style={styles.presetChip} onPress={() => applyPreset(7)}>
+            <Text style={styles.presetText}>7 DÍAS</Text>
+          </Pressable>
+          <Pressable testID="analitica-preset-30" style={styles.presetChip} onPress={() => applyPreset(30)}>
+            <Text style={styles.presetText}>30 DÍAS</Text>
+          </Pressable>
+          <Pressable testID="analitica-preset-90" style={styles.presetChip} onPress={() => applyPreset(90)}>
+            <Text style={styles.presetText}>90 DÍAS</Text>
+          </Pressable>
+          <Pressable testID="analitica-preset-clear" style={[styles.presetChip, { backgroundColor: colors.error }]} onPress={() => { setDateFrom(''); setDateTo(''); setTimeout(load, 50); }}>
+            <Text style={[styles.presetText, { color: colors.onError }]}>LIMPIAR</Text>
+          </Pressable>
+          {data && (
+            <Pressable testID="analitica-pdf-btn" style={[styles.presetChip, { backgroundColor: colors.brandSecondary, flex: 1 }]} onPress={exportPdf}>
+              <Ionicons name="document-text" size={14} color={colors.onBrandSecondary} />
+              <Text style={[styles.presetText, { color: colors.onBrandSecondary, marginLeft: 4 }]}>PDF</Text>
+            </Pressable>
+          )}
         </View>
 
         {loading && !data ? (
@@ -169,6 +232,9 @@ const styles = StyleSheet.create({
   dateInput: { borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.sm, backgroundColor: colors.surfaceSecondary, color: colors.onSurface, height: 40 },
   applyBtn: { backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.md, height: 40, flexDirection: 'row', alignItems: 'center', gap: 6 },
   applyBtnText: { color: colors.onBrandPrimary, fontWeight: '900', fontSize: 11, letterSpacing: 1 },
+  presetRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg, flexWrap: 'wrap' },
+  presetChip: { borderWidth: 2, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary, paddingHorizontal: spacing.md, paddingVertical: 8, flexShrink: 0, flexDirection: 'row', alignItems: 'center' },
+  presetText: { fontWeight: '900', color: colors.onSurface, fontSize: 11, letterSpacing: 1 },
   kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
   kpi: { flexGrow: 1, flexBasis: '47%', borderWidth: 2, padding: spacing.md, backgroundColor: colors.surfaceSecondary, alignItems: 'center' },
   kpiValue: { fontSize: 28, fontWeight: '900' },

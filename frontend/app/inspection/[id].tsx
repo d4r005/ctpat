@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, Platform, TextInput } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, Platform, TextInput, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -68,7 +68,7 @@ export default function InspectionDetail() {
           <td style="padding:6px;border:1px solid #999;">${p.number}</td>
           <td style="padding:6px;border:1px solid #999;">${p.name}</td>
           <td style="padding:6px;border:1px solid #999;background:${p.estado === 'bueno' ? '#dcfce7' : p.estado === 'malo' ? '#fee2e2' : '#fff'};font-weight:bold;text-transform:uppercase;">${p.estado || 'N/A'}</td>
-          <td style="padding:6px;border:1px solid #999;">${p.comentarios || '-'}</td>
+          <td style="padding:6px;border:1px solid #999;">${p.comentarios || '-'}${p.photo ? `<br/><img src="${p.photo}" style="max-width:280px;max-height:180px;margin-top:6px;border:1px solid #999;" />` : ''}</td>
         </tr>`
       )
       .join('');
@@ -221,6 +221,9 @@ export default function InspectionDetail() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.pointName}>{p.name}</Text>
                 {p.comentarios ? <Text style={styles.pointComment}>{p.comentarios}</Text> : null}
+                {p.photo ? (
+                  <Image source={{ uri: p.photo }} style={styles.pointPhoto} testID={`detail-point-${p.number}-photo`} />
+                ) : null}
               </View>
               <View style={[styles.pointChip, { backgroundColor: p.estado === 'bueno' ? colors.success : p.estado === 'malo' ? colors.error : colors.muted }]}>
                 <Text style={styles.pointChipText}>{(p.estado || 'NA').toUpperCase()}</Text>
@@ -314,6 +317,7 @@ const styles = StyleSheet.create({
   pointNum: { width: 28, fontWeight: '900', color: colors.muted },
   pointName: { color: colors.onSurface, fontWeight: '700', fontSize: typography.sizes.sm },
   pointComment: { color: colors.error, fontSize: typography.sizes.sm, marginTop: 4 },
+  pointPhoto: { width: '100%', height: 180, marginTop: 8, borderWidth: 2, borderColor: colors.error, resizeMode: 'cover' },
   pointChip: { paddingHorizontal: spacing.sm, paddingVertical: 4, marginLeft: spacing.sm },
   pointChipText: { color: '#FFF', fontWeight: '900', fontSize: 10, letterSpacing: 1 },
   bodyText: { padding: spacing.md, color: colors.onSurface },
