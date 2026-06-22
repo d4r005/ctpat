@@ -1,15 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/src/context/AuthContext';
 import { useInspections } from '@/src/context/InspectionContext';
+import { useNotifications } from '@/src/context/NotificationsContext';
+import NotificationsPanel from '@/src/components/NotificationsPanel';
 import { colors, spacing, radius, typography } from '@/src/constants/theme';
 
 export default function Inicio() {
   const { user } = useAuth();
   const { inspections, isOnline, pendingCount, refresh, loading } = useInspections();
+  const { unreadCount } = useNotifications();
+  const [showNotifs, setShowNotifs] = useState(false);
   const router = useRouter();
 
   const today = new Date().toISOString().slice(0, 10);
@@ -37,8 +41,18 @@ export default function Inicio() {
         refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={colors.brandPrimary} />}
       >
         <View style={styles.header}>
-          <Text style={styles.hello}>Hola, {user?.name?.split(' ')[0] || 'Inspector'}</Text>
-          <Text style={styles.headerSub}>Inspección 19 Puntos NAF</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.hello}>Hola, {user?.name?.split(' ')[0] || 'Inspector'}</Text>
+            <Text style={styles.headerSub}>Inspección 19 Puntos NAF</Text>
+          </View>
+          <Pressable testID="inicio-bell-btn" style={styles.bellBtn} onPress={() => setShowNotifs(true)}>
+            <Ionicons name="notifications" size={24} color={colors.onSurface} />
+            {unreadCount > 0 && (
+              <View style={styles.badge} testID="inicio-bell-badge">
+                <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+              </View>
+            )}
+          </Pressable>
         </View>
 
         <View style={styles.statsRow}>
@@ -96,6 +110,8 @@ export default function Inicio() {
           ))
         )}
       </ScrollView>
+
+      <NotificationsPanel visible={showNotifs} onClose={() => setShowNotifs(false)} />
     </SafeAreaView>
   );
 }
@@ -113,7 +129,10 @@ const styles = StyleSheet.create({
   },
   pendingText: { color: colors.onInfo, fontWeight: '700', fontSize: 12 },
   container: { padding: spacing.lg, paddingBottom: spacing.xxxl },
-  header: { marginBottom: spacing.lg },
+  header: { marginBottom: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  bellBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary, position: 'relative' },
+  badge: { position: 'absolute', top: -6, right: -6, backgroundColor: colors.error, minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: colors.surface },
+  badgeText: { color: '#FFF', fontWeight: '900', fontSize: 11 },
   hello: { fontSize: typography.sizes.xxl, fontWeight: '900', color: colors.onSurface },
   headerSub: { fontSize: typography.sizes.base, color: colors.muted, marginTop: 2 },
   statsRow: {

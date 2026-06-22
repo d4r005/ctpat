@@ -71,7 +71,13 @@ export default function AppLayout() {
       <Tabs.Screen
         name="usuarios"
         options={{
-          href: null, // hidden from tabs, accessed via supervisor screen
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="analitica"
+        options={{
+          href: null,
         }}
       />
       <Tabs.Screen

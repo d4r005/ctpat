@@ -20,12 +20,16 @@ export default function Supervisor() {
   const { allInspections, refreshAll, loading, exportCsvUrl } = useInspections();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterApprov>('todos');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const { width } = useWindowDimensions();
   const isWide = width >= 900;
 
   const filtered = useMemo(() => {
     return allInspections.filter((i) => {
       if (filter !== 'todos' && (i.approval_status || 'pendiente') !== filter) return false;
+      if (dateFrom && i.created_at < dateFrom) return false;
+      if (dateTo && i.created_at > dateTo + 'T23:59:59') return false;
       if (!query.trim()) return true;
       const q = query.toLowerCase();
       return (
@@ -36,7 +40,7 @@ export default function Supervisor() {
         i.inspector_email?.toLowerCase().includes(q)
       );
     });
-  }, [allInspections, query, filter]);
+  }, [allInspections, query, filter, dateFrom, dateTo]);
 
   const stats = useMemo(() => ({
     total: allInspections.length,
@@ -46,7 +50,11 @@ export default function Supervisor() {
   }), [allInspections]);
 
   const downloadCsv = async (mode: 'summary' | 'detailed') => {
-    const url = exportCsvUrl(mode, 'all');
+    let url = exportCsvUrl(mode, 'all');
+    const params: string[] = [];
+    if (dateFrom) params.push(`date_from=${dateFrom}`);
+    if (dateTo) params.push(`date_to=${dateTo}`);
+    if (params.length) url += '&' + params.join('&');
     if (Platform.OS === 'web') {
       // Use fetch to attach Authorization header, then trigger download
       try {
@@ -107,10 +115,30 @@ export default function Supervisor() {
             <Ionicons name="download" size={16} color={colors.onBrandPrimary} />
             <Text style={styles.exportText}>CSV DETALLADO</Text>
           </Pressable>
+          <Pressable testID="supervisor-analitica-btn" style={[styles.exportBtn, { backgroundColor: colors.success }]} onPress={() => router.push('/(app)/analitica')}>
+            <Ionicons name="stats-chart" size={16} color={colors.onSuccess} />
+            <Text style={[styles.exportText, { color: colors.onSuccess }]}>ANALÍTICA</Text>
+          </Pressable>
           <Pressable testID="supervisor-users-btn" style={[styles.exportBtn, { backgroundColor: colors.brandSecondary }]} onPress={() => router.push('/(app)/usuarios')}>
             <Ionicons name="people" size={16} color={colors.onBrandSecondary} />
             <Text style={[styles.exportText, { color: colors.onBrandSecondary }]}>USUARIOS</Text>
           </Pressable>
+        </View>
+
+        <View style={styles.dateRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dateLabel}>DESDE</Text>
+            <TextInput testID="supervisor-date-from" style={styles.dateInput} value={dateFrom} onChangeText={setDateFrom} placeholder="YYYY-MM-DD" placeholderTextColor={colors.muted} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dateLabel}>HASTA</Text>
+            <TextInput testID="supervisor-date-to" style={styles.dateInput} value={dateTo} onChangeText={setDateTo} placeholder="YYYY-MM-DD" placeholderTextColor={colors.muted} />
+          </View>
+          {(dateFrom || dateTo) && (
+            <Pressable testID="supervisor-date-clear" style={styles.clearBtn} onPress={() => { setDateFrom(''); setDateTo(''); }}>
+              <Ionicons name="close" size={16} color={colors.onError} />
+            </Pressable>
+          )}
         </View>
 
         <View style={styles.searchBox}>
@@ -198,6 +226,10 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 22, fontWeight: '900', color: colors.onSurface },
   statLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, letterSpacing: 1, marginTop: 2 },
   exportRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, flexWrap: 'wrap' },
+  dateRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-end', marginBottom: spacing.md },
+  dateLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, letterSpacing: 1, marginBottom: 4 },
+  dateInput: { borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.sm, backgroundColor: colors.surface, color: colors.onSurface, height: 40 },
+  clearBtn: { backgroundColor: colors.error, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   exportBtn: {
     backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
     flexDirection: 'row', alignItems: 'center', gap: 6,
