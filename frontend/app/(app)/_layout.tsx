@@ -1,0 +1,71 @@
+import React, { useEffect } from 'react';
+import { Tabs, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@/src/context/AuthContext';
+import { colors } from '@/src/constants/theme';
+import { View, ActivityIndicator } from 'react-native';
+
+export default function AppLayout() {
+  const { token, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !token) router.replace('/login');
+  }, [token, loading, router]);
+
+  if (loading || !token) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surface }}>
+        <ActivityIndicator color={colors.brandPrimary} />
+      </View>
+    );
+  }
+
+  return (
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: colors.brandPrimary,
+        tabBarInactiveTintColor: colors.muted,
+        tabBarStyle: {
+          backgroundColor: colors.surfaceSecondary,
+          borderTopWidth: 2,
+          borderTopColor: colors.borderStrong,
+          height: 64,
+          paddingTop: 6,
+          paddingBottom: 8,
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
+      }}
+    >
+      <Tabs.Screen
+        name="inicio"
+        options={{
+          title: 'Inicio',
+          tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="historico"
+        options={{
+          title: 'Histórico',
+          tabBarIcon: ({ color, size }) => <Ionicons name="list" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="nueva"
+        options={{
+          title: 'Nueva',
+          tabBarIcon: ({ color, size }) => <Ionicons name="add-circle" size={size + 4} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="perfil"
+        options={{
+          title: 'Perfil',
+          tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
+        }}
+      />
+    </Tabs>
+  );
+}
