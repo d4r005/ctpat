@@ -108,6 +108,65 @@ class ApprovalBody(BaseModel):
     note: str = ""
 
 
+# ========== Vehicle Record (Caseta) ==========
+class EscoltaInfo(BaseModel):
+    presente: bool = False
+    compania: str = ""
+    unidad: str = ""
+    placas: str = ""
+
+class VehicleEntry(BaseModel):
+    sucursal: str = ""
+    direccion: str = ""
+    licencia_conductor: str = ""
+    placas_unidad: str
+    chofer_nombre: str
+    compania_transporte: str = ""
+    numero_tractor: str = ""
+    compania_caja: str = ""
+    numero_caja: str = ""  # trailer #
+    sello_entrada: str = ""
+    escolta: EscoltaInfo = EscoltaInfo()
+    cortina_asignada: str = ""
+    guardia_caseta_nombre: str
+    condicion_carga: str = ""  # vacia | consolidada | otra | descarga
+    descripcion_carga: str = ""
+    numero_guia: str = ""
+    numero_requerimiento: str = ""
+    orden_compra: bool = False
+    cliente: str = ""
+    destino: str = ""
+    firma_operador: str = ""  # base64 png
+    declaraciones_aceptadas: bool = False
+    fecha_entrada: Optional[str] = None
+
+class VehicleExit(BaseModel):
+    hora_apertura_cortina: str = ""
+    hora_cierre_cortina: str = ""
+    cortina_salida: str = ""
+    sello_salida: str = ""
+    condicion_salida: str = ""  # vacio | carga_cliente | consolidado
+    destino: str = ""
+    numero_tractor_salida: str = ""
+    numero_caja_salida: str = ""
+    escolta: EscoltaInfo = EscoltaInfo()
+    pallets: str = ""
+    cajas: str = ""
+    bultos: str = ""
+    guardia_salida_nombre: str = ""
+    firma_guardia: str = ""
+    fecha_salida: Optional[str] = None
+
+class VehicleRecord(BaseModel):
+    id: str
+    user_id: str
+    status: str  # entrada | inspeccionado | salida
+    entry: VehicleEntry
+    exit: Optional[VehicleExit] = None
+    inspection_id: Optional[str] = None
+    created_at: str
+
+
 # ========== Helpers ==========
 def hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -533,6 +592,80 @@ async def mark_all_read(current_user: Dict[str, Any] = Depends(get_current_user)
     await db.notifications.update_many(
         {"user_id": current_user["id"], "read": False},
         {"$set": {"read": True}},
+    )
+    return {"ok": True}
+
+
+# ========== Vehicle Records (Caseta) ==========
+@api_router.post("/vehicle-records", response_model=VehicleRecord)
+async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any] = Depends(get_current_user)):
+    rec_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    entry_data = body.dict()
+    entry_data["fecha_entrada"] = entry_data.get("fecha_entrada") or now
+    doc = {
+        "id": rec_id,
+        "user_id": current_user["id"],
+        "status": "entrada",
+        "entry": entry_data,
+        "exit": None,
+        "inspection_id": None,
+        "created_at": now,
+    }
+    await db.vehicle_records.insert_one(doc)
+    return VehicleRecord(**{k: v for k, v in doc.items() if k != "_id"})
+
+
+@api_router.get("/vehicle-records", response_model=List[VehicleRecord])
+async def list_vehicle_records(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    status: Optional[str] = None,
+):
+    filt: Dict[str, Any] = {}
+    if current_user.get("role") != "supervisor":
+        filt["user_id"] = current_user["id"]
+    if status:
+        filt["status"] = status
+    docs = await db.vehicle_records.find(filt, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return [VehicleRecord(**d) for d in docs]
+
+
+@api_router.get("/vehicle-records/{rec_id}", response_model=VehicleRecord)
+async def get_vehicle_record(rec_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    filt: Dict[str, Any] = {"id": rec_id}
+    if current_user.get("role") != "supervisor":
+        filt["user_id"] = current_user["id"]
+    doc = await db.vehicle_records.find_one(filt, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    return VehicleRecord(**doc)
+
+
+@api_router.patch("/vehicle-records/{rec_id}/exit", response_model=VehicleRecord)
+async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[str, Any] = Depends(get_current_user)):
+    doc = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    exit_data = body.dict()
+    exit_data["fecha_salida"] = exit_data.get("fecha_salida") or datetime.now(timezone.utc).isoformat()
+    await db.vehicle_records.update_one(
+        {"id": rec_id},
+        {"$set": {"exit": exit_data, "status": "salida"}},
+    )
+    doc["exit"] = exit_data
+    doc["status"] = "salida"
+    return VehicleRecord(**doc)
+
+
+@api_router.patch("/vehicle-records/{rec_id}/link-inspection")
+async def link_inspection(rec_id: str, inspection_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    doc = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    new_status = "inspeccionado" if doc.get("status") == "entrada" else doc.get("status")
+    await db.vehicle_records.update_one(
+        {"id": rec_id},
+        {"$set": {"inspection_id": inspection_id, "status": new_status}},
     )
     return {"ok": True}
 
