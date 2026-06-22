@@ -41,3 +41,31 @@ bcrypt + pyjwt (HS256, 30-day expiry).
 
 ## Smart Business Enhancement
 Offline queue with auto-sync ensures **zero data loss** in low-connectivity yards. Inspectors never wait — completed inspections are immediately usable (visible in history with PENDIENTE chip), then automatically uploaded when signal returns. Each inspection auto-flags `bueno` vs `con falla` for fast supervisor scanning.
+
+## Iteration 2 — Multi-User + CSV + Scanner + Web
+
+### Backend additions (server.py)
+- `role` field on users: `inspector` | `supervisor`. The **first** ever registered user automatically becomes supervisor.
+- `active` flag on users; deactivated accounts can't login (`403`) and their existing tokens are rejected.
+- `approval_status` on inspections: `pendiente` | `aprobada` | `rechazada` + `approval_note` + `approved_by_name` + `approved_at`.
+- New endpoints:
+  - `GET /api/users` (supervisor) — list all users
+  - `POST /api/users/create-inspector` (supervisor) — create inspector or supervisor account
+  - `POST /api/users/{id}/toggle-active` (supervisor) — flip active flag (cannot deactivate self)
+  - `GET /api/inspections?scope=all|mine&inspector_id=...` (supervisor with `scope=all`)
+  - `POST /api/inspections/{id}/approve` + `/reject` (supervisor) — workflow with note
+  - `GET /api/inspections/export?mode=summary|detailed&scope=mine|all` — CSV streaming response (text/csv)
+
+### Frontend additions
+- **Role-aware bottom tabs**: Supervisor tab (`shield-checkmark`) visible only for supervisors.
+- **Supervisor screen** (`/(app)/supervisor`): stats cards (Total/Pend/Aprob/Rech), search, 4 filter chips, 3 export buttons (CSV resumen, CSV detallado, Usuarios).
+- **Usuarios screen** (`/(app)/usuarios`): list with role chips, toggle active/desactivate, modal to create new inspector/supervisor.
+- **Inspection detail** now shows `ACCIÓN DE SUPERVISOR` box (note input + APROBAR/RECHAZAR buttons) and a permanent approval badge once acted on.
+- **Barcode scanner** (`src/components/BarcodeScanner.tsx`) using `expo-camera`. Buttons next to **placas, tráiler, precinto** in step 1 of Nueva. Web shows a Spanish info screen (camera scanner requires native build).
+- **CSV download**: web uses `fetch` + blob anchor; native uses `expo-file-system` + `expo-sharing`.
+- **Responsive web**: same UI, supervisor row uses wider layout on screens ≥900px.
+
+### Testing
+- Backend: 18/18 new pytest cases PASS (auth/role/active gating, approval workflow, CSV summary vs detailed)
+- Frontend: validated on both 1280x800 (web) and 390x844 (mobile)
+
