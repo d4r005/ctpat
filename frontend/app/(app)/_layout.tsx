@@ -54,6 +54,13 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="caseta"
+        options={{
+          title: 'Caseta',
+          tabBarIcon: ({ color, size }) => <Ionicons name="business" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="nueva"
         options={{
           title: 'Nueva',

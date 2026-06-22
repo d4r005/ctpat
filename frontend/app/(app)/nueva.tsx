@@ -4,7 +4,7 @@ import {
   Platform, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Signature from 'react-native-signature-canvas';
@@ -13,22 +13,24 @@ import { useAuth } from '@/src/context/AuthContext';
 import { INSPECTION_POINTS } from '@/src/constants/inspectionPoints';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import BarcodeScanner from '@/src/components/BarcodeScanner';
+import { apiCall } from '@/src/api/client';
 
 const TOTAL_STEPS = 4;
 
 export default function Nueva() {
   const router = useRouter();
-  const { user } = useAuth();
+  const params = useLocalSearchParams<{ record_id?: string; compania?: string; placas?: string; trailer?: string; sello?: string }>();
+  const { user, token } = useAuth();
   const { saveInspection } = useInspections();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
 
-  // General
-  const [compania, setCompania] = useState('');
-  const [placas, setPlacas] = useState('');
-  const [trailer, setTrailer] = useState('');
+  // General — prefill from caseta record if query params present
+  const [compania, setCompania] = useState(params.compania || '');
+  const [placas, setPlacas] = useState(params.placas || '');
+  const [trailer, setTrailer] = useState(params.trailer || '');
   const [precinto, setPrecinto] = useState('');
-  const [selloAlta, setSelloAlta] = useState('');
+  const [selloAlta, setSelloAlta] = useState(params.sello || '');
   const [selloVerificado, setSelloVerificado] = useState(false);
 
   // 19 points
@@ -108,6 +110,12 @@ export default function Nueva() {
         fecha_hora: new Date().toISOString(),
         client_uuid: '',
       });
+      // Link inspection to caseta record if came from there
+      if (params.record_id && token) {
+        try {
+          await apiCall(`/vehicle-records/${params.record_id}/link-inspection?inspection_id=${created.id}`, { method: 'PATCH', token });
+        } catch {}
+      }
       router.replace(`/inspection/${created.id}`);
     } catch (e: any) {
       alert(e.message || 'Error al guardar');
