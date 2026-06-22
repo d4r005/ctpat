@@ -11,6 +11,7 @@ import { useInspections, InspectionPoint } from '@/src/context/InspectionContext
 import { useAuth } from '@/src/context/AuthContext';
 import { INSPECTION_POINTS } from '@/src/constants/inspectionPoints';
 import { colors, spacing, typography } from '@/src/constants/theme';
+import BarcodeScanner from '@/src/components/BarcodeScanner';
 
 const TOTAL_STEPS = 4;
 
@@ -42,6 +43,15 @@ export default function Nueva() {
   const [verificadorFirma, setVerificadorFirma] = useState('');
   const [showSigInspector, setShowSigInspector] = useState(false);
   const [showSigVerificador, setShowSigVerificador] = useState(false);
+  const [scanning, setScanning] = useState<null | 'placas' | 'trailer' | 'precinto'>(null);
+
+  const handleScan = (value: string) => {
+    const cleaned = value.trim();
+    if (scanning === 'placas') setPlacas(cleaned.toUpperCase());
+    else if (scanning === 'trailer') setTrailer(cleaned);
+    else if (scanning === 'precinto') setPrecinto(cleaned);
+    setScanning(null);
+  };
 
   const progress = useMemo(() => ((step + 1) / TOTAL_STEPS) * 100, [step]);
   const completedPoints = points.filter((p) => p.estado !== '').length;
@@ -103,9 +113,9 @@ export default function Nueva() {
             <View>
               <Text style={styles.stepTitle}>Datos de la unidad</Text>
               <Field label="COMPAÑÍA TRANSPORTISTA" value={compania} onChange={setCompania} testID="nueva-compania-input" />
-              <Field label="PLACAS DE LA UNIDAD" value={placas} onChange={setPlacas} testID="nueva-placas-input" />
-              <Field label="NÚMERO DE TRÁILER/CONTENEDOR" value={trailer} onChange={setTrailer} testID="nueva-trailer-input" />
-              <Field label="NÚMERO DE PRECINTO" value={precinto} onChange={setPrecinto} testID="nueva-precinto-input" />
+              <Field label="PLACAS DE LA UNIDAD" value={placas} onChange={setPlacas} testID="nueva-placas-input" onScan={() => setScanning('placas')} scanTestID="nueva-placas-scan" />
+              <Field label="NÚMERO DE TRÁILER/CONTENEDOR" value={trailer} onChange={setTrailer} testID="nueva-trailer-input" onScan={() => setScanning('trailer')} scanTestID="nueva-trailer-scan" />
+              <Field label="NÚMERO DE PRECINTO" value={precinto} onChange={setPrecinto} testID="nueva-precinto-input" onScan={() => setScanning('precinto')} scanTestID="nueva-precinto-scan" />
               <Field label="SELLO DE ALTA SEGURIDAD" value={selloAlta} onChange={setSelloAlta} testID="nueva-sello-input" />
               <Pressable
                 testID="nueva-sello-verificado"
@@ -248,6 +258,14 @@ export default function Nueva() {
         </View>
       </KeyboardAvoidingView>
 
+      {/* Scanner */}
+      <BarcodeScanner
+        visible={scanning !== null}
+        title={`Escanear ${scanning === 'placas' ? 'PLACAS' : scanning === 'trailer' ? 'TRÁILER' : 'PRECINTO'}`}
+        onClose={() => setScanning(null)}
+        onScan={handleScan}
+      />
+
       {/* Signature modals */}
       {showSigInspector && (
         <SignatureModal
@@ -267,17 +285,24 @@ export default function Nueva() {
   );
 }
 
-function Field({ label, value, onChange, testID }: { label: string; value: string; onChange: (v: string) => void; testID: string }) {
+function Field({ label, value, onChange, testID, onScan, scanTestID }: { label: string; value: string; onChange: (v: string) => void; testID: string; onScan?: () => void; scanTestID?: string }) {
   return (
     <>
       <Text style={styles.label}>{label}</Text>
-      <TextInput
-        testID={testID}
-        style={styles.input}
-        value={value}
-        onChangeText={onChange}
-        placeholderTextColor={colors.muted}
-      />
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <TextInput
+          testID={testID}
+          style={[styles.input, { flex: 1 }]}
+          value={value}
+          onChangeText={onChange}
+          placeholderTextColor={colors.muted}
+        />
+        {onScan && (
+          <Pressable testID={scanTestID} onPress={onScan} style={styles.scanBtn}>
+            <Ionicons name="barcode" size={24} color={colors.onBrandPrimary} />
+          </Pressable>
+        )}
+      </View>
     </>
   );
 }
@@ -325,6 +350,9 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 2, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary,
     padding: spacing.md, fontSize: typography.sizes.lg, color: colors.onSurface,
+  },
+  scanBtn: {
+    width: 56, backgroundColor: colors.brandPrimary, alignItems: 'center', justifyContent: 'center',
   },
   checkRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg, gap: spacing.sm },
   checkbox: { width: 28, height: 28, borderWidth: 2, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },

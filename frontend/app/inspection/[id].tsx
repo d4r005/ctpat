@@ -1,23 +1,54 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, Platform, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useInspections, Inspection } from '@/src/context/InspectionContext';
+import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
 export default function InspectionDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { getById } = useInspections();
+  const { getById, approveInspection, rejectInspection } = useInspections();
+  const { user } = useAuth();
   const [insp, setInsp] = useState<Inspection | undefined>(undefined);
   const [generating, setGenerating] = useState(false);
+  const [approvalNote, setApprovalNote] = useState('');
+  const [acting, setActing] = useState(false);
+  const isSupervisor = user?.role === 'supervisor';
 
   useEffect(() => {
     if (id) setInsp(getById(id));
   }, [id, getById]);
+
+  const handleApprove = async () => {
+    if (!id) return;
+    setActing(true);
+    try {
+      await approveInspection(id, approvalNote.trim());
+      setInsp(getById(id));
+      setApprovalNote('');
+    } catch (e: any) { alert(e.message); }
+    finally { setActing(false); }
+  };
+
+  const handleReject = async () => {
+    if (!id) return;
+    if (!approvalNote.trim()) {
+      alert('Por favor agrega una nota explicando el rechazo');
+      return;
+    }
+    setActing(true);
+    try {
+      await rejectInspection(id, approvalNote.trim());
+      setInsp(getById(id));
+      setApprovalNote('');
+    } catch (e: any) { alert(e.message); }
+    finally { setActing(false); }
+  };
 
   if (!insp) {
     return (
@@ -123,11 +154,55 @@ export default function InspectionDetail() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={[styles.statusBanner, { backgroundColor: insp.status_general === 'bueno' ? colors.success : colors.error }]}>
           <Ionicons name={insp.status_general === 'bueno' ? 'checkmark-circle' : 'warning'} size={28} color="#FFF" />
-          <View style={{ marginLeft: spacing.md }}>
+          <View style={{ marginLeft: spacing.md, flex: 1 }}>
             <Text style={styles.statusTitle}>{insp.status_general === 'bueno' ? 'INSPECCIÓN APROBADA' : 'INSPECCIÓN CON FALLAS'}</Text>
             <Text style={styles.statusSub}>{insp.points.filter((p) => p.estado === 'malo').length} punto(s) con falla</Text>
           </View>
+          {insp.approval_status && insp.approval_status !== 'pendiente' && (
+            <View style={[styles.approvBadge, { backgroundColor: insp.approval_status === 'aprobada' ? colors.success : colors.error, borderColor: '#FFF' }]}>
+              <Text style={styles.approvBadgeText}>{insp.approval_status.toUpperCase()}</Text>
+            </View>
+          )}
         </View>
+
+        {insp.approval_status && insp.approval_status !== 'pendiente' && (
+          <View style={styles.approvalInfo} testID="approval-info">
+            <Text style={styles.approvalLabel}>
+              {insp.approval_status === 'aprobada' ? 'APROBADA POR' : 'RECHAZADA POR'}
+            </Text>
+            <Text style={styles.approvalValue}>{insp.approved_by_name}</Text>
+            {insp.approved_at ? <Text style={styles.approvalDate}>{new Date(insp.approved_at).toLocaleString('es-MX')}</Text> : null}
+            {insp.approval_note ? (
+              <>
+                <Text style={[styles.approvalLabel, { marginTop: spacing.sm }]}>NOTA</Text>
+                <Text style={styles.approvalValue}>{insp.approval_note}</Text>
+              </>
+            ) : null}
+          </View>
+        )}
+
+        {isSupervisor && (insp.approval_status || 'pendiente') === 'pendiente' && (
+          <View style={styles.approvalActionBox} testID="approval-action-box">
+            <Text style={styles.sectionTitleLocal}>ACCIÓN DE SUPERVISOR</Text>
+            <TextInput
+              testID="approval-note-input"
+              style={styles.noteInput}
+              placeholder="Nota (obligatoria para rechazar)"
+              placeholderTextColor={colors.muted}
+              value={approvalNote}
+              onChangeText={setApprovalNote}
+              multiline
+            />
+            <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+              <Pressable testID="approval-approve-btn" style={[styles.actionBtn, { backgroundColor: colors.success }]} onPress={handleApprove} disabled={acting}>
+                {acting ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="checkmark-circle" size={20} color="#FFF" /><Text style={styles.actionBtnText}>APROBAR</Text></>}
+              </Pressable>
+              <Pressable testID="approval-reject-btn" style={[styles.actionBtn, { backgroundColor: colors.error }]} onPress={handleReject} disabled={acting}>
+                {acting ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="close-circle" size={20} color="#FFF" /><Text style={styles.actionBtnText}>RECHAZAR</Text></>}
+              </Pressable>
+            </View>
+          </View>
+        )}
 
         <Section title="DATOS GENERALES">
           <Row label="Compañía" value={insp.compania_transportista} />
@@ -252,4 +327,18 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.lg, minHeight: 64,
   },
   exportText: { color: colors.onBrandSecondary, fontWeight: '900', letterSpacing: 1, fontSize: typography.sizes.base },
+  approvBadge: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderWidth: 2 },
+  approvBadgeText: { color: '#FFF', fontWeight: '900', fontSize: 10, letterSpacing: 1 },
+  approvalInfo: { borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, backgroundColor: colors.surfaceSecondary, marginBottom: spacing.lg },
+  approvalLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, letterSpacing: 1 },
+  approvalValue: { fontWeight: '700', color: colors.onSurface, marginTop: 4 },
+  approvalDate: { color: colors.muted, fontSize: typography.sizes.sm, marginTop: 2 },
+  approvalActionBox: { borderWidth: 2, borderColor: colors.brandPrimary, padding: spacing.md, backgroundColor: colors.brandTertiary, marginBottom: spacing.lg },
+  sectionTitleLocal: { fontWeight: '900', color: colors.onBrandTertiary, letterSpacing: 1, marginBottom: spacing.sm },
+  noteInput: {
+    borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.sm, backgroundColor: colors.surfaceSecondary,
+    minHeight: 70, textAlignVertical: 'top', color: colors.onSurface,
+  },
+  actionBtn: { flex: 1, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 52 },
+  actionBtnText: { color: '#FFF', fontWeight: '900', letterSpacing: 1 },
 });

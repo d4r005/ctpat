@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 2 (multi-user supervisor roles, CSV export, barcode scanner) tested end-to-end. Backend: 18/18 new pytest cases pass (100%) covering /auth/me role+active, /users supervisor-only (403 for inspector), /users/create-inspector (supervisor only), /users/{id}/toggle-active (400 on self, deactivated user login 403, existing token also rejected), /inspections?scope=all role gating, ownership 404 vs supervisor cross-access, /approve and /reject setting approval_status/approval_note/approved_by_name (and persisted via GET), and CSV export — mode=summary has 'ID Inspeccion'/no 'Punto #', mode=detailed has 'Punto #' row-per-point with proper content-type='text/csv', detailed&scope=all returns 403 for inspectors. Frontend Web (1280x800) as supervisor: Panel Supervisor renders with TOTAL/PEND/APROB/RECH stat cards, search input, four filter chips (todos/pendiente/aprobada/rechazada), and CSV RESUMEN / CSV DETALLADO / USUARIOS buttons — all testIDs present. Usuarios screen lists users with role badge and DESACTIVAR/ACTIVAR toggles, + button opens create-user-modal (name/email/password/role) with cancel working. Inspection detail (supervisor view) shows ACCIÓN DE SUPERVISOR box with note input + APROBAR/RECHAZAR; approval reflected in list (APROBADA badge). Mobile (390x844): supervisor login shows Supervisor tab (5 tabs); inspector1@naf.com login correctly hides Supervisor tab (4 tabs). Nueva > Step 1 shows scan icons next to placas/trailer/precinto with testIDs nueva-placas-scan / nueva-trailer-scan / nueva-precinto-scan; tapping opens scanner-modal which on web shows the intended Spanish info screen ('El escáner de cámara está optimizado para dispositivos móviles. En navegador, ingresa el código de barras o QR.') and scanner-close dismisses it.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "pointerEvents prop", "issue": "Non-blocking React Native Web deprecation warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Cosmetic only — appears in console on both supervisor and inspector flows. Source is a child component; likely react-native-signature-canvas or similar third-party. Reference: console log during /inicio mount."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration2_roles_export.py",
+    "/app/test_reports/pytest/iteration2_results.xml",
+    "/app/backend/tests/test_naf_inspections.py"
+  ],
+  "action_items": [
+    "Optional: silence the 'props.pointerEvents is deprecated' RN-Web warning (cosmetic, was already reported in iteration 1)."
+  ],
+  "critical_code_review_comments": [
+    "server.py role gating is correct: require_supervisor dependency reused for /users, /users/create-inspector, /users/{id}/toggle-active, /approve, /reject. /inspections?scope=all and /inspections/export?scope=all check role inline and return 403 for inspectors.",
+    "get_current_user enforces user.active — both new tokens (login) and existing tokens of a deactivated user are correctly rejected (403).",
+    "Self-deactivation guarded: toggle-active returns 400 when supervisor targets their own id.",
+    "/inspections/{id} uses ownership filter only for non-supervisors; supervisors can fetch any inspection.",
+    "CSV export route is registered BEFORE the /{inspection_id} dynamic route in server.py (lines 349 vs 406), so 'export' is not swallowed by the path param — verified working.",
+    "Frontend tab guard uses href: isSupervisor ? '/(app)/supervisor' : null (Expo Router idiom) — confirmed working: inspector sees 4 tabs, supervisor sees 5.",
+    "All new screens have proper testID coverage; Field component forwards scanTestID to the scan TouchableOpacity."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration2_roles_export.py (new)",
+    "/app/test_reports/pytest/iteration2_results.xml (generated)"
+  ],
+  "success_rate": {"backend": "100% (18/18 new + 13/13 iter1 regression-compatible)", "frontend": "100% of iteration-2 flows (web supervisor panel, usuarios CRUD UI, approval UI, mobile tab gating, scanner modal open/close)"},
+  "seed_data_creation": "Created via pytest: TEST_IT2 Inspector Co (INS-001) under inspector1@naf.com, TEST_IT2 Super Co (SUP-001) under test@naf.com, TEST_IT2 Rechazo (REJ-001) which was rejected with note 'TEST_FALLO', and several TEST_ users via /users/create-inspector (TEST_Ins New, TEST_Deact — fully toggled inactive then reactivated). The INS-001 inspection ended in approval_status='aprobada' with note 'TEST_OK'.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration 2 backend + frontend (web + mobile gating + scanner UI) verified clean. Test fixture in test_iteration2_roles_export.py auto-heals: if inspector1@naf.com is deactivated/missing it will reactivate or create via supervisor endpoint, so the file is safe to re-run. CSV export route ordering (export before /{id}) is critical — do not move /inspections/{id} above it. Camera scanner deeper testing requires a native build (Expo Go / EAS); the current web placeholder is intentional per problem statement.",
+  "rca_of_issue": "No bugs found in iteration 2."
+}

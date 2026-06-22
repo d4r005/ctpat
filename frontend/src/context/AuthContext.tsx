@@ -10,6 +10,8 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  role?: 'inspector' | 'supervisor';
+  active?: boolean;
 }
 
 interface AuthContextValue {

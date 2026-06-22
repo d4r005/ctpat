@@ -1,0 +1,200 @@
+import React, { useEffect, useState } from 'react';
+import {
+  View, Text, StyleSheet, FlatList, Pressable, TextInput, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ScrollView,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { apiCall } from '@/src/api/client';
+import { useAuth, User } from '@/src/context/AuthContext';
+import { colors, spacing, typography } from '@/src/constants/theme';
+
+export default function Usuarios() {
+  const { user, token } = useAuth();
+  const router = useRouter();
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newRole, setNewRole] = useState<'inspector' | 'supervisor'>('inspector');
+  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await apiCall<User[]>('/users', { token });
+      setUsers(data);
+    } catch (e: any) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { if (user?.role === 'supervisor') load(); }, [token]);
+
+  const handleToggle = async (u: User) => {
+    if (u.id === user?.id) return;
+    try {
+      await apiCall(`/users/${u.id}/toggle-active`, { method: 'POST', token });
+      await load();
+    } catch (e: any) { alert(e.message); }
+  };
+
+  const handleCreate = async () => {
+    setError(null);
+    if (!newName.trim() || !newEmail.trim() || newPassword.length < 6) {
+      setError('Completa nombre, correo y contraseña (mín. 6)');
+      return;
+    }
+    setCreating(true);
+    try {
+      await apiCall('/users/create-inspector', {
+        method: 'POST', token,
+        body: { name: newName.trim(), email: newEmail.trim().toLowerCase(), password: newPassword, role: newRole },
+      });
+      setNewName(''); setNewEmail(''); setNewPassword(''); setNewRole('inspector');
+      setShowCreate(false);
+      await load();
+    } catch (e: any) { setError(e.message); }
+    finally { setCreating(false); }
+  };
+
+  if (user?.role !== 'supervisor') {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}><Text style={{ color: colors.muted }}>Acceso restringido</Text></View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']} testID="usuarios-screen">
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()} testID="usuarios-back"><Ionicons name="arrow-back" size={24} color={colors.onSurface} /></Pressable>
+        <Text style={styles.title}>Gestión de Usuarios</Text>
+        <Pressable testID="usuarios-add-btn" onPress={() => setShowCreate(true)}>
+          <Ionicons name="person-add" size={24} color={colors.brandPrimary} />
+        </Pressable>
+      </View>
+
+      {loading ? (
+        <ActivityIndicator color={colors.brandPrimary} style={{ marginTop: spacing.xl }} />
+      ) : (
+        <FlatList
+          data={users}
+          keyExtractor={(u) => u.id}
+          contentContainerStyle={{ padding: spacing.lg }}
+          renderItem={({ item }) => (
+            <View style={styles.userRow} testID={`usuario-${item.id}`}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <Text style={styles.userName}>{item.name}</Text>
+                  {item.role === 'supervisor' && (
+                    <View style={styles.roleChip}><Text style={styles.roleChipText}>SUPER</Text></View>
+                  )}
+                  {!item.active && (
+                    <View style={[styles.roleChip, { backgroundColor: colors.error }]}>
+                      <Text style={styles.roleChipText}>INACTIVO</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.userEmail}>{item.email}</Text>
+              </View>
+              {item.id !== user.id && (
+                <Pressable
+                  testID={`usuario-toggle-${item.id}`}
+                  style={[styles.toggleBtn, { backgroundColor: item.active ? colors.error : colors.success }]}
+                  onPress={() => handleToggle(item)}
+                >
+                  <Text style={styles.toggleBtnText}>{item.active ? 'DESACTIVAR' : 'ACTIVAR'}</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+        />
+      )}
+
+      {showCreate && (
+        <View style={styles.modalOverlay} testID="create-user-modal">
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', maxWidth: 480 }}>
+            <ScrollView contentContainerStyle={styles.modalCard} keyboardShouldPersistTaps="handled">
+              <Text style={styles.modalTitle}>Nuevo Usuario</Text>
+
+              <Text style={styles.label}>NOMBRE</Text>
+              <TextInput testID="create-user-name" style={styles.input} value={newName} onChangeText={setNewName} />
+
+              <Text style={styles.label}>CORREO</Text>
+              <TextInput testID="create-user-email" style={styles.input} value={newEmail} onChangeText={setNewEmail} autoCapitalize="none" keyboardType="email-address" />
+
+              <Text style={styles.label}>CONTRASEÑA</Text>
+              <TextInput testID="create-user-password" style={styles.input} value={newPassword} onChangeText={setNewPassword} secureTextEntry />
+
+              <Text style={styles.label}>ROL</Text>
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                {(['inspector', 'supervisor'] as const).map((r) => (
+                  <Pressable
+                    key={r}
+                    testID={`create-user-role-${r}`}
+                    onPress={() => setNewRole(r)}
+                    style={[styles.roleOpt, newRole === r && styles.roleOptActive]}
+                  >
+                    <Text style={[styles.roleOptText, newRole === r && { color: colors.onBrandPrimary }]}>{r.toUpperCase()}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {error && <Text style={{ color: colors.error, marginTop: spacing.md, fontWeight: '700' }}>{error}</Text>}
+
+              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg }}>
+                <Pressable testID="create-user-cancel" style={[styles.btn, styles.btnSecondary]} onPress={() => setShowCreate(false)}>
+                  <Text style={styles.btnSecondaryText}>CANCELAR</Text>
+                </Pressable>
+                <Pressable testID="create-user-submit" style={[styles.btn, styles.btnPrimary]} onPress={handleCreate} disabled={creating}>
+                  {creating ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.btnPrimaryText}>CREAR</Text>}
+                </Pressable>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.surface },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  header: {
+    padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: colors.surfaceSecondary, borderBottomWidth: 2, borderBottomColor: colors.borderStrong,
+  },
+  title: { fontSize: typography.sizes.lg, fontWeight: '900', color: colors.onSurface },
+  userRow: {
+    backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong,
+    padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center',
+  },
+  userName: { fontWeight: '900', color: colors.onSurface, fontSize: typography.sizes.base },
+  userEmail: { color: colors.muted, fontSize: typography.sizes.sm, marginTop: 2 },
+  roleChip: { backgroundColor: colors.brandPrimary, paddingHorizontal: 6, paddingVertical: 2 },
+  roleChipText: { color: '#FFF', fontWeight: '900', fontSize: 9, letterSpacing: 1 },
+  toggleBtn: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  toggleBtnText: { color: '#FFF', fontWeight: '900', fontSize: 11, letterSpacing: 1 },
+  modalOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(9,9,11,0.85)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg, zIndex: 100,
+  },
+  modalCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong },
+  modalTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface, marginBottom: spacing.md, letterSpacing: 1 },
+  label: { fontSize: 11, fontWeight: '900', color: colors.onSurfaceTertiary, letterSpacing: 1, marginBottom: 6, marginTop: spacing.md },
+  input: { borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, fontSize: typography.sizes.base, color: colors.onSurface, backgroundColor: colors.surface },
+  roleOpt: { flex: 1, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, alignItems: 'center' },
+  roleOptActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  roleOptText: { fontWeight: '900', letterSpacing: 1, color: colors.onSurface },
+  btn: { flex: 1, padding: spacing.md, alignItems: 'center', minHeight: 48, justifyContent: 'center' },
+  btnPrimary: { backgroundColor: colors.brandPrimary },
+  btnPrimaryText: { color: colors.onBrandPrimary, fontWeight: '900', letterSpacing: 1 },
+  btnSecondary: { backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong },
+  btnSecondaryText: { color: colors.onSurface, fontWeight: '900', letterSpacing: 1 },
+});

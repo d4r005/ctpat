@@ -6,8 +6,9 @@ import { colors } from '@/src/constants/theme';
 import { View, ActivityIndicator } from 'react-native';
 
 export default function AppLayout() {
-  const { token, loading } = useAuth();
+  const { token, loading, user } = useAuth();
   const router = useRouter();
+  const isSupervisor = user?.role === 'supervisor';
 
   useEffect(() => {
     if (!loading && !token) router.replace('/login');
@@ -57,6 +58,20 @@ export default function AppLayout() {
         options={{
           title: 'Nueva',
           tabBarIcon: ({ color, size }) => <Ionicons name="add-circle" size={size + 4} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="supervisor"
+        options={{
+          title: 'Supervisor',
+          href: isSupervisor ? '/(app)/supervisor' : null,
+          tabBarIcon: ({ color, size }) => <Ionicons name="shield-checkmark" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="usuarios"
+        options={{
+          href: null, // hidden from tabs, accessed via supervisor screen
         }}
       />
       <Tabs.Screen
