@@ -1,0 +1,162 @@
+{
+  "app_name": "Inspección 19 Puntos NAF",
+  "personality": "5 Brutalist Mobile",
+  "personality_one_liner": "A rugged, high-contrast, industrial-grade tool built for logistics yards—large targets, hard alignment, and zero decorative friction.",
+  "color": {
+    "surface": "#F4F4F5",
+    "onSurface": "#09090B",
+    "surfaceSecondary": "#FFFFFF",
+    "onSurfaceSecondary": "#09090B",
+    "surfaceTertiary": "#E4E4E7",
+    "onSurfaceTertiary": "#18181B",
+    "surfaceInverse": "#09090B",
+    "onSurfaceInverse": "#FAFAFA",
+    "brand": "#0A2540",
+    "brandPrimary": "#0A2540",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#F59E0B",
+    "onBrandSecondary": "#09090B",
+    "brandTertiary": "#DBEAFE",
+    "onBrandTertiary": "#1E3A8A",
+    "success": "#16A34A",
+    "onSuccess": "#FFFFFF",
+    "warning": "#F59E0B",
+    "onWarning": "#09090B",
+    "error": "#DC2626",
+    "onError": "#FFFFFF",
+    "info": "#0284C7",
+    "onInfo": "#FFFFFF",
+    "border": "#D4D4D8",
+    "borderStrong": "#09090B",
+    "divider": "#E4E4E7"
+  },
+  "typography": {
+    "displayFontFamily": "Space Grotesk",
+    "textFontFamily": "IBM Plex Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Use rigid grids, exposed structure, and deliberate tension. Forms should have clear boundary lines. Use md for internal card padding, lg for layout margins.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 0,
+    "md": 4,
+    "lg": 8,
+    "pill": 999
+  },
+  "shadow_tier": "0",
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": "false",
+    "do's": [],
+    "dont's": ["Do not use blur or glass effects anywhere. This is a brutalist, industrial app."]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-blur",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Login",
+      "purpose": "Simple email and password entry with robust error handling for poor connections.",
+      "states": {
+        "loading": "Full-screen spinner with 'Autenticando...'",
+        "empty": "N/A",
+        "error": "Banner at top: 'Error de conexión. Reintentar.'"
+      },
+      "layout": "Hero image at the top with a dark gradient scrim and NAF logo. Below, edge-to-edge brutalist form inputs with 2pt borders on focus. Primary button pinned to bottom."
+    },
+    {
+      "name": "Inicio",
+      "purpose": "Dashboard to start new inspections and view offline sync status.",
+      "states": {
+        "loading": "Skeleton of recent inspections.",
+        "empty": "No hay inspecciones recientes. Illustration of empty clipboard.",
+        "error": "Error cargando datos. Botón reintentar."
+      },
+      "layout": "Top banner for 'Offline mode' if disconnected. Card list of today's inspections. Large 'Nueva Inspección' sticky FAB in brandSecondary (Safety Yellow) for high contrast."
+    },
+    {
+      "name": "Histórico",
+      "purpose": "Searchable list of past inspections by date, plates, or status.",
+      "states": {
+        "loading": "List skeletons.",
+        "empty": "No se encontraron inspecciones con esos filtros.",
+        "error": "No se pudo cargar el historial."
+      },
+      "layout": "Sticky header with search bar and filter chips. List items use strong 1pt borderStrong dividers. Status chips (Bueno/Malo) aligned to the right. Fast scanning metrics."
+    },
+    {
+      "name": "Nueva Inspección (Wizard)",
+      "purpose": "Multi-step form capturing company info, 19 inspection points, activity report, and signatures.",
+      "states": {
+        "loading": "Guardando borrador...",
+        "empty": "N/A",
+        "error": "Faltan campos obligatorios. Scroll al primer error."
+      },
+      "layout": "Sticky progress bar at the top (e.g., 'Paso 2 de 4: 19 Puntos'). Step 1: General data form. Step 2: 19 checklist items as a stack. Each item has a title and two large touch targets: 'Bueno' (turns solid green) / 'Malo' (turns solid red). If 'Malo' is selected, automatically expand a text input for 'Comentarios'. Step 3: Suspicious activity text area. Step 4: Two canvas areas for digital signatures. Sticky 'Siguiente' / 'Guardar' button at the bottom."
+    },
+    {
+      "name": "Detalle Inspección",
+      "purpose": "Read-only view of a completed inspection with PDF generation and sharing.",
+      "states": {
+        "loading": "Generando PDF...",
+        "empty": "N/A",
+        "error": "Error al cargar la inspección."
+      },
+      "layout": "Header with summary and large 'Exportar PDF' action button. Content organized in strict, receipt-like blocks with mono-spaced labels for keys (Placas, Tráiler, etc.) and bold values. Signatures displayed as images at the bottom."
+    }
+  ],
+  "images": {
+    "login_hero": {
+      "url": "https://images.pexels.com/photos/27732803/pexels-photo-27732803.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Colorful shipping containers stack at an industrial port"
+    },
+    "empty_clipboard": {
+      "url": "https://images.pexels.com/photos/12234106/pexels-photo-12234106.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Industrial worker managing inventory with a clipboard"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the Brutalist Mobile Light design. Do NOT use blur or glassmorphism. Use flat surfaces, sharp corners (radius 0 or very small), and strong borders.",
+    "Implement offline support as a priority. Show a persistent banner 'Modo offline' when the device loses connection.",
+    "The 19-point checklist must be highly ergonomic for gloved hands. Use large toggle buttons for 'Bueno'/'Malo' instead of small radio buttons or checkboxes.",
+    "Conditional logic in the checklist: The 'Comentarios' field should only appear if the inspector selects 'Malo'.",
+    "Use react-native-signature-canvas or expo-signature-pad for the drawn signatures of the Inspector and Verificador.",
+    "For PDF generation, use expo-print to generate a PDF from an HTML template and expo-sharing to share it.",
+    "Ensure high contrast text. Avoid light grays for text; use onSurfaceSecondary (#09090B) for legibility in sunlight.",
+    "Do NOT use any emojis in the UI. Rely on Phosphor icons with filled/regular variations."
+  ],
+  "haptics": {
+    "events": {
+      "button_press": "light",
+      "tab_change": "light",
+      "checklist_bueno": "success",
+      "checklist_malo": "warning",
+      "step_complete": "medium",
+      "error": "error"
+    }
+  }
+}
