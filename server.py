@@ -332,6 +332,8 @@ async def list_inspections(
     current_user: Dict[str, Any] = Depends(get_current_user),
     scope: str = Query("mine", description="mine | all (all requires supervisor)"),
     inspector_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
 ):
     filt: Dict[str, Any] = {}
     if scope == "all":
@@ -342,6 +344,14 @@ async def list_inspections(
     else:
         filt["user_id"] = current_user["id"]
 
+    if date_from or date_to:
+        date_filt: Dict[str, Any] = {}
+        if date_from:
+            date_filt["$gte"] = date_from
+        if date_to:
+            date_filt["$lte"] = date_to + "T23:59:59.999999"
+        filt["created_at"] = date_filt
+
     docs = await db.inspections.find(filt, {"_id": 0, "client_uuid": 0}).sort("created_at", -1).to_list(2000)
     return [_serialize_inspection(d) for d in docs]
 
@@ -350,6 +360,8 @@ async def list_inspections(
 async def export_csv(
     mode: str = Query("summary", description="summary | detailed"),
     scope: str = Query("mine", description="mine | all"),
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     filt: Dict[str, Any] = {}
@@ -358,6 +370,14 @@ async def export_csv(
             raise HTTPException(status_code=403, detail="Solo supervisores")
     else:
         filt["user_id"] = current_user["id"]
+
+    if date_from or date_to:
+        date_filt: Dict[str, Any] = {}
+        if date_from:
+            date_filt["$gte"] = date_from
+        if date_to:
+            date_filt["$lte"] = date_to + "T23:59:59.999999"
+        filt["created_at"] = date_filt
 
     docs = await db.inspections.find(filt, {"_id": 0, "client_uuid": 0}).sort("created_at", -1).to_list(5000)
 
@@ -430,6 +450,12 @@ async def approve_inspection(
     }
     await db.inspections.update_one({"id": inspection_id}, {"$set": update})
     doc.update(update)
+    await _create_notification(
+        user_id=doc["user_id"],
+        title="Inspección aprobada",
+        message=f"Tu inspección {doc.get('placas_unidad','')} fue APROBADA por {current_user['name']}." + (f" Nota: {body.note}" if body.note else ""),
+        inspection_id=inspection_id,
+    )
     return _serialize_inspection(doc)
 
 
@@ -449,7 +475,129 @@ async def reject_inspection(
     }
     await db.inspections.update_one({"id": inspection_id}, {"$set": update})
     doc.update(update)
+    await _create_notification(
+        user_id=doc["user_id"],
+        title="Inspección rechazada",
+        message=f"Tu inspección {doc.get('placas_unidad','')} fue RECHAZADA por {current_user['name']}." + (f" Motivo: {body.note}" if body.note else ""),
+        inspection_id=inspection_id,
+    )
     return _serialize_inspection(doc)
+
+
+# ========== Notifications ==========
+class Notification(BaseModel):
+    id: str
+    user_id: str
+    title: str
+    message: str
+    inspection_id: Optional[str] = None
+    read: bool = False
+    created_at: str
+
+
+async def _create_notification(user_id: str, title: str, message: str, inspection_id: Optional[str] = None):
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "title": title,
+        "message": message,
+        "inspection_id": inspection_id,
+        "read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.notifications.insert_one(doc)
+
+
+@api_router.get("/notifications", response_model=List[Notification])
+async def list_notifications(current_user: Dict[str, Any] = Depends(get_current_user)):
+    docs = await db.notifications.find(
+        {"user_id": current_user["id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(200)
+    return [Notification(**d) for d in docs]
+
+
+@api_router.post("/notifications/{notif_id}/read")
+async def mark_notification_read(notif_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    res = await db.notifications.update_one(
+        {"id": notif_id, "user_id": current_user["id"]},
+        {"$set": {"read": True}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Notificación no encontrada")
+    return {"ok": True}
+
+
+@api_router.post("/notifications/read-all")
+async def mark_all_read(current_user: Dict[str, Any] = Depends(get_current_user)):
+    await db.notifications.update_many(
+        {"user_id": current_user["id"], "read": False},
+        {"$set": {"read": True}},
+    )
+    return {"ok": True}
+
+
+# ========== Analytics (supervisor) ==========
+@api_router.get("/analytics")
+async def analytics(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    current_user: Dict[str, Any] = Depends(require_supervisor),
+):
+    filt: Dict[str, Any] = {}
+    if date_from or date_to:
+        date_filt: Dict[str, Any] = {}
+        if date_from:
+            date_filt["$gte"] = date_from
+        if date_to:
+            date_filt["$lte"] = date_to + "T23:59:59.999999"
+        filt["created_at"] = date_filt
+
+    docs = await db.inspections.find(filt, {"_id": 0, "client_uuid": 0}).to_list(5000)
+
+    total = len(docs)
+    approval = {"pendiente": 0, "aprobada": 0, "rechazada": 0}
+    status_general = {"bueno": 0, "malo": 0}
+    by_inspector: Dict[str, Dict[str, Any]] = {}
+    point_failures: Dict[str, Dict[str, Any]] = {}
+
+    for d in docs:
+        approval[d.get("approval_status", "pendiente")] = approval.get(d.get("approval_status", "pendiente"), 0) + 1
+        status_general[d.get("status_general", "bueno")] = status_general.get(d.get("status_general", "bueno"), 0) + 1
+
+        insp_name = d.get("inspector_nombre", "Desconocido")
+        if insp_name not in by_inspector:
+            by_inspector[insp_name] = {"name": insp_name, "total": 0, "fallas": 0, "aprobadas": 0, "rechazadas": 0}
+        by_inspector[insp_name]["total"] += 1
+        if d.get("status_general") == "malo":
+            by_inspector[insp_name]["fallas"] += 1
+        if d.get("approval_status") == "aprobada":
+            by_inspector[insp_name]["aprobadas"] += 1
+        elif d.get("approval_status") == "rechazada":
+            by_inspector[insp_name]["rechazadas"] += 1
+
+        for p in d.get("points", []):
+            if p.get("estado") == "malo":
+                key = f"{p.get('number')}. {p.get('name')}"
+                if key not in point_failures:
+                    point_failures[key] = {"name": key, "count": 0}
+                point_failures[key]["count"] += 1
+
+    by_inspector_list = sorted(by_inspector.values(), key=lambda x: x["total"], reverse=True)
+    point_failures_list = sorted(point_failures.values(), key=lambda x: x["count"], reverse=True)[:10]
+
+    approval_rate = 0
+    decided = approval["aprobada"] + approval["rechazada"]
+    if decided > 0:
+        approval_rate = round((approval["aprobada"] / decided) * 100, 1)
+
+    return {
+        "total": total,
+        "approval_breakdown": approval,
+        "status_breakdown": status_general,
+        "approval_rate_pct": approval_rate,
+        "by_inspector": by_inspector_list,
+        "top_failed_points": point_failures_list,
+    }
 
 
 app.include_router(api_router)
