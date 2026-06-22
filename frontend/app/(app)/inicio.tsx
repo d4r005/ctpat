@@ -77,10 +77,23 @@ export default function Inicio() {
         >
           <Ionicons name="add-circle" size={32} color={colors.onBrandSecondary} />
           <View style={{ flex: 1, marginLeft: spacing.md }}>
-            <Text style={styles.fabTitle}>NUEVA INSPECCIÓN</Text>
-            <Text style={styles.fabSub}>Iniciar formato de 19 puntos</Text>
+            <Text style={styles.fabTitle}>NUEVA INSPECCIÓN 19 PUNTOS</Text>
+            <Text style={styles.fabSub}>Camión / Remolque</Text>
           </View>
           <Ionicons name="arrow-forward" size={24} color={colors.onBrandSecondary} />
+        </Pressable>
+
+        <Pressable
+          testID="inicio-nueva-9-button"
+          style={({ pressed }) => [styles.fabBlock, { backgroundColor: colors.info, marginTop: 0, marginBottom: spacing.xl }, pressed && { opacity: 0.9 }]}
+          onPress={() => router.push('/(app)/nueva?type=9_puntos_contenedor')}
+        >
+          <Ionicons name="cube" size={32} color={colors.onInfo} />
+          <View style={{ flex: 1, marginLeft: spacing.md }}>
+            <Text style={[styles.fabTitle, { color: colors.onInfo }]}>NUEVA INSPECCIÓN 9 PUNTOS</Text>
+            <Text style={[styles.fabSub, { color: colors.onInfo }]}>Contenedor marítimo</Text>
+          </View>
+          <Ionicons name="arrow-forward" size={24} color={colors.onInfo} />
         </Pressable>
 
         <Text style={styles.sectionTitle}>INSPECCIONES DE HOY</Text>

@@ -10,7 +10,7 @@ import * as ImagePicker from 'expo-image-picker';
 import Signature from 'react-native-signature-canvas';
 import { useInspections, InspectionPoint } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
-import { INSPECTION_POINTS } from '@/src/constants/inspectionPoints';
+import { getInspectionPoints } from '@/src/constants/inspectionPoints';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import BarcodeScanner from '@/src/components/BarcodeScanner';
 import { apiCall } from '@/src/api/client';
@@ -19,7 +19,10 @@ const TOTAL_STEPS = 4;
 
 export default function Nueva() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ record_id?: string; compania?: string; placas?: string; trailer?: string; sello?: string }>();
+  const params = useLocalSearchParams<{ record_id?: string; compania?: string; placas?: string; trailer?: string; sello?: string; type?: string }>();
+  const inspectionType = (params.type === '9_puntos_contenedor' ? '9_puntos_contenedor' : '19_puntos') as '19_puntos' | '9_puntos_contenedor';
+  const pointsDef = getInspectionPoints(inspectionType);
+  const totalPoints = pointsDef.length;
   const { user, token } = useAuth();
   const { saveInspection } = useInspections();
   const [step, setStep] = useState(0);
@@ -33,9 +36,9 @@ export default function Nueva() {
   const [selloAlta, setSelloAlta] = useState(params.sello || '');
   const [selloVerificado, setSelloVerificado] = useState(false);
 
-  // 19 points
+  // points (dynamic based on type)
   const [points, setPoints] = useState<InspectionPoint[]>(
-    INSPECTION_POINTS.map((p) => ({ number: p.number, name: p.name, estado: '', comentarios: '', photo: '' }))
+    pointsDef.map((p) => ({ number: p.number, name: p.name, estado: '', comentarios: '', photo: '' }))
   );
 
   const pickPhoto = async (idx: number, fromCamera: boolean) => {
@@ -91,6 +94,9 @@ export default function Nueva() {
     return false;
   };
 
+  // also expose inspectionType to UI
+  const typeLabel = inspectionType === '9_puntos_contenedor' ? '9 PUNTOS CONTENEDOR' : '19 PUNTOS';
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -109,7 +115,8 @@ export default function Nueva() {
         verificador_firma: verificadorFirma,
         fecha_hora: new Date().toISOString(),
         client_uuid: '',
-      });
+        inspection_type: inspectionType,
+      } as any);
       // Link inspection to caseta record if came from there
       if (params.record_id && token) {
         try {
@@ -132,7 +139,7 @@ export default function Nueva() {
           <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
         </View>
         <Text style={styles.progressText}>
-          PASO {step + 1} DE {TOTAL_STEPS}: {['DATOS GENERALES', '19 PUNTOS', 'OBSERVACIONES', 'FIRMAS'][step]}
+          PASO {step + 1} DE {TOTAL_STEPS} · {typeLabel} · {['DATOS GENERALES', `${totalPoints} PUNTOS`, 'OBSERVACIONES', 'FIRMAS'][step]}
         </Text>
       </View>
 
@@ -162,7 +169,7 @@ export default function Nueva() {
           {step === 1 && (
             <View>
               <Text style={styles.stepTitle}>
-                Inspección 19 Puntos <Text style={styles.counter}>({completedPoints}/19)</Text>
+                Inspección {totalPoints} Puntos {inspectionType === '9_puntos_contenedor' ? '(Contenedor)' : ''} <Text style={styles.counter}>({completedPoints}/{totalPoints})</Text>
               </Text>
               {points.map((p, idx) => (
                 <View key={p.number} style={styles.pointBlock} testID={`nueva-point-${p.number}`}>
