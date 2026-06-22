@@ -65,6 +65,7 @@ class InspectionPoint(BaseModel):
     photo: str = ""  # base64 data url, optional
 
 class InspectionCreate(BaseModel):
+    inspection_type: str = "19_puntos"
     compania_transportista: str
     placas_unidad: str
     numero_trailer: str
@@ -83,6 +84,7 @@ class InspectionCreate(BaseModel):
 class Inspection(BaseModel):
     id: str
     user_id: str
+    inspection_type: str = "19_puntos"
     inspector_email: str = ""
     compania_transportista: str
     placas_unidad: str
@@ -320,6 +322,7 @@ def _serialize_inspection(doc: Dict[str, Any]) -> Inspection:
     return Inspection(
         id=doc["id"],
         user_id=doc["user_id"],
+        inspection_type=doc.get("inspection_type", "19_puntos"),
         inspector_email=doc.get("inspector_email", ""),
         compania_transportista=doc["compania_transportista"],
         placas_unidad=doc["placas_unidad"],
@@ -361,6 +364,7 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
     doc = {
         "id": insp_id,
         "user_id": current_user["id"],
+        "inspection_type": body.inspection_type,
         "inspector_email": current_user["email"],
         "compania_transportista": body.compania_transportista,
         "placas_unidad": body.placas_unidad,
@@ -668,6 +672,94 @@ async def link_inspection(rec_id: str, inspection_id: str, current_user: Dict[st
         {"$set": {"inspection_id": inspection_id, "status": new_status}},
     )
     return {"ok": True}
+
+
+# ========== Shipping Tickets (Ticket de Embarque) ==========
+class ShippingTicket(BaseModel):
+    id: str
+    user_id: str
+    almacenista: str
+    fecha: str
+    area: str = ""
+    sellos: str = ""
+    cliente: str = ""
+    operador: str = ""
+    linea_transporte: str = ""
+    numero_economico: str = ""
+    placas_unidad: str = ""
+    numero_caja: str = ""
+    placas_caja: str = ""
+    hora_llegada: str = ""
+    hora_apertura_cortina: str = ""
+    hora_cierre_cortina: str = ""
+    hora_salida: str = ""
+    numero_pallets: str = ""
+    numero_sello: str = ""
+    observaciones: str = ""
+    daño_caja: str = ""  # description of damage
+    plano_carga: str = ""  # base64 image of loading diagram
+    firma_almacenista: str = ""
+    firma_guardia: str = ""
+    nombre_guardia: str = ""
+    created_at: str
+
+class ShippingTicketCreate(BaseModel):
+    almacenista: str
+    fecha: Optional[str] = None
+    area: str = ""
+    sellos: str = ""
+    cliente: str = ""
+    operador: str = ""
+    linea_transporte: str = ""
+    numero_economico: str = ""
+    placas_unidad: str = ""
+    numero_caja: str = ""
+    placas_caja: str = ""
+    hora_llegada: str = ""
+    hora_apertura_cortina: str = ""
+    hora_cierre_cortina: str = ""
+    hora_salida: str = ""
+    numero_pallets: str = ""
+    numero_sello: str = ""
+    observaciones: str = ""
+    daño_caja: str = ""
+    plano_carga: str = ""
+    firma_almacenista: str = ""
+    firma_guardia: str = ""
+    nombre_guardia: str = ""
+
+
+@api_router.post("/shipping-tickets", response_model=ShippingTicket)
+async def create_ticket(body: ShippingTicketCreate, current_user: Dict[str, Any] = Depends(get_current_user)):
+    tid = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    doc = body.dict()
+    doc["id"] = tid
+    doc["user_id"] = current_user["id"]
+    doc["fecha"] = doc.get("fecha") or now
+    doc["created_at"] = now
+    await db.shipping_tickets.insert_one(doc)
+    return ShippingTicket(**{k: v for k, v in doc.items() if k != "_id"})
+
+
+@api_router.get("/shipping-tickets", response_model=List[ShippingTicket])
+async def list_tickets(current_user: Dict[str, Any] = Depends(get_current_user)):
+    filt: Dict[str, Any] = {}
+    if current_user.get("role") != "supervisor":
+        filt["user_id"] = current_user["id"]
+    docs = await db.shipping_tickets.find(filt, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return [ShippingTicket(**d) for d in docs]
+
+
+@api_router.get("/shipping-tickets/{ticket_id}", response_model=ShippingTicket)
+async def get_ticket(ticket_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    filt: Dict[str, Any] = {"id": ticket_id}
+    if current_user.get("role") != "supervisor":
+        filt["user_id"] = current_user["id"]
+    doc = await db.shipping_tickets.find_one(filt, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ticket no encontrado")
+    return ShippingTicket(**doc)
 
 
 # ========== Analytics (supervisor) ==========
