@@ -17,6 +17,7 @@ type FilterApprov = 'todos' | 'pendiente' | 'aprobada' | 'rechazada';
 
 export default function Supervisor() {
   const { user, token } = useAuth();
+  const isAdmin = user?.email === 'd.trujillo@brancoindustries.com';
   const router = useRouter();
   const { allInspections, refreshAll, loading, exportCsvUrl } = useInspections();
   const [query, setQuery] = useState('');
@@ -146,14 +147,19 @@ export default function Supervisor() {
             <Ionicons name="download" size={16} color={colors.onBrandPrimary} />
             <Text style={styles.exportText}>CSV DETALLADO</Text>
           </Pressable>
-          <Pressable testID="supervisor-analitica-btn" style={[styles.exportBtn, { backgroundColor: colors.success }]} onPress={() => router.push('/(app)/analitica')}>
-            <Ionicons name="stats-chart" size={16} color={colors.onSuccess} />
-            <Text style={[styles.exportText, { color: colors.onSuccess }]}>ANALÍTICA</Text>
-          </Pressable>
-          <Pressable testID="supervisor-users-btn" style={[styles.exportBtn, { backgroundColor: colors.brandSecondary }]} onPress={() => router.push('/(app)/usuarios')}>
-            <Ionicons name="people" size={16} color={colors.onBrandSecondary} />
-            <Text style={[styles.exportText, { color: colors.onBrandSecondary }]}>USUARIOS</Text>
-          </Pressable>
+
+          {isAdmin && (
+            <>
+              <Pressable testID="supervisor-analitica-btn" style={[styles.exportBtn, { backgroundColor: colors.success }]} onPress={() => router.push('/(app)/analitica')}>
+                <Ionicons name="stats-chart" size={16} color={colors.onSuccess} />
+                <Text style={[styles.exportText, { color: colors.onSuccess }]}>KPIs</Text>
+              </Pressable>
+              <Pressable testID="supervisor-users-btn" style={[styles.exportBtn, { backgroundColor: colors.brandSecondary }]} onPress={() => router.push('/(app)/usuarios')}>
+                <Ionicons name="people" size={16} color={colors.onBrandSecondary} />
+                <Text style={[styles.exportText, { color: colors.onBrandSecondary }]}>USUARIOS</Text>
+              </Pressable>
+            </>
+          )}
         </View>
 
         <View style={styles.dateRow}>

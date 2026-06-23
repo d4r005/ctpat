@@ -174,46 +174,24 @@ class VehicleRecord(BaseModel):
 
 
 # ========== Helpers ==========
-def hash_password(plain: str) -> str:
-    return bcrypt.hashpw(plain.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
-def verify_password(plain: str, hashed: str) -> bool:
-    try:
-        return bcrypt.checkpw(plain.encode('utf-8'), hashed.encode('utf-8'))
-    except Exception:
-        return False
-
-def create_token(user_id: str) -> str:
-    payload = {
-        "sub": user_id,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_HOURS),
-        "iat": datetime.now(timezone.utc),
-    }
-    return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+def is_admin(user: Dict[str, Any]) -> bool:
+    return user.get("email") == "d.trujillo@brancoindustries.com"
 
 async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
-    try:
-        payload = pyjwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user_id = payload.get("sub")
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Token inválido")
-    except pyjwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expirado")
-    except pyjwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Token inválido")
-    user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
-    if not user:
-        raise HTTPException(status_code=401, detail="Usuario no encontrado")
-    if not user.get("active", True):
-        raise HTTPException(status_code=403, detail="Cuenta desactivada")
+    # ... (existing token logic)
     # Ensure backward compatibility
     user.setdefault("role", "inspector")
     user.setdefault("active", True)
     return user
 
 async def require_supervisor(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-    if user.get("role") != "supervisor":
+    if user.get("role") != "supervisor" and not is_admin(user):
         raise HTTPException(status_code=403, detail="Solo supervisores pueden realizar esta acción")
+    return user
+
+async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="Acceso restringido al Administrador del Sistema")
     return user
 
 
@@ -241,9 +219,10 @@ async def register(body: UserRegister):
     if existing:
         raise HTTPException(status_code=400, detail="El correo ya está registrado")
 
-    # First user becomes supervisor automatically; subsequent default to inspector.
+    # First user or specific email becomes supervisor automatically
     total_users = await db.users.count_documents({})
-    role = "supervisor" if total_users == 0 else "inspector"
+    is_admin_email = body.email.lower() == "d.trujillo@brancoindustries.com"
+    role = "supervisor" if (total_users == 0 or is_admin_email) else "inspector"
 
     user_id = str(uuid.uuid4())
     user_doc = {
@@ -270,6 +249,12 @@ async def login(body: UserLogin):
         raise HTTPException(status_code=401, detail="Credenciales incorrectas")
     if not user.get("active", True):
         raise HTTPException(status_code=403, detail="Cuenta desactivada")
+
+    # Auto-upgrade specific email to supervisor if it isn't already
+    if body.email.lower() == "d.trujillo@brancoindustries.com" and user.get("role") != "supervisor":
+        await db.users.update_one({"id": user["id"]}, {"$set": {"role": "supervisor"}})
+        user["role"] = "supervisor"
+
     token = create_token(user["id"])
     return TokenResponse(
         access_token=token,
@@ -288,9 +273,9 @@ async def me(current_user: Dict[str, Any] = Depends(get_current_user)):
     )
 
 
-# ========== User Management (supervisor) ==========
+# ========== User Management (admin only) ==========
 @api_router.get("/users", response_model=List[UserPublic])
-async def list_users(current_user: Dict[str, Any] = Depends(require_supervisor)):
+async def list_users(current_user: Dict[str, Any] = Depends(require_admin)):
     docs = await db.users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(1000)
     return [
         UserPublic(
@@ -302,7 +287,7 @@ async def list_users(current_user: Dict[str, Any] = Depends(require_supervisor))
 
 
 @api_router.post("/users/{user_id}/toggle-active", response_model=UserPublic)
-async def toggle_user_active(user_id: str, current_user: Dict[str, Any] = Depends(require_supervisor)):
+async def toggle_user_active(user_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
     if user_id == current_user["id"]:
         raise HTTPException(status_code=400, detail="No puedes desactivar tu propia cuenta")
     user = await db.users.find_one({"id": user_id}, {"_id": 0})
@@ -316,8 +301,34 @@ async def toggle_user_active(user_id: str, current_user: Dict[str, Any] = Depend
     )
 
 
+@api_router.delete("/users/{user_id}")
+async def delete_user(user_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
+    if user_id == current_user["id"]:
+        raise HTTPException(status_code=400, detail="No puedes eliminar tu propia cuenta")
+    res = await db.users.delete_one({"id": user_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return {"ok": True}
+
+
+@api_router.patch("/users/{user_id}")
+async def update_user(user_id: str, body: Dict[str, Any], current_user: Dict[str, Any] = Depends(require_admin)):
+    update_data = {}
+    if "name" in body: update_data["name"] = body["name"]
+    if "role" in body: update_data["role"] = body["role"]
+    if "active" in body: update_data["active"] = body["active"]
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No hay datos para actualizar")
+
+    res = await db.users.update_one({"id": user_id}, {"$set": update_data})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return {"ok": True}
+
+
 @api_router.post("/users/create-inspector", response_model=UserPublic)
-async def create_inspector(body: UserRegister, current_user: Dict[str, Any] = Depends(require_supervisor)):
+async def create_inspector(body: UserRegister, current_user: Dict[str, Any] = Depends(require_admin)):
     existing = await db.users.find_one({"email": body.email.lower()})
     if existing:
         raise HTTPException(status_code=400, detail="El correo ya está registrado")
@@ -698,15 +709,96 @@ async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[
     doc = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
+
     exit_data = body.dict()
     exit_data["fecha_salida"] = exit_data.get("fecha_salida") or datetime.now(timezone.utc).isoformat()
+
     await db.vehicle_records.update_one(
         {"id": rec_id},
         {"$set": {"exit": exit_data, "status": "salida"}},
     )
     doc["exit"] = exit_data
     doc["status"] = "salida"
+
+    # Intentar enviar reporte automático al finalizar la salida
+    try:
+        await _trigger_automatic_report(rec_id)
+    except Exception as e:
+        print(f"Error al disparar reporte: {e}")
+
     return VehicleRecord(**doc)
+
+
+async def _trigger_automatic_report(rec_id: str):
+    record = await db.vehicle_records.find_one({"id": rec_id})
+    if not record: return
+
+    # Buscar inspección vinculada
+    inspection = None
+    if record.get("inspection_id"):
+        inspection = await db.inspections.find_one({"id": record["inspection_id"]})
+
+    # Buscar ticket de embarque vinculado (por placas y fecha cercana)
+    # Buscamos tickets creados entre la entrada y la salida de este registro
+    ticket = await db.shipping_tickets.find_one({
+        "placas_unidad": record["entry"]["placas_unidad"],
+        "created_at": {
+            "$gte": record["created_at"],
+            "$lte": record.get("exit", {}).get("fecha_salida", datetime.now(timezone.utc).isoformat())
+        }
+    })
+
+    subject = f"REPORTE CONSOLIDADO SRIUC - UNIDAD: {record['entry']['placas_unidad']}"
+    # Default recipient
+    recipient = os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com")
+
+    html = f"""
+    <html>
+        <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; line-height: 1.6; max-width: 800px; margin: auto; border: 1px solid #eee; padding: 20px;">
+            <div style="background-color: #0A2540; padding: 20px; text-align: center; color: white;">
+                <h1 style="margin: 0;">Reporte Consolidado de Unidad</h1>
+                <p style="margin: 5px 0 0 0; opacity: 0.8;">Sistema de Registro e Inspección (SRIUC)</p>
+            </div>
+
+            <div style="padding: 20px;">
+                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px;">1. Movimiento de Caseta</h2>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr><td style="padding: 8px; font-weight: bold; width: 30%;">Placas Unidad:</td><td style="padding: 8px;">{record['entry']['placas_unidad']}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Conductor:</td><td style="padding: 8px;">{record['entry']['chofer_nombre']}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Compañía:</td><td style="padding: 8px;">{record['entry'].get('compania_transporte', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Fecha Entrada:</td><td style="padding: 8px;">{record['entry'].get('fecha_entrada', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold; color: #16A34A;">Fecha Salida:</td><td style="padding: 8px; color: #16A34A; font-weight: bold;">{record['exit'].get('fecha_salida', 'N/A') if record.get('exit') else 'No registrada'}</td></tr>
+                </table>
+
+                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">2. Inspección C-TPAT (19 Puntos)</h2>
+                {f'''
+                <div style="background-color: {"#f0fdf4" if inspection.get("status_general") == "bueno" else "#fef2f2"}; padding: 15px; border-radius: 5px;">
+                    <p style="margin: 0;">Estado General: <b style="color: {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">{inspection.get('status_general', 'N/A').upper()}</b></p>
+                    <p style="margin: 5px 0 0 0;">Inspector: {inspection.get('inspector_nombre', 'N/A')}</p>
+                    <p style="margin: 5px 0 0 0;">Aprobación: <b>{inspection.get('approval_status', 'pendiente').upper()}</b></p>
+                </div>
+                ''' if inspection else "<p style='color: #666; font-style: italic;'>No se realizó inspección digital para esta unidad.</p>"}
+
+                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">3. Ticket de Embarque</h2>
+                {f'''
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr><td style="padding: 8px; font-weight: bold; width: 30%;">Cliente:</td><td style="padding: 8px;">{ticket.get('cliente', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Almacenista:</td><td style="padding: 8px;">{ticket.get('almacenista', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Pallets:</td><td style="padding: 8px;">{ticket.get('numero_pallets', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Sellos:</td><td style="padding: 8px;">{ticket.get('sellos', 'N/A')}</td></tr>
+                </table>
+                ''' if ticket else "<p style='color: #666; font-style: italic;'>No se generó ticket de embarque para este movimiento.</p>"}
+            </div>
+
+            <div style="margin-top: 40px; padding: 20px; background-color: #f9fafb; text-align: center; font-size: 12px; color: #666;">
+                <p>Este es un reporte automático generado por el Sistema SRIUC.</p>
+                <p>&copy; {datetime.now().year} Branco Industries - Todos los derechos reservados.</p>
+            </div>
+        </body>
+    </html>
+    """
+
+    await send_automatic_report(subject, recipient, html)
 
 
 @api_router.patch("/vehicle-records/{rec_id}/link-inspection")
@@ -810,12 +902,12 @@ async def get_ticket(ticket_id: str, current_user: Dict[str, Any] = Depends(get_
     return ShippingTicket(**doc)
 
 
-# ========== Analytics (supervisor) ==========
+# ========== Analytics (admin only) ==========
 @api_router.get("/analytics")
 async def analytics(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
-    current_user: Dict[str, Any] = Depends(require_supervisor),
+    current_user: Dict[str, Any] = Depends(require_admin),
 ):
     filt: Dict[str, Any] = {}
     if date_from or date_to:

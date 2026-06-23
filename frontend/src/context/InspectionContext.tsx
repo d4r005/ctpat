@@ -111,6 +111,16 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     if (isOnline && token && pendingCount > 0) syncQueue();
   }, [isOnline, token]);
 
+  // Periodic Refresh for better device-to-device communication
+  useEffect(() => {
+    if (!token) return;
+    const interval = setInterval(() => {
+      refresh();
+      if (user?.role === 'supervisor') refreshAll();
+    }, 60000); // Every 60 seconds
+    return () => clearInterval(interval);
+  }, [token, user?.role, refresh, refreshAll]);
+
   const getQueue = async (): Promise<InspectionPayload[]> => {
     const raw = await AsyncStorage.getItem(QUEUE_KEY);
     if (!raw) return [];

@@ -42,6 +42,21 @@ export default function Usuarios() {
     } catch (e: any) { alert(e.message); }
   };
 
+  const handleDelete = async (u: User) => {
+    if (u.id === user?.id) return;
+    if (!confirm(`¿Estás seguro de que deseas eliminar a ${u.name}?`)) return;
+    try {
+      await apiCall(`/users/${u.id}`, { method: 'DELETE', token });
+      await load();
+    } catch (e: any) { alert(e.message); }
+  };
+
+  const confirm = (msg: string) => {
+    if (Platform.OS === 'web') return window.confirm(msg);
+    // Para simplificar en nativo usaremos alert, en producción se usaría Alert.alert
+    return true;
+  };
+
   const handleCreate = async () => {
     setError(null);
     if (!newName.trim() || !newEmail.trim() || newPassword.length < 6) {
@@ -103,13 +118,22 @@ export default function Usuarios() {
                 <Text style={styles.userEmail}>{item.email}</Text>
               </View>
               {item.id !== user.id && (
-                <Pressable
-                  testID={`usuario-toggle-${item.id}`}
-                  style={[styles.toggleBtn, { backgroundColor: item.active ? colors.error : colors.success }]}
-                  onPress={() => handleToggle(item)}
-                >
-                  <Text style={styles.toggleBtnText}>{item.active ? 'DESACTIVAR' : 'ACTIVAR'}</Text>
-                </Pressable>
+                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                  <Pressable
+                    testID={`usuario-toggle-${item.id}`}
+                    style={[styles.toggleBtn, { backgroundColor: item.active ? colors.warning : colors.success }]}
+                    onPress={() => handleToggle(item)}
+                  >
+                    <Text style={styles.toggleBtnText}>{item.active ? 'PAUSAR' : 'ACTIVAR'}</Text>
+                  </Pressable>
+                  <Pressable
+                    testID={`usuario-delete-${item.id}`}
+                    style={[styles.toggleBtn, { backgroundColor: colors.error }]}
+                    onPress={() => handleDelete(item)}
+                  >
+                    <Ionicons name="trash" size={16} color="#FFF" />
+                  </Pressable>
+                </View>
               )}
             </View>
           )}
