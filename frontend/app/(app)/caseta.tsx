@@ -74,7 +74,7 @@ export default function Caseta() {
             <View style={styles.empty}>
               <Ionicons name="car-outline" size={48} color={colors.muted} />
               <Text style={styles.emptyText}>Sin vehículos registrados</Text>
-              <Text style={styles.emptySub}>Toca "NUEVO REGISTRO DE ENTRADA"</Text>
+              <Text style={styles.emptySub}>Toca &quot;NUEVO REGISTRO DE ENTRADA&quot;</Text>
             </View>
           )
         }

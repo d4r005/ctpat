@@ -49,7 +49,7 @@ export default function BarcodeScanner({ visible, title, onClose, onScan }: Prop
     if (!permission.granted) {
       return (
         <View style={styles.center}>
-          <Ionicons name="camera-off" size={48} color={colors.muted} />
+          <Ionicons name="videocam-off" size={48} color={colors.muted} />
           <Text style={styles.infoText}>Se necesita acceso a la cámara para escanear códigos.</Text>
           <Pressable
             testID="scanner-grant-permission"
