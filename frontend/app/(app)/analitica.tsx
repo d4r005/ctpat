@@ -55,8 +55,19 @@ export default function Analitica() {
     if (!data) return;
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head>
 <body style="font-family:Arial,sans-serif;padding:20px;color:#09090B;">
-<h1 style="text-align:center;border-bottom:3px solid #0A2540;padding-bottom:10px;">REPORTE DE ANALÍTICA NAF</h1>
-<p style="text-align:center;color:#666;font-size:11px;">Generado: ${new Date().toLocaleString('es-MX')}${dateFrom || dateTo ? ` · Periodo: ${dateFrom || '...'} → ${dateTo || '...'}` : ''}</p>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;border-bottom:3px solid #0A2540;padding-bottom:10px;">
+    <div style="display:flex;flex-direction:column;">
+      <div style="background-color:#0A2540;color:white;padding:8px 15px;display:inline-block;font-weight:900;font-size:28px;letter-spacing:2px;position:relative;">
+        NAF
+        <div style="position:absolute;right:-40px;top:50%;height:3px;background-color:white;width:40px;"></div>
+      </div>
+      <div style="color:#0A2540;font-size:12px;font-weight:bold;margin-top:5px;letter-spacing:0.5px;">North America Flooring</div>
+    </div>
+    <div style="text-align:right;">
+      <h1 style="margin:0;font-size:20px;color:#0A2540;">REPORTE DE ANALÍTICA</h1>
+      <p style="margin:5px 0 0 0;font-size:10px;color:#666;">Generado: ${new Date().toLocaleString('es-MX')}${dateFrom || dateTo ? ` · Periodo: ${dateFrom || '...'} → ${dateTo || '...'}` : ''}</p>
+    </div>
+  </div>
 <table style="width:100%;border-collapse:collapse;margin:20px 0;">
   <tr><td style="padding:10px;border:1px solid #999;background:#F4F4F5;width:50%;"><b>Total inspecciones</b></td><td style="padding:10px;border:1px solid #999;font-size:24px;font-weight:bold;">${data.total}</td></tr>
   <tr><td style="padding:10px;border:1px solid #999;background:#F4F4F5;"><b>% de aprobación</b></td><td style="padding:10px;border:1px solid #999;font-size:24px;font-weight:bold;color:#16A34A;">${data.approval_rate_pct}%</td></tr>
