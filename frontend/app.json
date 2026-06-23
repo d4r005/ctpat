@@ -22,7 +22,8 @@
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.CAMERA"
-      ]
+      ],
+      "usesCleartextTraffic": true
     },
     "web": {
       "bundler": "metro",

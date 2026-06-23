@@ -216,7 +216,19 @@ async def require_supervisor(user: Dict[str, Any] = Depends(get_current_user)) -
 # ========== Auth Routes ==========
 @api_router.get("/")
 async def root():
-    return {"message": "NAF Inspección API", "ok": True}
+    try:
+        # Verifica conexión a la base de datos
+        await db.command("ping")
+        db_status = "online"
+    except Exception as e:
+        db_status = f"offline: {str(e)}"
+
+    return {
+        "message": "NAF Inspección API",
+        "status": "running",
+        "database": db_status,
+        "environment": os.environ.get("ENV_NAME", "production")
+    }
 
 
 @api_router.post("/auth/register", response_model=TokenResponse)
