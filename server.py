@@ -15,7 +15,11 @@ import uuid
 from datetime import datetime, timedelta, timezone
 import bcrypt
 import jwt as pyjwt
-
+import aiosmtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -582,6 +586,38 @@ async def _create_notification(user_id: str, title: str, message: str, inspectio
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.notifications.insert_one(doc)
+
+
+# ========== Email Utility ==========
+async def send_automatic_report(subject: str, recipient: str, body_html: str):
+    smtp_host = os.environ.get("SMTP_HOST")
+    smtp_port = int(os.environ.get("SMTP_PORT", 587))
+    smtp_user = os.environ.get("SMTP_USER")
+    smtp_pass = os.environ.get("SMTP_PASS")
+
+    if not all([smtp_host, smtp_user, smtp_pass]):
+        print("SMTP not configured. Skipping email.")
+        return
+
+    message = MIMEMultipart()
+    message["From"] = smtp_user
+    message["To"] = recipient
+    message["Subject"] = subject
+    message.attach(MIMEText(body_html, "html"))
+
+    try:
+        await aiosmtplib.send(
+            message,
+            hostname=smtp_host,
+            port=smtp_port,
+            username=smtp_user,
+            password=smtp_pass,
+            use_tls=(smtp_port == 465),
+            start_tls=(smtp_port == 587),
+        )
+        print(f"Reporte enviado exitosamente a {recipient}")
+    except Exception as e:
+        print(f"Error al enviar correo: {e}")
 
 
 @api_router.get("/notifications", response_model=List[Notification])
