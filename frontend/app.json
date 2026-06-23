@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Sistema de Registro e Inspección de Unidades de Carga",
-    "slug": "frontend",
+    "name": "SRIUC",
+    "slug": "SRIUC",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
