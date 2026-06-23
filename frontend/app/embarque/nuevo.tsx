@@ -12,6 +12,7 @@ export default function EmbarqueNuevo() {
   const router = useRouter();
   const { token, user } = useAuth();
   const [saving, setSaving] = useState(false);
+  const sigRef = React.useRef<any>(null);
   const [form, setForm] = useState({
     almacenista: user?.name || '', area: '', sellos: '', cliente: '', operador: '',
     linea_transporte: '', numero_economico: '', placas_unidad: '', numero_caja: '', placas_caja: '',
@@ -102,15 +103,24 @@ export default function EmbarqueNuevo() {
             <Text style={styles.modalTitle}>Firma {sigTarget === 'almacenista' ? 'Almacenista' : 'Guardia'}</Text>
             <View style={{ height: 280 }}>
               <Signature
+                ref={sigRef}
                 onOK={(sig) => { set(sigTarget === 'almacenista' ? 'firma_almacenista' : 'firma_guardia', sig); setSigTarget(null); }}
                 webStyle={`.m-signature-pad--footer{display:none;}.m-signature-pad{box-shadow:none;border:2px solid #09090B;}body,html{background:#FFF;height:100%;}`}
                 autoClear={false}
                 imageType="image/png"
               />
             </View>
-            <Pressable style={[styles.secBtn, { marginTop: spacing.md }]} onPress={() => setSigTarget(null)}>
-              <Text style={styles.secBtnText}>CANCELAR</Text>
-            </Pressable>
+            <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+              <Pressable style={[styles.secBtn, { flex: 1 }]} onPress={() => setSigTarget(null)}>
+                <Text style={styles.secBtnText}>CANCELAR</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.bigBtn, { flex: 1, padding: spacing.md, minHeight: 52 }]}
+                onPress={() => sigRef.current?.readSignature()}
+              >
+                <Text style={[styles.bigBtnText, { fontSize: 12 }]}>GUARDAR FIRMA</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       )}

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView,
-  Platform, ActivityIndicator,
+  Platform, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -123,7 +123,21 @@ export default function Nueva() {
           await apiCall(`/vehicle-records/${params.record_id}/link-inspection?inspection_id=${created.id}`, { method: 'PATCH', token });
         } catch {}
       }
-      router.replace(`/inspection/${created.id}`);
+
+      Alert.alert(
+        "Inspección Guardada",
+        "¿Desea generar el Ticket de Embarque ahora?",
+        [
+          {
+            text: "Ver Detalle",
+            onPress: () => router.replace(`/inspection/${created.id}`)
+          },
+          {
+            text: "SÍ, GENERAR TICKET",
+            onPress: () => router.replace('/embarque/nuevo')
+          }
+        ]
+      );
     } catch (e: any) {
       alert(e.message || 'Error al guardar');
     } finally {
@@ -367,6 +381,7 @@ function Field({ label, value, onChange, testID, onScan, scanTestID }: { label: 
 }
 
 function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSave: (sig: string) => void; title: string }) {
+  const sigRef = React.useRef<any>(null);
   const handleOK = (signature: string) => onSave(signature);
   const style = `.m-signature-pad--footer {display: none; margin: 0px;}
                  .m-signature-pad {box-shadow: none; border: 2px solid #09090B;}
@@ -377,6 +392,7 @@ function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSav
         <Text style={styles.modalTitle}>{title}</Text>
         <View style={styles.signatureCanvas}>
           <Signature
+            ref={sigRef}
             onOK={handleOK}
             descriptionText="Firme dentro del recuadro"
             clearText="Borrar"
@@ -389,6 +405,13 @@ function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSav
         <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
           <Pressable style={[styles.secondaryBtn, { flex: 1 }]} onPress={onClose} testID="signature-cancel">
             <Text style={styles.secondaryBtnText}>CANCELAR</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.primaryBtn, { flex: 1 }]}
+            onPress={() => sigRef.current?.readSignature()}
+            testID="signature-save"
+          >
+            <Text style={styles.primaryBtnText}>GUARDAR FIRMA</Text>
           </Pressable>
         </View>
       </View>

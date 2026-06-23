@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView,
-  Platform, ActivityIndicator, ScrollView as _SV,
+  Platform, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -45,10 +45,11 @@ export default function CasetaNuevo() {
   const { token } = useAuth();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  const sigRef = React.useRef<any>(null);
 
   // Step 1 — Datos del vehículo
-  const [sucursal, setSucursal] = useState('');
-  const [direccion, setDireccion] = useState('');
+  const [sucursal, setSucursal] = useState('Escobedo');
+  const [direccion, setDireccion] = useState('Av. Expansion #350');
   const [licencia, setLicencia] = useState('');
   const [placas, setPlacas] = useState('');
   const [chofer, setChofer] = useState('');
@@ -104,7 +105,30 @@ export default function CasetaNuevo() {
         firma_operador: firmaOperador, declaraciones_aceptadas: aceptaTerminos,
       };
       const created = await apiCall<any>('/vehicle-records', { method: 'POST', body, token });
-      router.replace(`/caseta/${created.id}`);
+
+      Alert.alert(
+        "Entrada Registrada",
+        "¿Desea proceder con la inspección de 19 puntos ahora?",
+        [
+          {
+            text: "Más tarde",
+            onPress: () => router.replace(`/caseta/${created.id}`)
+          },
+          {
+            text: "SÍ, INICIAR",
+            onPress: () => {
+              const params = new URLSearchParams({
+                record_id: created.id,
+                compania: body.compania_transporte,
+                placas: body.placas_unidad,
+                trailer: body.numero_caja,
+                sello: body.sello_entrada
+              });
+              router.replace(`/(app)/nueva?${params.toString()}`);
+            }
+          }
+        ]
+      );
     } catch (e: any) { alert(e.message || 'Error al guardar'); }
     finally { setSaving(false); }
   };
@@ -222,15 +246,25 @@ export default function CasetaNuevo() {
             <Text style={styles.modalTitle}>Firma del Operador</Text>
             <View style={{ height: 280 }}>
               <Signature
+                ref={sigRef}
                 onOK={(sig) => { setFirmaOperador(sig); setShowSig(false); }}
                 webStyle={`.m-signature-pad--footer{display:none;}.m-signature-pad{box-shadow:none;border:2px solid #09090B;}body,html{background:#FFF;height:100%;}`}
                 autoClear={false}
                 imageType="image/png"
               />
             </View>
-            <Pressable style={[styles.secBtn, { marginTop: spacing.md }]} onPress={() => setShowSig(false)} testID="caseta-firma-cancel">
-              <Text style={styles.secBtnText}>CANCELAR</Text>
-            </Pressable>
+            <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+              <Pressable style={[styles.secBtn, { flex: 1 }]} onPress={() => setShowSig(false)} testID="caseta-firma-cancel">
+                <Text style={styles.secBtnText}>CANCELAR</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.priBtn, { flex: 1 }]}
+                onPress={() => sigRef.current?.readSignature()}
+                testID="caseta-firma-save"
+              >
+                <Text style={styles.priBtnText}>GUARDAR FIRMA</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       )}

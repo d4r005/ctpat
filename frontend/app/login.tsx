@@ -1,20 +1,36 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform,
   ScrollView, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, radius, typography } from '@/src/constants/theme';
+
+const REMEMBER_KEY = 'naf_remembered_email';
 
 export default function Login() {
   const router = useRouter();
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadSavedEmail = async () => {
+      const saved = await AsyncStorage.getItem(REMEMBER_KEY);
+      if (saved) {
+        setEmail(saved);
+        setRememberMe(true);
+      }
+    };
+    loadSavedEmail();
+  }, []);
 
   const handleLogin = async () => {
     setError(null);
@@ -25,6 +41,13 @@ export default function Login() {
     setLoading(true);
     try {
       await signIn(email.trim(), password);
+
+      if (rememberMe) {
+        await AsyncStorage.setItem(REMEMBER_KEY, email.trim());
+      } else {
+        await AsyncStorage.removeItem(REMEMBER_KEY);
+      }
+
       router.replace('/(app)/inicio');
     } catch (e: any) {
       setError(e.message || 'Error al iniciar sesión');
@@ -44,7 +67,7 @@ export default function Login() {
             <View style={styles.logoBlock}>
               <Text style={styles.logoText}>NAF</Text>
             </View>
-            <Text style={styles.title}>Inspección 19 Puntos</Text>
+            <Text style={styles.title}>Sistema de Registro e Inspección de Unidades de Carga</Text>
             <Text style={styles.subtitle}>Sistema de inspección de unidades y remolques</Text>
           </View>
 
@@ -71,6 +94,18 @@ export default function Login() {
               placeholder="••••••••"
               placeholderTextColor={colors.muted}
             />
+
+            <Pressable
+              onPress={() => setRememberMe(!rememberMe)}
+              style={styles.rememberRow}
+            >
+              <Ionicons
+                name={rememberMe ? 'checkbox' : 'square-outline'}
+                size={22}
+                color={colors.brandPrimary}
+              />
+              <Text style={styles.rememberText}>Recordar usuario</Text>
+            </Pressable>
 
             {error ? (
               <View style={styles.errorBox} testID="login-error">
@@ -126,6 +161,12 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary,
     padding: spacing.md, fontSize: typography.sizes.lg, color: colors.onSurfaceSecondary,
     borderRadius: radius.sm,
+  },
+  rememberRow: {
+    flexDirection: 'row', alignItems: 'center', marginTop: spacing.md, gap: spacing.xs,
+  },
+  rememberText: {
+    fontSize: typography.sizes.sm, color: colors.onSurfaceTertiary, fontWeight: '600',
   },
   errorBox: {
     backgroundColor: colors.error, padding: spacing.md, marginTop: spacing.lg, borderRadius: radius.sm,
