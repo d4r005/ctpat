@@ -174,11 +174,43 @@ class VehicleRecord(BaseModel):
 
 
 # ========== Helpers ==========
+def hash_password(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+def verify_password(plain: str, hashed: str) -> bool:
+    try:
+        return bcrypt.checkpw(plain.encode('utf-8'), hashed.encode('utf-8'))
+    except Exception:
+        return False
+
+def create_token(user_id: str) -> str:
+    payload = {
+        "sub": user_id,
+        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_HOURS),
+        "iat": datetime.now(timezone.utc),
+    }
+    return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
 def is_admin(user: Dict[str, Any]) -> bool:
     return user.get("email") == "d.trujillo@brancoindustries.com"
 
 async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
-    # ... (existing token logic)
+    try:
+        payload = pyjwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Token inválido")
+    except pyjwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expirado")
+    except pyjwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Token inválido")
+
+    user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuario no encontrado")
+    if not user.get("active", True):
+        raise HTTPException(status_code=403, detail="Cuenta desactivada")
+
     # Ensure backward compatibility
     user.setdefault("role", "inspector")
     user.setdefault("active", True)
