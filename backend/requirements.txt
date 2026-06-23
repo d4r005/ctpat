@@ -11,3 +11,4 @@ passlib>=1.7.4
 motor==3.3.1
 requests>=2.31.0
 python-multipart>=0.0.9
+aiosmtplib==3.0.1
