@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -22,9 +23,21 @@ export default function CasetaDetail() {
     numero_tractor_salida: '', numero_caja_salida: '',
     escolta: { presente: false, compania: '', unidad: '', placas: '' },
     pallets: '', cajas: '', bultos: '',
+    sello_vvtt_estado: '', sello_vvtt_foto: '',
     guardia_salida_nombre: '',
   });
   const [saving, setSaving] = useState(false);
+
+  const pickExitPhoto = async () => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
+      const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+      if (!r.canceled && r.assets[0]?.base64) {
+        setExitData({ ...exitData, sello_vvtt_foto: `data:image/jpeg;base64,${r.assets[0].base64}` });
+      }
+    } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -51,8 +64,8 @@ export default function CasetaDetail() {
   };
 
   const saveExit = async () => {
-    if (!exitData.guardia_salida_nombre?.trim() || !exitData.condicion_salida) {
-      alert('Completa nombre del guardia y condición de salida'); return;
+    if (!exitData.guardia_salida_nombre?.trim() || !exitData.condicion_salida || !exitData.sello_vvtt_estado) {
+      alert('Completa guardia, condición de salida e inspección de sello VVTT'); return;
     }
     setSaving(true);
     try {
@@ -116,6 +129,23 @@ export default function CasetaDetail() {
           </Section>
         )}
 
+        <Section title="FOTOGRAFÍAS DE ENTRADA">
+          <View style={styles.photoGrid}>
+            <View style={styles.photoItem}>
+              <Text style={styles.photoLabel}>FRENTE UNIDAD</Text>
+              {e.foto_frente_unidad ? <Image source={{ uri: e.foto_frente_unidad }} style={styles.photoImg} /> : <Text style={styles.noPhoto}>Sin foto</Text>}
+            </View>
+            <View style={styles.photoItem}>
+              <Text style={styles.photoLabel}>ATRÁS CAJA</Text>
+              {e.foto_atras_caja ? <Image source={{ uri: e.foto_atras_caja }} style={styles.photoImg} /> : <Text style={styles.noPhoto}>Sin foto</Text>}
+            </View>
+            <View style={styles.photoItem}>
+              <Text style={styles.photoLabel}>ID CHOFER</Text>
+              {e.foto_id_chofer ? <Image source={{ uri: e.foto_id_chofer }} style={styles.photoImg} /> : <Text style={styles.noPhoto}>Sin foto</Text>}
+            </View>
+          </View>
+        </Section>
+
         {rec.status === 'entrada' && (
           <Pressable testID="caseta-go-inspeccion" style={styles.bigBtn} onPress={goInspeccion}>
             <Ionicons name="clipboard" size={24} color={colors.onBrandPrimary} />
@@ -141,6 +171,12 @@ export default function CasetaDetail() {
             <Row label="# Tractor salida" value={x.numero_tractor_salida || '-'} />
             <Row label="# Caja salida" value={x.numero_caja_salida || '-'} />
             <Row label="Pallets / Cajas / Bultos" value={`${x.pallets || 0} / ${x.cajas || 0} / ${x.bultos || 0}`} />
+            <Row label="Sello VVTT" value={(x.sello_vvtt_estado || '-').toUpperCase()} />
+            {x.sello_vvtt_foto ? (
+              <View style={{ padding: spacing.sm, alignItems: 'center' }}>
+                <Image source={{ uri: x.sello_vvtt_foto }} style={{ width: '100%', height: 200, resizeMode: 'contain', borderWidth: 1, borderColor: colors.border }} />
+              </View>
+            ) : null}
             <Row label="Guardia salida" value={x.guardia_salida_nombre} />
           </Section>
         ) : (
@@ -180,6 +216,28 @@ export default function CasetaDetail() {
                   <View style={{ flex: 1 }}><ExitField label="CAJAS" v={exitData.cajas} on={(t: string) => setExitData({ ...exitData, cajas: t })} tid="exit-cajas" kb="numeric" /></View>
                   <View style={{ flex: 1 }}><ExitField label="BULTOS" v={exitData.bultos} on={(t: string) => setExitData({ ...exitData, bultos: t })} tid="exit-bultos" kb="numeric" /></View>
                 </View>
+
+                <Text style={styles.label}>INSPECCIÓN SELLOS VVTT *</Text>
+                <View style={styles.optRow}>
+                  {(['bueno', 'malo'] as const).map((s) => (
+                    <Pressable key={s} onPress={() => setExitData({ ...exitData, sello_vvtt_estado: s })} style={[styles.optChip, { flex: 1 }, exitData.sello_vvtt_estado === s && (s === 'bueno' ? { backgroundColor: colors.success, borderColor: colors.success } : { backgroundColor: colors.error, borderColor: colors.error })]}>
+                      <Text style={[styles.optText, exitData.sello_vvtt_estado === s && { color: '#FFF' }]}>{s.toUpperCase()}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                {exitData.sello_vvtt_foto ? (
+                  <View style={{ marginTop: spacing.sm }}>
+                    <Image source={{ uri: exitData.sello_vvtt_foto }} style={{ width: '100%', height: 150, resizeMode: 'cover', borderWidth: 2, borderColor: colors.borderStrong }} />
+                    <Pressable onPress={() => setExitData({ ...exitData, sello_vvtt_foto: '' })} style={{ position: 'absolute', top: 5, right: 5, backgroundColor: '#FFF', borderRadius: 15 }}><Ionicons name="close-circle" size={30} color={colors.error} /></Pressable>
+                  </View>
+                ) : (
+                  <Pressable onPress={pickExitPhoto} style={{ borderWidth: 2, borderColor: colors.borderStrong, borderStyle: 'dashed', padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, backgroundColor: colors.surfaceSecondary }}>
+                    <Ionicons name="camera" size={32} color={colors.brandPrimary} />
+                    <Text style={{ fontWeight: '900', color: colors.brandPrimary, marginTop: 4 }}>FOTO DEL SELLO VVTT</Text>
+                  </Pressable>
+                )}
+
                 <ExitField label="NOMBRE GUARDIA SALIDA *" v={exitData.guardia_salida_nombre} on={(t: string) => setExitData({ ...exitData, guardia_salida_nombre: t })} tid="exit-guardia" />
               </ScrollView>
               <View style={styles.modalFooter}>
@@ -246,4 +304,9 @@ const styles = StyleSheet.create({
   optChipOn: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   optText: { fontWeight: '900', fontSize: 11, color: colors.onSurface, letterSpacing: 1 },
   optTextOn: { color: colors.onBrandPrimary },
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: spacing.sm, gap: spacing.sm, justifyContent: 'space-between' },
+  photoItem: { width: '48%', marginBottom: spacing.sm },
+  photoLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, marginBottom: 4, letterSpacing: 0.5 },
+  photoImg: { width: '100%', height: 120, resizeMode: 'cover', borderWidth: 2, borderColor: colors.borderStrong },
+  noPhoto: { fontSize: 10, color: colors.muted, fontStyle: 'italic' },
 });

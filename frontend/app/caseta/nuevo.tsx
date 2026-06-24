@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView,
-  Platform, ActivityIndicator, Alert,
+  Platform, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import Signature from 'react-native-signature-canvas';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
-const TOTAL_STEPS = 3;
+const TOTAL_STEPS = 4;
 
 const REGLAS = [
   '1. No romper el sello hasta que la cortina asignada esté abierta y el almacenista responsable esté presente.',
@@ -64,6 +65,11 @@ export default function CasetaNuevo() {
   const [escoltaUnidad, setEscoltaUnidad] = useState('');
   const [escoltaPlacas, setEscoltaPlacas] = useState('');
 
+  // Step 1 — Fotografías
+  const [fotoFrente, setFotoFrente] = useState('');
+  const [fotoAtras, setFotoAtras] = useState('');
+  const [fotoId, setFotoId] = useState('');
+
   // Step 2 — Carga y operación
   const [cortina, setCortina] = useState('');
   const [guardiaCaseta, setGuardiaCaseta] = useState('');
@@ -86,9 +92,21 @@ export default function CasetaNuevo() {
 
   const canNext = () => {
     if (step === 0) return placas.trim() && chofer.trim();
-    if (step === 1) return guardiaCaseta.trim() && condicionCarga;
-    if (step === 2) return aceptaTerminos && firmaOperador;
+    if (step === 1) return fotoFrente && fotoAtras && fotoId;
+    if (step === 2) return guardiaCaseta.trim() && condicionCarga;
+    if (step === 3) return aceptaTerminos && firmaOperador;
     return false;
+  };
+
+  const pickPhoto = async (setter: (v: string) => void) => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
+      const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+      if (!r.canceled && r.assets[0]?.base64) {
+        setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
+      }
+    } catch (e: any) { alert(e.message || 'Error al capturar foto'); }
   };
 
   const handleSave = async () => {
@@ -101,6 +119,9 @@ export default function CasetaNuevo() {
         compania_caja: companiaCaja, numero_caja: numeroCaja,
         sello_entrada: selloEntradaNA ? 'N/A' : selloEntrada,
         escolta: { presente: escoltaPresente, compania: escoltaCompania, unidad: escoltaUnidad, placas: escoltaPlacas },
+        foto_frente_unidad: fotoFrente,
+        foto_atras_caja: fotoAtras,
+        foto_id_chofer: fotoId,
         cortina_asignada: cortina, guardia_caseta_nombre: guardiaCaseta,
         condicion_carga: condicionCarga, descripcion_carga: descripcionCarga,
         numero_guia: numGuiaNA ? 'N/A' : numGuia,
@@ -147,7 +168,7 @@ export default function CasetaNuevo() {
         <View style={{ width: 24 }} />
       </View>
       <View style={styles.progressBg}><View style={[styles.progressFill, { width: `${progress}%` }]} /></View>
-      <Text style={styles.stepLabel}>PASO {step + 1} DE {TOTAL_STEPS}: {['VEHÍCULO', 'CARGA Y OPERACIÓN', 'REGLAS Y FIRMA'][step]}</Text>
+      <Text style={styles.stepLabel}>PASO {step + 1} DE {TOTAL_STEPS}: {['VEHÍCULO', 'FOTOGRAFÍAS', 'CARGA Y OPERACIÓN', 'REGLAS Y FIRMA'][step]}</Text>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -187,6 +208,30 @@ export default function CasetaNuevo() {
           )}
 
           {step === 1 && (
+            <View>
+              <Text style={styles.stepTitle}>Registro Fotográfico</Text>
+
+              <PhotoBox
+                label="UNIDAD (FRENTE) - Placa y Económico"
+                value={fotoFrente}
+                onPress={() => pickPhoto(setFotoFrente)}
+              />
+
+              <PhotoBox
+                label="CAJA / TRÁILER (ATRÁS) - Placa y Económico"
+                value={fotoAtras}
+                onPress={() => pickPhoto(setFotoAtras)}
+              />
+
+              <PhotoBox
+                label="IDENTIFICACIÓN DEL CHOFER"
+                value={fotoId}
+                onPress={() => pickPhoto(setFotoId)}
+              />
+            </View>
+          )}
+
+          {step === 2 && (
             <View>
               <Field label="CORTINA ASIGNADA" value={cortina} onChange={setCortina} testID="caseta-cortina" />
               <Field label="NOMBRE GUARDIA CASETA *" value={guardiaCaseta} onChange={setGuardiaCaseta} testID="caseta-guardia" />
@@ -235,7 +280,7 @@ export default function CasetaNuevo() {
             </View>
           )}
 
-          {step === 2 && (
+          {step === 3 && (
             <View>
               <Text style={styles.declTitle}>INSTRUCCIONES DE SEGURIDAD</Text>
               <View style={styles.rulesBox}>
@@ -347,6 +392,24 @@ function ToggleRow({ label, value, onChange, testID }: any) {
   );
 }
 
+function PhotoBox({ label, value, onPress }: any) {
+  return (
+    <View style={{ marginBottom: spacing.lg }}>
+      <Text style={styles.fieldLabel}>{label} *</Text>
+      <Pressable onPress={onPress} style={styles.photoBox}>
+        {value ? (
+          <Image source={{ uri: value }} style={styles.photoPreview} />
+        ) : (
+          <View style={styles.photoPlaceholder}>
+            <Ionicons name="camera" size={40} color={colors.brandPrimary} />
+            <Text style={styles.photoText}>TOCAR PARA TOMAR FOTO</Text>
+          </View>
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   topBar: { backgroundColor: colors.brandPrimary, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -361,6 +424,11 @@ const styles = StyleSheet.create({
   naCheck: { width: 20, height: 20, borderWidth: 2, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF' },
   naCheckOn: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   naText: { fontSize: 10, fontWeight: '900', color: colors.onSurface },
+  stepTitle: { fontSize: typography.sizes.xl, fontWeight: '900', color: colors.onSurface, marginBottom: spacing.md },
+  photoBox: { borderWidth: 2, borderColor: colors.borderStrong, height: 200, backgroundColor: colors.surfaceSecondary, borderStyle: 'dashed', overflow: 'hidden' },
+  photoPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  photoText: { fontWeight: '900', color: colors.brandPrimary, fontSize: 11, marginTop: 8 },
+  photoPreview: { flex: 1, resizeMode: 'cover' },
   optionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   optionChip: { borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, paddingVertical: 8, flexShrink: 0 },
   optionChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
