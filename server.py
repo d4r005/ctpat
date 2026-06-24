@@ -145,6 +145,9 @@ class VehicleEntry(BaseModel):
     orden_compra: bool = False
     numero_orden_compra: str = ""
     destino: str = ""
+    foto_frente_unidad: str = ""
+    foto_atras_caja: str = ""
+    foto_id_chofer: str = ""
     firma_operador: str = ""  # base64 png
     declaraciones_aceptadas: bool = False
     fecha_entrada: Optional[str] = None
@@ -162,6 +165,8 @@ class VehicleExit(BaseModel):
     pallets: str = ""
     cajas: str = ""
     bultos: str = ""
+    sello_vvtt_estado: str = ""  # bueno | malo
+    sello_vvtt_foto: str = ""   # base64
     guardia_salida_nombre: str = ""
     firma_guardia: str = ""
     fecha_salida: Optional[str] = None
@@ -805,6 +810,9 @@ async def _trigger_automatic_report(rec_id: str):
                     <tr><td style="padding: 8px; font-weight: bold;">Compañía:</td><td style="padding: 8px;">{record['entry'].get('compania_transporte', 'N/A')}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold;">Fecha Entrada:</td><td style="padding: 8px;">{record['entry'].get('fecha_entrada', 'N/A')}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold; color: #16A34A;">Fecha Salida:</td><td style="padding: 8px; color: #16A34A; font-weight: bold;">{record['exit'].get('fecha_salida', 'N/A') if record.get('exit') else 'No registrada'}</td></tr>
+                    {f'''
+                    <tr><td style="padding: 8px; font-weight: bold;">Sello VVTT (Salida):</td><td style="padding: 8px; text-transform: uppercase;">{record['exit'].get('sello_vvtt_estado', 'N/A')}</td></tr>
+                    ''' if record.get('exit') else ''}
                 </table>
 
                 <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">2. Inspección C-TPAT (19 Puntos)</h2>
