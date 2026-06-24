@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { documentDirectory, downloadAsync } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system';
 import { apiCall, API_BASE } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -121,8 +121,8 @@ ${data.top_failed_points.length ? data.top_failed_points.map((p) => `<tr><td sty
         window.URL.revokeObjectURL(downloadUrl);
         document.body.removeChild(a);
       } else {
-        const filename = `${documentDirectory}reporte_naf.csv`;
-        const res = await downloadAsync(url, filename, {
+        const filename = `${(FileSystem as any).documentDirectory}reporte_naf.csv`;
+        const res = await FileSystem.downloadAsync(url, filename, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (await Sharing.isAvailableAsync()) {
