@@ -172,11 +172,11 @@ export default function Supervisor() {
             <>
               <Pressable testID="supervisor-analitica-btn" style={[styles.exportBtn, { backgroundColor: colors.success }]} onPress={() => router.push('/(app)/analitica')}>
                 <Ionicons name="stats-chart" size={16} color={colors.onSuccess} />
-                <Text style={[styles.exportText, { color: colors.onSuccess }]}>KPIs</Text>
+                <Text style={[styles.exportText, { color: colors.onSuccess }]}>{t('kpis')}</Text>
               </Pressable>
               <Pressable testID="supervisor-users-btn" style={[styles.exportBtn, { backgroundColor: colors.brandSecondary }]} onPress={() => router.push('/(app)/usuarios')}>
                 <Ionicons name="people" size={16} color={colors.onBrandSecondary} />
-                <Text style={[styles.exportText, { color: colors.onBrandSecondary }]}>USUARIOS</Text>
+                <Text style={[styles.exportText, { color: colors.onBrandSecondary }]}>{t('usuarios_caps')}</Text>
               </Pressable>
             </>
           )}
@@ -209,7 +209,7 @@ export default function Supervisor() {
           <TextInput
             testID="supervisor-search"
             style={styles.searchInput}
-            placeholder="Placas, inspector, compañía..."
+            placeholder={t('buscar_placeholder')}
             placeholderTextColor={colors.muted}
             value={query}
             onChangeText={setQuery}
@@ -260,7 +260,7 @@ export default function Supervisor() {
                     disabled={!!reportLoading}
                   >
                     <Ionicons name="mail" size={14} color={colors.onBrandSecondary} />
-                    <Text style={styles.reportBtnText}>ESPAÑOL</Text>
+                    <Text style={styles.reportBtnText}>{t('espanol_caps')}</Text>
                   </Pressable>
                   <Pressable
                     style={[styles.reportBtn, { backgroundColor: colors.info }, reportLoading === item.id && { opacity: 0.5 }]}
@@ -268,7 +268,7 @@ export default function Supervisor() {
                     disabled={!!reportLoading}
                   >
                     <Ionicons name="mail" size={14} color={colors.onInfo} />
-                    <Text style={[styles.reportBtnText, { color: colors.onInfo }]}>中文 (REPORT)</Text>
+                    <Text style={[styles.reportBtnText, { color: colors.onInfo }]}>{t('chino_caps')} (REPORT)</Text>
                   </Pressable>
                 </View>
               </View>

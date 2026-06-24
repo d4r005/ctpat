@@ -25,9 +25,9 @@ export default function Caseta() {
   const [loading, setLoading] = useState(false);
 
   const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-    entrada: { label: t('en_patio', 'EN PATIO'), color: '#F59E0B' },
-    inspeccionado: { label: t('inspeccionado', 'INSPECCIONADO'), color: '#0284C7' },
-    salida: { label: t('salio', 'SALIÓ'), color: '#16A34A' },
+    entrada: { label: t('en_patio'), color: '#F59E0B' },
+    inspeccionado: { label: t('inspeccionado'), color: '#0284C7' },
+    salida: { label: t('salio'), color: '#16A34A' },
   };
 
   const load = useCallback(async () => {
@@ -45,7 +45,7 @@ export default function Caseta() {
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="caseta-screen">
       <View style={styles.header}>
         <Text style={styles.title}>{t('caseta')}</Text>
-        <Text style={styles.subtitle}>{t('caseta_subtitle', 'Registro de entrada y salida de vehículos')}</Text>
+        <Text style={styles.subtitle}>{t('caseta_subtitle')}</Text>
       </View>
 
       <Pressable
@@ -55,8 +55,8 @@ export default function Caseta() {
       >
         <Ionicons name="add-circle" size={32} color={colors.onBrandSecondary} />
         <View style={{ flex: 1, marginLeft: spacing.md }}>
-          <Text style={styles.fabTitle}>{t('nuevo_registro_entrada', 'NUEVO REGISTRO DE ENTRADA')}</Text>
-          <Text style={styles.fabSub}>{t('vehiculo_llegando', 'Vehículo llegando al patio')}</Text>
+          <Text style={styles.fabTitle}>{t('nuevo_registro_entrada')}</Text>
+          <Text style={styles.fabSub}>{t('vehiculo_llegando')}</Text>
         </View>
         <Ionicons name="arrow-forward" size={24} color={colors.onBrandSecondary} />
       </Pressable>
@@ -67,7 +67,7 @@ export default function Caseta() {
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brandPrimary} />}
         ListHeaderComponent={
-          records.length > 0 ? <Text style={styles.sectionTitle}>{t('vehiculos_registrados', 'VEHÍCULOS REGISTRADOS')}</Text> : null
+          records.length > 0 ? <Text style={styles.sectionTitle}>{t('vehiculos_registrados')}</Text> : null
         }
         ListEmptyComponent={
           loading ? (
@@ -75,7 +75,7 @@ export default function Caseta() {
           ) : (
             <View style={styles.empty}>
               <Ionicons name="car-outline" size={48} color={colors.muted} />
-              <Text style={styles.emptyText}>{t('sin_vehiculos', 'Sin vehículos registrados')}</Text>
+              <Text style={styles.emptyText}>{t('sin_vehiculos')}</Text>
             </View>
           )
         }
@@ -90,7 +90,7 @@ export default function Caseta() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowTitle}>{item.entry.placas_unidad}</Text>
                 <Text style={styles.rowSub}>{item.entry.chofer_nombre} · {item.entry.compania_transporte || '-'}</Text>
-                <Text style={styles.rowMeta}>{t('trailer', 'Tráiler')}: {item.entry.numero_caja || '-'} · {t('sello', 'Sello')}: {item.entry.sello_entrada || '-'}</Text>
+                <Text style={styles.rowMeta}>{t('trailer')}: {item.entry.numero_caja || '-'} · {t('sello')}: {item.entry.sello_entrada || '-'}</Text>
                 <Text style={styles.rowDate}>{new Date(item.entry.fecha_entrada || item.created_at).toLocaleString()}</Text>
               </View>
               <View style={[styles.statusChip, { backgroundColor: st.color }]}>

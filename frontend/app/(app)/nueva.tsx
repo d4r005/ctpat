@@ -8,6 +8,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Signature from 'react-native-signature-canvas';
+import { useTranslation } from 'react-i18next';
 import { useInspections, InspectionPoint } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { getInspectionPoints } from '@/src/constants/inspectionPoints';
@@ -19,6 +20,7 @@ const TOTAL_STEPS = 4;
 
 export default function Nueva() {
   const router = useRouter();
+  const { t } = useTranslation();
   const params = useLocalSearchParams<{ record_id?: string; compania?: string; placas?: string; trailer?: string; sello?: string; type?: string }>();
 
   const [showTypeSelector, setShowTypeSelector] = useState(!params.type);
@@ -102,7 +104,7 @@ export default function Nueva() {
   };
 
   // also expose inspectionType to UI
-  const typeLabel = inspectionType === '9_puntos_contenedor' ? '9 PUNTOS CONTENEDOR' : '19 PUNTOS';
+  const typeLabel = inspectionType === '9_puntos_contenedor' ? t('inspeccion_9_puntos') : t('inspeccion_19_puntos');
 
   const handleSave = async () => {
     setSaving(true);
@@ -130,21 +132,31 @@ export default function Nueva() {
       }
 
       Alert.alert(
-        "Inspección Guardada",
-        "¿Desea generar el Ticket de Embarque ahora?",
+        t('inspeccion_guardada'),
+        t('desea_generar_ticket'),
         [
           {
-            text: "Ver Detalle",
+            text: t('ver_detalle'),
             onPress: () => router.replace(`/inspection/${created.id}`)
           },
           {
-            text: "SÍ, GENERAR TICKET",
-            onPress: () => router.replace('/embarque/nuevo')
+            text: t('si_generar_ticket_caps'),
+            onPress: () => {
+              const queryParams = new URLSearchParams({
+                inspection_id: created.id,
+                compania: compania,
+                placas: placas,
+                trailer: trailer,
+                sello: precinto !== 'N/A' ? precinto : '',
+                operador: inspectorNombre
+              });
+              router.replace(`/embarque/nuevo?${queryParams.toString()}`);
+            }
           }
         ]
       );
     } catch (e: any) {
-      alert(e.message || 'Error al guardar');
+      alert(e.message || t('error_general', 'Error'));
     } finally {
       setSaving(false);
     }
@@ -157,11 +169,11 @@ export default function Nueva() {
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} />
           </Pressable>
-          <Text style={styles.selectorTitle}>Nueva Inspección</Text>
+          <Text style={styles.selectorTitle}>{t('nueva_inspeccion')}</Text>
         </View>
 
         <View style={styles.selectorContent}>
-          <Text style={styles.selectorLabel}>SELECCIONA EL TIPO DE UNIDAD:</Text>
+          <Text style={styles.selectorLabel}>{t('selecciona_tipo')}</Text>
 
           <Pressable
             style={[styles.typeCard, { backgroundColor: colors.brandPrimary }]}
@@ -169,8 +181,8 @@ export default function Nueva() {
           >
             <Ionicons name="car-sport" size={48} color="#FFF" />
             <View style={{ flex: 1 }}>
-              <Text style={styles.typeTitle}>INSPECCIÓN 19 PUNTOS</Text>
-              <Text style={styles.typeSub}>Tractor, Camión o Remolque</Text>
+              <Text style={styles.typeTitle}>{t('inspeccion_19_puntos')}</Text>
+              <Text style={styles.typeSub}>{t('tractor_camion')}</Text>
             </View>
             <Ionicons name="chevron-forward" size={24} color="#FFF" />
           </Pressable>
@@ -181,8 +193,8 @@ export default function Nueva() {
           >
             <Ionicons name="cube" size={48} color="#FFF" />
             <View style={{ flex: 1 }}>
-              <Text style={styles.typeTitle}>INSPECCIÓN 9 PUNTOS</Text>
-              <Text style={styles.typeSub}>Contenedor Marítimo</Text>
+              <Text style={styles.typeTitle}>{t('inspeccion_9_puntos')}</Text>
+              <Text style={styles.typeSub}>{t('contenedor_maritimo')}</Text>
             </View>
             <Ionicons name="chevron-forward" size={24} color="#FFF" />
           </Pressable>
@@ -199,7 +211,7 @@ export default function Nueva() {
           <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
         </View>
         <Text style={styles.progressText}>
-          PASO {step + 1} DE {TOTAL_STEPS} · {typeLabel} · {['DATOS GENERALES', `${totalPoints} PUNTOS`, 'OBSERVACIONES', 'FIRMAS'][step]}
+          {t('paso')} {step + 1} {t('de')} {TOTAL_STEPS} · {typeLabel} · {[t('datos_generales'), `${totalPoints} ${t('puntos')}`, t('observaciones'), t('firmas')][step]}
         </Text>
       </View>
 
@@ -207,14 +219,14 @@ export default function Nueva() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {step === 0 && (
             <View>
-              <Text style={styles.stepTitle}>Datos de la unidad</Text>
-              <Field label="COMPAÑÍA TRANSPORTISTA" value={compania} onChange={setCompania} testID="nueva-compania-input" />
-              <Field label="PLACAS DE LA UNIDAD" value={placas} onChange={setPlacas} testID="nueva-placas-input" onScan={() => setScanning('placas')} scanTestID="nueva-placas-scan" />
-              <Field label="NÚMERO DE TRÁILER/CONTENEDOR" value={trailer} onChange={setTrailer} testID="nueva-trailer-input" onScan={() => setScanning('trailer')} scanTestID="nueva-trailer-scan" />
+              <Text style={styles.stepTitle}>{t('datos_unidad')}</Text>
+              <Field label={t('compania_transportista_caps')} value={compania} onChange={setCompania} testID="nueva-compania-input" />
+              <Field label={t('placas_unidad_caps')} value={placas} onChange={setPlacas} testID="nueva-placas-input" onScan={() => setScanning('placas')} scanTestID="nueva-placas-scan" />
+              <Field label={t('numero_trailer_caps')} value={trailer} onChange={setTrailer} testID="nueva-trailer-input" onScan={() => setScanning('trailer')} scanTestID="nueva-trailer-scan" />
 
               <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
                 <View style={{ flex: 1 }}>
-                  <Field label="NÚMERO DE PRECINTO" value={precinto} onChange={setPrecinto} testID="nueva-precinto-input" onScan={precintoNA ? undefined : () => setScanning('precinto')} scanTestID="nueva-precinto-scan" disabled={precintoNA} />
+                  <Field label={t('numero_precinto_caps')} value={precinto} onChange={setPrecinto} testID="nueva-precinto-input" onScan={precintoNA ? undefined : () => setScanning('precinto')} scanTestID="nueva-precinto-scan" disabled={precintoNA} />
                 </View>
                 <Pressable onPress={() => setPrecintoNA(!precintoNA)} style={styles.naBox}>
                   <View style={[styles.naCheck, precintoNA && styles.naCheckOn]}>
@@ -224,7 +236,7 @@ export default function Nueva() {
                 </Pressable>
               </View>
 
-              <Field label="SELLO DE ALTA SEGURIDAD" value={selloAlta} onChange={setSelloAlta} testID="nueva-sello-input" />
+              <Field label={t('sello_alta_seguridad_caps')} value={selloAlta} onChange={setSelloAlta} testID="nueva-sello-input" />
               <Pressable
                 testID="nueva-sello-verificado"
                 style={styles.checkRow}
@@ -233,7 +245,7 @@ export default function Nueva() {
                 <View style={[styles.checkbox, selloVerificado && styles.checkboxOn]}>
                   {selloVerificado && <Ionicons name="checkmark" size={18} color={colors.onSuccess} />}
                 </View>
-                <Text style={styles.checkLabel}>Sello debidamente verificado</Text>
+                <Text style={styles.checkLabel}>{t('sello_verificado_msg')}</Text>
               </Pressable>
             </View>
           )}
@@ -241,7 +253,7 @@ export default function Nueva() {
           {step === 1 && (
             <View>
               <Text style={styles.stepTitle}>
-                Inspección {totalPoints} Puntos {inspectionType === '9_puntos_contenedor' ? '(Contenedor)' : ''} <Text style={styles.counter}>({completedPoints}/{totalPoints})</Text>
+                {t('inspeccion')} {totalPoints} {t('puntos')} {inspectionType === '9_puntos_contenedor' ? `(${t('contenedor_maritimo')})` : ''} <Text style={styles.counter}>({completedPoints}/{totalPoints})</Text>
               </Text>
               {points.map((p, idx) => (
                 <View key={p.number} style={styles.pointBlock} testID={`nueva-point-${p.number}`}>
@@ -267,7 +279,7 @@ export default function Nueva() {
                       disabled={p.estado === 'na'}
                     >
                       <Ionicons name="checkmark-circle" size={20} color={p.estado === 'bueno' ? colors.onSuccess : colors.muted} />
-                      <Text style={[styles.toggleText, p.estado === 'bueno' && { color: colors.onSuccess }]}>BUENO</Text>
+                      <Text style={[styles.toggleText, p.estado === 'bueno' && { color: colors.onSuccess }]}>{t('bueno')}</Text>
                     </Pressable>
                     <Pressable
                       testID={`nueva-point-${p.number}-malo`}
@@ -276,12 +288,12 @@ export default function Nueva() {
                       disabled={p.estado === 'na'}
                     >
                       <Ionicons name="close-circle" size={20} color={p.estado === 'malo' ? colors.onError : colors.muted} />
-                      <Text style={[styles.toggleText, p.estado === 'malo' && { color: colors.onError }]}>MALO</Text>
+                      <Text style={[styles.toggleText, p.estado === 'malo' && { color: colors.onError }]}>{t('malo')}</Text>
                     </Pressable>
                   </View>
                   {p.estado === 'na' && (
                     <View style={{ marginTop: spacing.sm, padding: spacing.sm, backgroundColor: colors.surfaceTertiary, alignItems: 'center' }}>
-                      <Text style={{ fontSize: 11, fontWeight: '900', color: colors.muted }}>ESTE PUNTO NO APLICA</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '900', color: colors.muted }}>{t('punto_no_aplica_msg')}</Text>
                     </View>
                   )}
                   {p.estado === 'malo' && (
@@ -291,7 +303,7 @@ export default function Nueva() {
                         style={styles.commentInput}
                         value={p.comentarios}
                         onChangeText={(t) => updatePoint(idx, { comentarios: t })}
-                        placeholder="Describir falla, daño o observación..."
+                        placeholder={t('describir_falla_placeholder')}
                         placeholderTextColor={colors.muted}
                         multiline
                       />
@@ -307,11 +319,11 @@ export default function Nueva() {
                           <>
                             <Pressable testID={`nueva-point-${p.number}-camera`} style={styles.photoBtn} onPress={() => pickPhoto(idx, true)}>
                               <Ionicons name="camera" size={20} color={colors.onBrandPrimary} />
-                              <Text style={styles.photoBtnText}>FOTO</Text>
+                              <Text style={styles.photoBtnText}>{t('foto_caps')}</Text>
                             </Pressable>
                             <Pressable testID={`nueva-point-${p.number}-gallery`} style={[styles.photoBtn, { backgroundColor: colors.brandSecondary }]} onPress={() => pickPhoto(idx, false)}>
                               <Ionicons name="images" size={20} color={colors.onBrandSecondary} />
-                              <Text style={[styles.photoBtnText, { color: colors.onBrandSecondary }]}>GALERÍA</Text>
+                              <Text style={[styles.photoBtnText, { color: colors.onBrandSecondary }]}>{t('galeria_caps')}</Text>
                             </Pressable>
                           </>
                         )}
@@ -325,15 +337,15 @@ export default function Nueva() {
 
           {step === 2 && (
             <View>
-              <Text style={styles.stepTitle}>Observaciones</Text>
-              <Text style={styles.label}>INFORME ACTIVIDAD SOSPECHOSA A SEGURIDAD NAF</Text>
+              <Text style={styles.stepTitle}>{t('observaciones')}</Text>
+              <Text style={styles.label}>{t('informe_actividad_sospechosa_caps')}</Text>
               <TextInput
                 testID="nueva-actividad-input"
                 style={[styles.input, { minHeight: 140, textAlignVertical: 'top' }]}
                 value={actSospechosa}
                 onChangeText={setActSospechosa}
                 multiline
-                placeholder="Detallar cualquier actividad o hallazgo sospechoso (opcional)"
+                placeholder={t('detallar_actividad_placeholder')}
                 placeholderTextColor={colors.muted}
               />
             </View>
@@ -341,22 +353,22 @@ export default function Nueva() {
 
           {step === 3 && (
             <View>
-              <Text style={styles.stepTitle}>Firma</Text>
+              <Text style={styles.stepTitle}>{t('firmas')}</Text>
 
-              <Text style={styles.label}>NOMBRE DEL INSPECTOR</Text>
+              <Text style={styles.label}>{t('nombre_inspector_caps')}</Text>
               <TextInput
                 testID="nueva-inspector-nombre"
                 style={styles.input}
                 value={inspectorNombre}
                 onChangeText={setInspectorNombre}
-                placeholder="Nombre completo"
+                placeholder={t('nombre_completo_placeholder')}
                 placeholderTextColor={colors.muted}
               />
               <Pressable testID="nueva-inspector-firma-btn" style={styles.signatureBox} onPress={() => setShowSigInspector(true)}>
                 {inspectorFirma ? (
-                  <Text style={styles.signatureDone}>FIRMA CAPTURADA ✓ (Tocar para volver a firmar)</Text>
+                  <Text style={styles.signatureDone}>{t('firma_capturada_msg')}</Text>
                 ) : (
-                  <Text style={styles.signatureCta}>Toca para firmar</Text>
+                  <Text style={styles.signatureCta}>{t('toca_para_firmar')}</Text>
                 )}
               </Pressable>
             </View>
@@ -367,7 +379,7 @@ export default function Nueva() {
         <View style={styles.footer}>
           {step > 0 && (
             <Pressable testID="nueva-prev-btn" style={styles.secondaryBtn} onPress={() => setStep(step - 1)}>
-              <Text style={styles.secondaryBtnText}>ATRÁS</Text>
+              <Text style={styles.secondaryBtnText}>{t('atras')}</Text>
             </Pressable>
           )}
           {step < TOTAL_STEPS - 1 ? (
@@ -377,7 +389,7 @@ export default function Nueva() {
               onPress={() => canNext() && setStep(step + 1)}
               disabled={!canNext()}
             >
-              <Text style={styles.primaryBtnText}>SIGUIENTE</Text>
+              <Text style={styles.primaryBtnText}>{t('siguiente')}</Text>
             </Pressable>
           ) : (
             <Pressable
@@ -386,7 +398,7 @@ export default function Nueva() {
               onPress={handleSave}
               disabled={!canNext() || saving}
             >
-              {saving ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.primaryBtnText}>GUARDAR INSPECCIÓN</Text>}
+              {saving ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.primaryBtnText}>{t('guardar_inspeccion_caps')}</Text>}
             </Pressable>
           )}
         </View>
@@ -395,7 +407,7 @@ export default function Nueva() {
       {/* Scanner */}
       <BarcodeScanner
         visible={scanning !== null}
-        title={`Escanear ${scanning === 'placas' ? 'PLACAS' : scanning === 'trailer' ? 'TRÁILER' : 'PRECINTO'}`}
+        title={`${t('escanear_title')} ${scanning === 'placas' ? t('placas_unidad_caps') : scanning === 'trailer' ? t('numero_trailer_caps') : t('numero_precinto_caps')}`}
         onClose={() => setScanning(null)}
         onScan={handleScan}
       />
@@ -405,10 +417,13 @@ export default function Nueva() {
         <SignatureModal
           onClose={() => setShowSigInspector(false)}
           onSave={(sig) => { setInspectorFirma(sig); setShowSigInspector(false); }}
-          title="Firma del Inspector"
+          title={t('firma_inspector')}
+          t={t}
         />
       )}
     </SafeAreaView>
+  );
+}
   );
 }
 
@@ -439,7 +454,7 @@ function Field({ label, value, onChange, testID, onScan, scanTestID, disabled }:
   );
 }
 
-function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSave: (sig: string) => void; title: string }) {
+function SignatureModal({ onClose, onSave, title, t }: { onClose: () => void; onSave: (sig: string) => void; title: string; t: any }) {
   const sigRef = React.useRef<any>(null);
   const handleOK = (signature: string) => onSave(signature);
   const style = `.m-signature-pad--footer {display: none; margin: 0px;}
@@ -453,9 +468,9 @@ function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSav
           <Signature
             ref={sigRef}
             onOK={handleOK}
-            descriptionText="Firme dentro del recuadro"
-            clearText="Borrar"
-            confirmText="Guardar"
+            descriptionText={t('firme_dentro_desc')}
+            clearText={t('borrar')}
+            confirmText={t('guardar')}
             webStyle={style}
             autoClear={false}
             imageType="image/png"
@@ -463,14 +478,14 @@ function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSav
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
           <Pressable style={[styles.secondaryBtn, { flex: 1 }]} onPress={onClose} testID="signature-cancel">
-            <Text style={styles.secondaryBtnText}>CANCELAR</Text>
+            <Text style={styles.secondaryBtnText}>{t('cancelar_caps')}</Text>
           </Pressable>
           <Pressable
             style={[styles.primaryBtn, { flex: 1 }]}
             onPress={() => sigRef.current?.readSignature()}
             testID="signature-save"
           >
-            <Text style={styles.primaryBtnText}>GUARDAR FIRMA</Text>
+            <Text style={styles.primaryBtnText}>{t('guardar_firma_caps')}</Text>
           </Pressable>
         </View>
       </View>
