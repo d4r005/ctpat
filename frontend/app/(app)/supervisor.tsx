@@ -123,16 +123,29 @@ export default function Supervisor() {
         ${htmlZh}
       `;
 
-      const { uri } = await Print.printToFileAsync({ html: combinedHtml, base64: false });
+      const { uri } = await Print.printToFileAsync({ html: combinedHtml, base64: true });
 
       if (Platform.OS === 'web') {
-        const response = await fetch(uri);
-        const blob = await response.blob();
+        // En web, Print.printToFileAsync con base64 devuelve la data en base64
+        // Extraemos la parte base64 si es un data URI o lo usamos directamente
+        const base64Data = uri.includes('base64,') ? uri.split('base64,')[1] : uri;
+
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'application/pdf' });
+
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = `Reporte_Consolidado_${insp.placas_unidad || 'NA'}.pdf`;
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
       } else {
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Descargar Reporte Consolidado' });
       }
