@@ -90,16 +90,19 @@ export default function EmbarqueDetail() {
     } catch (e: any) { alert(e.message); }
   };
 
-  const AdminPhotoActions = ({ field }: { field: string }) => {
+  const AdminPhotoActions = ({ field, hasPhoto }: { field: string, hasPhoto: boolean }) => {
     if (!isAdmin) return null;
     return (
-      <View style={styles.adminPhotoOverlay}>
-        <Pressable onPress={() => adminUpdatePhoto(field)} style={styles.adminPhotoBtn}>
-          <Ionicons name="pencil" size={14} color="#FFF" />
+      <View style={hasPhoto ? styles.adminPhotoOverlay : styles.adminAddPhotoContainer}>
+        <Pressable onPress={() => adminUpdatePhoto(field)} style={hasPhoto ? styles.adminPhotoBtn : styles.adminAddBtn}>
+          <Ionicons name={hasPhoto ? "pencil" : "add-circle"} size={hasPhoto ? 14 : 20} color="#FFF" />
+          {!hasPhoto && <Text style={styles.adminAddText}>AGREGAR</Text>}
         </Pressable>
-        <Pressable onPress={() => adminDeletePhoto(field)} style={[styles.adminPhotoBtn, { backgroundColor: colors.error }]}>
-          <Ionicons name="trash" size={14} color="#FFF" />
-        </Pressable>
+        {hasPhoto && (
+          <Pressable onPress={() => adminDeletePhoto(field)} style={[styles.adminPhotoBtn, { backgroundColor: colors.error }]}>
+            <Ionicons name="trash" size={14} color="#FFF" />
+          </Pressable>
+        )}
       </View>
     );
   };
@@ -146,27 +149,42 @@ export default function EmbarqueDetail() {
               {t.foto_inicio_carga ? (
                 <View>
                   <Image source={{ uri: t.foto_inicio_carga }} style={styles.photoImg} />
-                  <AdminPhotoActions field="foto_inicio_carga" />
+                  <AdminPhotoActions field="foto_inicio_carga" hasPhoto={true} />
                 </View>
-              ) : <Text style={styles.noPhoto}>Sin foto</Text>}
+              ) : (
+                <>
+                  <Text style={styles.noPhoto}>Sin foto</Text>
+                  <AdminPhotoActions field="foto_inicio_carga" hasPhoto={false} />
+                </>
+              )}
             </View>
             <View style={styles.photoItem}>
               <Text style={styles.photoLabel}>MEDIA CARGA</Text>
               {t.foto_media_carga ? (
                 <View>
                   <Image source={{ uri: t.foto_media_carga }} style={styles.photoImg} />
-                  <AdminPhotoActions field="foto_media_carga" />
+                  <AdminPhotoActions field="foto_media_carga" hasPhoto={true} />
                 </View>
-              ) : <Text style={styles.noPhoto}>Sin foto</Text>}
+              ) : (
+                <>
+                  <Text style={styles.noPhoto}>Sin foto</Text>
+                  <AdminPhotoActions field="foto_media_carga" hasPhoto={false} />
+                </>
+              )}
             </View>
             <View style={styles.photoItem}>
               <Text style={styles.photoLabel}>FINAL CARGA</Text>
               {t.foto_final_carga ? (
                 <View>
                   <Image source={{ uri: t.foto_final_carga }} style={styles.photoImg} />
-                  <AdminPhotoActions field="foto_final_carga" />
+                  <AdminPhotoActions field="foto_final_carga" hasPhoto={true} />
                 </View>
-              ) : <Text style={styles.noPhoto}>Sin foto</Text>}
+              ) : (
+                <>
+                  <Text style={styles.noPhoto}>Sin foto</Text>
+                  <AdminPhotoActions field="foto_final_carga" hasPhoto={false} />
+                </>
+              )}
             </View>
           </View>
         </Section>
@@ -232,5 +250,22 @@ const styles = StyleSheet.create({
     width: 24, height: 24, borderRadius: 12, backgroundColor: colors.brandPrimary,
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3,
+  },
+  adminAddPhotoContainer: {
+    marginTop: 5,
+  },
+  adminAddBtn: {
+    backgroundColor: colors.brandPrimary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 6,
+    borderRadius: 4,
+    gap: 4,
+    justifyContent: 'center',
+  },
+  adminAddText: {
+    color: '#FFF',
+    fontSize: 8,
+    fontWeight: '900',
   },
 });

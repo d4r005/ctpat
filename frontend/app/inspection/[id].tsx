@@ -58,16 +58,19 @@ export default function InspectionDetail() {
     } catch (e: any) { alert(e.message); }
   };
 
-  const AdminPointPhotoActions = ({ pointNum }: { pointNum: number }) => {
+  const AdminPointPhotoActions = ({ pointNum, hasPhoto }: { pointNum: number, hasPhoto: boolean }) => {
     if (!isAdmin) return null;
     return (
-      <View style={styles.adminPhotoOverlay}>
-        <Pressable onPress={() => adminUpdatePointPhoto(pointNum)} style={styles.adminPhotoBtn}>
-          <Ionicons name="pencil" size={14} color="#FFF" />
+      <View style={hasPhoto ? styles.adminPhotoOverlay : styles.adminAddPhotoContainer}>
+        <Pressable onPress={() => adminUpdatePointPhoto(pointNum)} style={hasPhoto ? styles.adminPhotoBtn : styles.adminAddBtn}>
+          <Ionicons name={hasPhoto ? "pencil" : "add-circle"} size={hasPhoto ? 14 : 20} color="#FFF" />
+          {!hasPhoto && <Text style={styles.adminAddText}>AGREGAR FOTO</Text>}
         </Pressable>
-        <Pressable onPress={() => adminDeletePointPhoto(pointNum)} style={[styles.adminPhotoBtn, { backgroundColor: colors.error }]}>
-          <Ionicons name="trash" size={14} color="#FFF" />
-        </Pressable>
+        {hasPhoto && (
+          <Pressable onPress={() => adminDeletePointPhoto(pointNum)} style={[styles.adminPhotoBtn, { backgroundColor: colors.error }]}>
+            <Ionicons name="trash" size={14} color="#FFF" />
+          </Pressable>
+        )}
       </View>
     );
   };
@@ -371,9 +374,11 @@ export default function InspectionDetail() {
                 {p.photo ? (
                   <View>
                     <Image source={{ uri: p.photo }} style={styles.pointPhoto} testID={`detail-point-${p.number}-photo`} />
-                    <AdminPointPhotoActions pointNum={p.number} />
+                    <AdminPointPhotoActions pointNum={p.number} hasPhoto={true} />
                   </View>
-                ) : null}
+                ) : (
+                  <AdminPointPhotoActions pointNum={p.number} hasPhoto={false} />
+                )}
               </View>
               <View style={[styles.pointChip, { backgroundColor: p.estado === 'bueno' ? colors.success : p.estado === 'malo' ? colors.error : colors.muted }]}>
                 <Text style={styles.pointChipText}>{(p.estado || 'NA').toUpperCase()}</Text>
@@ -596,5 +601,22 @@ const styles = StyleSheet.create({
     width: 28, height: 28, borderRadius: 14, backgroundColor: colors.brandPrimary,
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3,
+  },
+  adminAddPhotoContainer: {
+    marginTop: 8,
+  },
+  adminAddBtn: {
+    backgroundColor: colors.brandPrimary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 6,
+    borderRadius: 4,
+    gap: 5,
+    alignSelf: 'flex-start',
+  },
+  adminAddText: {
+    color: '#FFF',
+    fontSize: 9,
+    fontWeight: '900',
   },
 });

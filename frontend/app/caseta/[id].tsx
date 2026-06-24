@@ -188,16 +188,19 @@ export default function CasetaDetail() {
     } catch (e: any) { alert(e.message); }
   };
 
-  const AdminPhotoActions = ({ field }: { field: string }) => {
+  const AdminPhotoActions = ({ field, hasPhoto }: { field: string, hasPhoto: boolean }) => {
     if (!isAdmin) return null;
     return (
-      <View style={styles.adminPhotoOverlay}>
-        <Pressable onPress={() => adminUpdatePhoto(field)} style={styles.adminPhotoBtn}>
-          <Ionicons name="pencil" size={16} color="#FFF" />
+      <View style={hasPhoto ? styles.adminPhotoOverlay : styles.adminAddPhotoContainer}>
+        <Pressable onPress={() => adminUpdatePhoto(field)} style={hasPhoto ? styles.adminPhotoBtn : styles.adminAddBtn}>
+          <Ionicons name={hasPhoto ? "pencil" : "add-circle"} size={hasPhoto ? 16 : 24} color="#FFF" />
+          {!hasPhoto && <Text style={styles.adminAddText}>AGREGAR FOTO</Text>}
         </Pressable>
-        <Pressable onPress={() => adminDeletePhoto(field)} style={[styles.adminPhotoBtn, { backgroundColor: colors.error }]}>
-          <Ionicons name="trash" size={16} color="#FFF" />
-        </Pressable>
+        {hasPhoto && (
+          <Pressable onPress={() => adminDeletePhoto(field)} style={[styles.adminPhotoBtn, { backgroundColor: colors.error }]}>
+            <Ionicons name="trash" size={16} color="#FFF" />
+          </Pressable>
+        )}
       </View>
     );
   };
@@ -250,27 +253,42 @@ export default function CasetaDetail() {
               {e.foto_frente_unidad ? (
                 <View>
                   <Image source={{ uri: e.foto_frente_unidad }} style={styles.photoImg} />
-                  <AdminPhotoActions field="entry.foto_frente_unidad" />
+                  <AdminPhotoActions field="entry.foto_frente_unidad" hasPhoto={true} />
                 </View>
-              ) : <Text style={styles.noPhoto}>Sin foto</Text>}
+              ) : (
+                <>
+                  <Text style={styles.noPhoto}>Sin foto</Text>
+                  <AdminPhotoActions field="entry.foto_frente_unidad" hasPhoto={false} />
+                </>
+              )}
             </View>
             <View style={styles.photoItem}>
               <Text style={styles.photoLabel}>ATRÁS CAJA</Text>
               {e.foto_atras_caja ? (
                 <View>
                   <Image source={{ uri: e.foto_atras_caja }} style={styles.photoImg} />
-                  <AdminPhotoActions field="entry.foto_atras_caja" />
+                  <AdminPhotoActions field="entry.foto_atras_caja" hasPhoto={true} />
                 </View>
-              ) : <Text style={styles.noPhoto}>Sin foto</Text>}
+              ) : (
+                <>
+                  <Text style={styles.noPhoto}>Sin foto</Text>
+                  <AdminPhotoActions field="entry.foto_atras_caja" hasPhoto={false} />
+                </>
+              )}
             </View>
             <View style={styles.photoItem}>
               <Text style={styles.photoLabel}>ID CHOFER</Text>
               {e.foto_id_chofer ? (
                 <View>
                   <Image source={{ uri: e.foto_id_chofer }} style={styles.photoImg} />
-                  <AdminPhotoActions field="entry.foto_id_chofer" />
+                  <AdminPhotoActions field="entry.foto_id_chofer" hasPhoto={true} />
                 </View>
-              ) : <Text style={styles.noPhoto}>Sin foto</Text>}
+              ) : (
+                <>
+                  <Text style={styles.noPhoto}>Sin foto</Text>
+                  <AdminPhotoActions field="entry.foto_id_chofer" hasPhoto={false} />
+                </>
+              )}
             </View>
           </View>
         </Section>
@@ -304,9 +322,13 @@ export default function CasetaDetail() {
             {x.sello_vvtt_foto ? (
               <View style={{ padding: spacing.sm, alignItems: 'center' }}>
                 <Image source={{ uri: x.sello_vvtt_foto }} style={{ width: '100%', height: 200, resizeMode: 'contain', borderWidth: 1, borderColor: colors.border }} />
-                <AdminPhotoActions field="exit.sello_vvtt_foto" />
+                <AdminPhotoActions field="exit.sello_vvtt_foto" hasPhoto={true} />
               </View>
-            ) : null}
+            ) : (
+              <View style={{ padding: spacing.sm }}>
+                <AdminPhotoActions field="exit.sello_vvtt_foto" hasPhoto={false} />
+              </View>
+            )}
             <Row label="Guardia salida" value={x.guardia_salida_nombre} />
           </Section>
         ) : (
@@ -463,5 +485,22 @@ const styles = StyleSheet.create({
     width: 30, height: 30, borderRadius: 15, backgroundColor: colors.brandPrimary,
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3,
+  },
+  adminAddPhotoContainer: {
+    marginTop: 5,
+  },
+  adminAddBtn: {
+    backgroundColor: colors.brandPrimary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 4,
+    gap: 5,
+    justifyContent: 'center',
+  },
+  adminAddText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '900',
   },
 });
