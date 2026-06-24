@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/context/AuthContext';
 import { useInspections } from '@/src/context/InspectionContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -10,6 +11,7 @@ import { colors, spacing, typography } from '@/src/constants/theme';
 export default function Perfil() {
   const { user, signOut } = useAuth();
   const { inspections, pendingCount, isOnline, syncQueue } = useInspections();
+  const { t, i18n } = useTranslation();
   const router = useRouter();
 
   const handleSignOut = async () => {
@@ -17,10 +19,14 @@ export default function Perfil() {
     router.replace('/login');
   };
 
+  const changeLanguage = (lng: string) => {
+    i18n.changeLanguage(lng);
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']} testID="perfil-screen">
       <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
-        <Text style={styles.title}>Perfil</Text>
+        <Text style={styles.title}>{t('perfil')}</Text>
 
         <View style={styles.card}>
           <View style={styles.avatar}>
@@ -32,17 +38,17 @@ export default function Perfil() {
 
         <View style={styles.statsBlock}>
           <View style={styles.statRow}>
-            <Text style={styles.statLabel}>TOTAL INSPECCIONES</Text>
+            <Text style={styles.statLabel}>{t('total_inspecciones')}</Text>
             <Text style={styles.statValue}>{inspections.length}</Text>
           </View>
           <View style={styles.statRow}>
-            <Text style={styles.statLabel}>PENDIENTES DE SINCRONIZAR</Text>
+            <Text style={styles.statLabel}>{t('pendientes_sincronizar')}</Text>
             <Text style={[styles.statValue, pendingCount > 0 && { color: colors.warning }]}>{pendingCount}</Text>
           </View>
           <View style={styles.statRow}>
-            <Text style={styles.statLabel}>ESTADO</Text>
+            <Text style={styles.statLabel}>{t('estado')}</Text>
             <View style={[styles.statusDot, { backgroundColor: isOnline ? colors.success : colors.warning }]}>
-              <Text style={styles.statusDotText}>{isOnline ? 'EN LÍNEA' : 'OFFLINE'}</Text>
+              <Text style={styles.statusDotText}>{isOnline ? t('en_linea') : t('fuera_linea')}</Text>
             </View>
           </View>
         </View>
@@ -50,13 +56,41 @@ export default function Perfil() {
         {pendingCount > 0 && isOnline && (
           <Pressable testID="perfil-sync-button" style={styles.syncBtn} onPress={syncQueue}>
             <Ionicons name="cloud-upload" size={20} color={colors.onInfo} />
-            <Text style={styles.syncBtnText}>SINCRONIZAR AHORA ({pendingCount})</Text>
+            <Text style={styles.syncBtnText}>{t('sincronizar_ahora')} ({pendingCount})</Text>
           </Pressable>
         )}
 
+        <Text style={styles.sectionTitle}>{t('ajustes')}</Text>
+        <View style={styles.settingsBlock}>
+          <View style={styles.settingHeader}>
+            <Ionicons name="language" size={20} color={colors.onSurface} />
+            <Text style={styles.settingTitle}>{t('idioma')}</Text>
+          </View>
+          <View style={styles.languageOptions}>
+            <Pressable
+              style={[styles.langBtn, i18n.language === 'es' && styles.langBtnActive]}
+              onPress={() => changeLanguage('es')}
+            >
+              <Text style={[styles.langBtnText, i18n.language === 'es' && styles.langBtnTextActive]}>Español</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.langBtn, i18n.language === 'en' && styles.langBtnActive]}
+              onPress={() => changeLanguage('en')}
+            >
+              <Text style={[styles.langBtnText, i18n.language === 'en' && styles.langBtnTextActive]}>English</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.langBtn, i18n.language === 'zh' && styles.langBtnActive]}
+              onPress={() => changeLanguage('zh')}
+            >
+              <Text style={[styles.langBtnText, i18n.language === 'zh' && styles.langBtnTextActive]}>中文</Text>
+            </Pressable>
+          </View>
+        </View>
+
         <Pressable testID="perfil-signout-button" style={styles.signOutBtn} onPress={handleSignOut}>
           <Ionicons name="log-out" size={20} color={colors.onError} />
-          <Text style={styles.signOutText}>CERRAR SESIÓN</Text>
+          <Text style={styles.signOutText}>{t('cerrar_sesion')}</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -88,9 +122,24 @@ const styles = StyleSheet.create({
   statusDotText: { color: '#FFF', fontWeight: '900', fontSize: 10, letterSpacing: 1 },
   syncBtn: {
     backgroundColor: colors.info, padding: spacing.lg, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.md,
+    alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.lg,
   },
   syncBtnText: { color: colors.onInfo, fontWeight: '900', letterSpacing: 1 },
+  sectionTitle: { fontSize: 12, fontWeight: '900', color: colors.onSurfaceTertiary, letterSpacing: 1.5, marginBottom: spacing.sm, textTransform: 'uppercase' },
+  settingsBlock: {
+    backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong,
+    padding: spacing.md, marginBottom: spacing.xl,
+  },
+  settingHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
+  settingTitle: { fontSize: typography.sizes.base, fontWeight: '700', color: colors.onSurface },
+  languageOptions: { flexDirection: 'row', gap: spacing.sm },
+  langBtn: {
+    flex: 1, paddingVertical: spacing.sm, alignItems: 'center',
+    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
+  },
+  langBtnActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  langBtnText: { fontSize: 12, fontWeight: '700', color: colors.onSurfaceTertiary },
+  langBtnTextActive: { color: colors.onBrandPrimary },
   signOutBtn: {
     backgroundColor: colors.error, padding: spacing.lg, flexDirection: 'row',
     alignItems: 'center', justifyContent: 'center', gap: spacing.sm,

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, Pressable, TextInput, RefreshControl 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useInspections } from '@/src/context/InspectionContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
@@ -10,6 +11,7 @@ type Filter = 'todos' | 'bueno' | 'malo';
 
 export default function Historico() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { inspections, refresh, loading } = useInspections();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('todos');
@@ -31,13 +33,13 @@ export default function Historico() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']} testID="historico-screen">
       <View style={styles.header}>
-        <Text style={styles.title}>Histórico</Text>
+        <Text style={styles.title}>{t('historico')}</Text>
         <View style={styles.searchBox}>
           <Ionicons name="search" size={18} color={colors.muted} />
           <TextInput
             testID="historico-search-input"
             style={styles.searchInput}
-            placeholder="Placas, compañía, tráiler..."
+            placeholder={t('buscar_placeholder')}
             placeholderTextColor={colors.muted}
             value={query}
             onChangeText={setQuery}
@@ -52,7 +54,7 @@ export default function Historico() {
               style={[styles.chip, filter === f && styles.chipActive]}
             >
               <Text style={[styles.chipText, filter === f && styles.chipTextActive]}>
-                {f === 'todos' ? 'TODOS' : f === 'bueno' ? 'BUENO' : 'CON FALLA'}
+                {f === 'todos' ? t('todos') : f === 'bueno' ? t('bueno') : t('con_falla')}
               </Text>
             </Pressable>
           ))}
@@ -67,7 +69,7 @@ export default function Historico() {
         ListEmptyComponent={
           <View style={styles.empty} testID="historico-empty">
             <Ionicons name="clipboard-outline" size={48} color={colors.muted} />
-            <Text style={styles.emptyText}>No se encontraron inspecciones</Text>
+            <Text style={styles.emptyText}>{t('sin_resultados_inspecciones')}</Text>
           </View>
         }
         renderItem={({ item }) => (
@@ -77,21 +79,21 @@ export default function Historico() {
             onPress={() => router.push(`/inspection/${item.id}`)}
           >
             <View style={{ flex: 1 }}>
-              <Text style={styles.itemTitle}>{item.placas_unidad || 'Sin placas'}</Text>
+              <Text style={styles.itemTitle}>{item.placas_unidad || t('sin_placas')}</Text>
               <Text style={styles.itemSub}>{item.compania_transportista}</Text>
               <Text style={styles.itemMeta}>
-                Tráiler: {item.numero_trailer} · Precinto: {item.numero_precinto}
+                {t('trailer')}: {item.numero_trailer} · {t('precinto')}: {item.numero_precinto}
               </Text>
-              <Text style={styles.itemDate}>{new Date(item.created_at).toLocaleString('es-MX')}</Text>
+              <Text style={styles.itemDate}>{new Date(item.created_at).toLocaleString()}</Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               {item._pending && (
                 <View style={styles.pendingChip}>
-                  <Text style={styles.pendingChipText}>PEND</Text>
+                  <Text style={styles.pendingChipText}>{t('pend')}</Text>
                 </View>
               )}
               <View style={[styles.statusChip, { backgroundColor: item.status_general === 'bueno' ? colors.success : colors.error }]}>
-                <Text style={styles.statusChipText}>{item.status_general === 'bueno' ? 'BUENO' : 'FALLA'}</Text>
+                <Text style={styles.statusChipText}>{item.status_general === 'bueno' ? t('bueno') : t('falla')}</Text>
               </View>
             </View>
           </Pressable>

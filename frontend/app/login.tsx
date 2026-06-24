@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, radius, typography } from '@/src/constants/theme';
 
@@ -15,6 +16,7 @@ const REMEMBER_KEY = 'naf_remembered_email';
 export default function Login() {
   const router = useRouter();
   const { signIn } = useAuth();
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -35,7 +37,7 @@ export default function Login() {
   const handleLogin = async () => {
     setError(null);
     if (!email.trim() || !password) {
-      setError('Ingresa correo y contraseña');
+      setError(t('ingresa_credenciales'));
       return;
     }
     setLoading(true);
@@ -50,7 +52,7 @@ export default function Login() {
 
       router.replace('/(app)/inicio');
     } catch (e: any) {
-      setError(e.message || 'Error al iniciar sesión');
+      setError(e.message || t('error_sesion'));
     } finally {
       setLoading(false);
     }
@@ -67,12 +69,12 @@ export default function Login() {
             <View style={styles.logoBlock}>
               <Text style={styles.logoText}>NAF</Text>
             </View>
-            <Text style={styles.title}>Sistema de Registro e Inspección de Unidades de Carga</Text>
-            <Text style={styles.subtitle}>Sistema de inspección de unidades y remolques</Text>
+            <Text style={styles.title}>{t('sistema_registro')}</Text>
+            <Text style={styles.subtitle}>{t('sistema_inspeccion_sub')}</Text>
           </View>
 
           <View style={styles.form}>
-            <Text style={styles.label}>CORREO ELECTRÓNICO</Text>
+            <Text style={styles.label}>{t('correo_electronico')}</Text>
             <TextInput
               testID="login-email-input"
               style={styles.input}
@@ -84,7 +86,7 @@ export default function Login() {
               placeholderTextColor={colors.muted}
             />
 
-            <Text style={styles.label}>CONTRASEÑA</Text>
+            <Text style={styles.label}>{t('contrasena')}</Text>
             <TextInput
               testID="login-password-input"
               style={styles.input}
@@ -104,7 +106,7 @@ export default function Login() {
                 size={22}
                 color={colors.brandPrimary}
               />
-              <Text style={styles.rememberText}>Recordar usuario</Text>
+              <Text style={styles.rememberText}>{t('recordar_usuario')}</Text>
             </Pressable>
 
             {error ? (
@@ -122,15 +124,15 @@ export default function Login() {
               {loading ? (
                 <ActivityIndicator color={colors.onBrandPrimary} />
               ) : (
-                <Text style={styles.primaryBtnText}>INICIAR SESIÓN</Text>
+                <Text style={styles.primaryBtnText}>{t('iniciar_sesion')}</Text>
               )}
             </Pressable>
 
             <View style={styles.footerRow}>
-              <Text style={styles.footerText}>¿No tienes cuenta? </Text>
+              <Text style={styles.footerText}>{t('no_tienes_cuenta')} </Text>
               <Link href="/register" asChild>
                 <Pressable testID="login-go-register">
-                  <Text style={styles.link}>Regístrate</Text>
+                  <Text style={styles.link}>{t('registrate')}</Text>
                 </Pressable>
               </Link>
             </View>

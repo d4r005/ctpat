@@ -8,6 +8,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Signature from 'react-native-signature-canvas';
+import { useTranslation } from 'react-i18next';
 import { useInspections, InspectionPoint } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { getInspectionPoints } from '@/src/constants/inspectionPoints';
@@ -19,8 +20,13 @@ const TOTAL_STEPS = 4;
 
 export default function Nueva() {
   const router = useRouter();
+  const { t } = useTranslation();
   const params = useLocalSearchParams<{ record_id?: string; compania?: string; placas?: string; trailer?: string; sello?: string; type?: string }>();
-  const inspectionType = (params.type === '9_puntos_contenedor' ? '9_puntos_contenedor' : '19_puntos') as '19_puntos' | '9_puntos_contenedor';
+
+  const [showTypeSelector, setShowTypeSelector] = useState(!params.type);
+  const [selectedType, setSelectedType] = useState<any>(params.type || null);
+
+  const inspectionType = (selectedType === '9_puntos_contenedor' ? '9_puntos_contenedor' : '19_puntos') as '19_puntos' | '9_puntos_contenedor';
   const pointsDef = getInspectionPoints(inspectionType);
   const totalPoints = pointsDef.length;
   const { user, token } = useAuth();
@@ -33,13 +39,19 @@ export default function Nueva() {
   const [placas, setPlacas] = useState(params.placas || '');
   const [trailer, setTrailer] = useState(params.trailer || '');
   const [precinto, setPrecinto] = useState('');
+  const [precintoNA, setPrecintoNA] = useState(false);
   const [selloAlta, setSelloAlta] = useState(params.sello || '');
   const [selloVerificado, setSelloVerificado] = useState(false);
 
   // points (dynamic based on type)
-  const [points, setPoints] = useState<InspectionPoint[]>(
-    pointsDef.map((p) => ({ number: p.number, name: p.name, estado: '', comentarios: '', photo: '' }))
-  );
+  const [points, setPoints] = useState<InspectionPoint[]>([]);
+
+  React.useEffect(() => {
+    if (selectedType) {
+      const def = getInspectionPoints(selectedType);
+      setPoints(def.map((p) => ({ number: p.number, name: p.name, estado: '', comentarios: '', photo: '' })));
+    }
+  }, [selectedType]);
 
   const pickPhoto = async (idx: number, fromCamera: boolean) => {
     try {
@@ -64,11 +76,8 @@ export default function Nueva() {
   // Suspicious + signatures
   const [actSospechosa, setActSospechosa] = useState('');
   const [inspectorNombre, setInspectorNombre] = useState(user?.name || '');
-  const [verificadorNombre, setVerificadorNombre] = useState('');
   const [inspectorFirma, setInspectorFirma] = useState('');
-  const [verificadorFirma, setVerificadorFirma] = useState('');
   const [showSigInspector, setShowSigInspector] = useState(false);
-  const [showSigVerificador, setShowSigVerificador] = useState(false);
   const [scanning, setScanning] = useState<null | 'placas' | 'trailer' | 'precinto'>(null);
 
   const handleScan = (value: string) => {
@@ -87,7 +96,7 @@ export default function Nueva() {
   };
 
   const canNext = () => {
-    if (step === 0) return compania.trim() && placas.trim() && trailer.trim() && precinto.trim();
+    if (step === 0) return compania.trim() && placas.trim() && trailer.trim() && (precintoNA || precinto.trim());
     if (step === 1) return points.every((p) => p.estado !== '');
     if (step === 2) return true;
     if (step === 3) return inspectorNombre.trim() && inspectorFirma;
@@ -95,7 +104,7 @@ export default function Nueva() {
   };
 
   // also expose inspectionType to UI
-  const typeLabel = inspectionType === '9_puntos_contenedor' ? '9 PUNTOS CONTENEDOR' : '19 PUNTOS';
+  const typeLabel = inspectionType === '9_puntos_contenedor' ? t('inspeccion_9_puntos') : t('inspeccion_19_puntos');
 
   const handleSave = async () => {
     setSaving(true);
@@ -104,15 +113,13 @@ export default function Nueva() {
         compania_transportista: compania.trim(),
         placas_unidad: placas.trim().toUpperCase(),
         numero_trailer: trailer.trim(),
-        numero_precinto: precinto.trim(),
+        numero_precinto: precintoNA ? 'N/A' : precinto.trim(),
         sello_alta_seguridad: selloAlta.trim(),
         sello_verificado: selloVerificado,
         points,
         actividad_sospechosa: actSospechosa.trim(),
         inspector_nombre: inspectorNombre.trim(),
         inspector_firma: inspectorFirma,
-        verificador_nombre: verificadorNombre.trim(),
-        verificador_firma: verificadorFirma,
         fecha_hora: new Date().toISOString(),
         client_uuid: '',
         inspection_type: inspectionType,
@@ -125,35 +132,86 @@ export default function Nueva() {
       }
 
       Alert.alert(
-        "Inspección Guardada",
-        "¿Desea generar el Ticket de Embarque ahora?",
+        t('inspeccion_guardada'),
+        t('desea_generar_ticket'),
         [
           {
-            text: "Ver Detalle",
+            text: t('ver_detalle'),
             onPress: () => router.replace(`/inspection/${created.id}`)
           },
           {
-            text: "SÍ, GENERAR TICKET",
-            onPress: () => router.replace('/embarque/nuevo')
+            text: t('si_generar_ticket_caps'),
+            onPress: () => {
+              const queryParams = new URLSearchParams({
+                inspection_id: created.id,
+                compania: compania,
+                placas: placas,
+                trailer: trailer,
+                sello: precinto !== 'N/A' ? precinto : '',
+                operador: inspectorNombre
+              });
+              router.replace(`/embarque/nuevo?${queryParams.toString()}`);
+            }
           }
         ]
       );
     } catch (e: any) {
-      alert(e.message || 'Error al guardar');
+      alert(e.message || t('error_general', 'Error'));
     } finally {
       setSaving(false);
     }
   };
 
+  if (showTypeSelector) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={styles.selectorHeader}>
+          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} />
+          </Pressable>
+          <Text style={styles.selectorTitle}>{t('nueva_inspeccion')}</Text>
+        </View>
+
+        <View style={styles.selectorContent}>
+          <Text style={styles.selectorLabel}>{t('selecciona_tipo')}</Text>
+
+          <Pressable
+            style={[styles.typeCard, { backgroundColor: colors.brandPrimary }]}
+            onPress={() => { setSelectedType('19_puntos'); setShowTypeSelector(false); }}
+          >
+            <Ionicons name="car-sport" size={48} color="#FFF" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.typeTitle}>{t('inspeccion_19_puntos')}</Text>
+              <Text style={styles.typeSub}>{t('tractor_camion')}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={24} color="#FFF" />
+          </Pressable>
+
+          <Pressable
+            style={[styles.typeCard, { backgroundColor: colors.info }]}
+            onPress={() => { setSelectedType('9_puntos_contenedor'); setShowTypeSelector(false); }}
+          >
+            <Ionicons name="cube" size={48} color="#FFF" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.typeTitle}>{t('inspeccion_9_puntos')}</Text>
+              <Text style={styles.typeSub}>{t('contenedor_maritimo')}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={24} color="#FFF" />
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.safe} edges={['top']} testID="nueva-screen">
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="nueva-screen">
       {/* Progress header */}
       <View style={styles.progressHeader}>
         <View style={styles.progressBarBg}>
           <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
         </View>
         <Text style={styles.progressText}>
-          PASO {step + 1} DE {TOTAL_STEPS} · {typeLabel} · {['DATOS GENERALES', `${totalPoints} PUNTOS`, 'OBSERVACIONES', 'FIRMAS'][step]}
+          {t('paso')} {step + 1} {t('de')} {TOTAL_STEPS} · {typeLabel} · {[t('datos_generales'), `${totalPoints} ${t('puntos')}`, t('observaciones'), t('firmas')][step]}
         </Text>
       </View>
 
@@ -161,12 +219,24 @@ export default function Nueva() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {step === 0 && (
             <View>
-              <Text style={styles.stepTitle}>Datos de la unidad</Text>
-              <Field label="COMPAÑÍA TRANSPORTISTA" value={compania} onChange={setCompania} testID="nueva-compania-input" />
-              <Field label="PLACAS DE LA UNIDAD" value={placas} onChange={setPlacas} testID="nueva-placas-input" onScan={() => setScanning('placas')} scanTestID="nueva-placas-scan" />
-              <Field label="NÚMERO DE TRÁILER/CONTENEDOR" value={trailer} onChange={setTrailer} testID="nueva-trailer-input" onScan={() => setScanning('trailer')} scanTestID="nueva-trailer-scan" />
-              <Field label="NÚMERO DE PRECINTO" value={precinto} onChange={setPrecinto} testID="nueva-precinto-input" onScan={() => setScanning('precinto')} scanTestID="nueva-precinto-scan" />
-              <Field label="SELLO DE ALTA SEGURIDAD" value={selloAlta} onChange={setSelloAlta} testID="nueva-sello-input" />
+              <Text style={styles.stepTitle}>{t('datos_unidad')}</Text>
+              <Field label={t('compania_transportista_caps')} value={compania} onChange={setCompania} testID="nueva-compania-input" />
+              <Field label={t('placas_unidad_caps')} value={placas} onChange={setPlacas} testID="nueva-placas-input" onScan={() => setScanning('placas')} scanTestID="nueva-placas-scan" />
+              <Field label={t('numero_trailer_caps')} value={trailer} onChange={setTrailer} testID="nueva-trailer-input" onScan={() => setScanning('trailer')} scanTestID="nueva-trailer-scan" />
+
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Field label={t('numero_precinto_caps')} value={precinto} onChange={setPrecinto} testID="nueva-precinto-input" onScan={precintoNA ? undefined : () => setScanning('precinto')} scanTestID="nueva-precinto-scan" disabled={precintoNA} />
+                </View>
+                <Pressable onPress={() => setPrecintoNA(!precintoNA)} style={styles.naBox}>
+                  <View style={[styles.naCheck, precintoNA && styles.naCheckOn]}>
+                    {precintoNA && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                  </View>
+                  <Text style={styles.naText}>N/A</Text>
+                </Pressable>
+              </View>
+
+              <Field label={t('sello_alta_seguridad_caps')} value={selloAlta} onChange={setSelloAlta} testID="nueva-sello-input" />
               <Pressable
                 testID="nueva-sello-verificado"
                 style={styles.checkRow}
@@ -175,7 +245,7 @@ export default function Nueva() {
                 <View style={[styles.checkbox, selloVerificado && styles.checkboxOn]}>
                   {selloVerificado && <Ionicons name="checkmark" size={18} color={colors.onSuccess} />}
                 </View>
-                <Text style={styles.checkLabel}>Sello debidamente verificado</Text>
+                <Text style={styles.checkLabel}>{t('sello_verificado_msg')}</Text>
               </Pressable>
             </View>
           )}
@@ -183,29 +253,49 @@ export default function Nueva() {
           {step === 1 && (
             <View>
               <Text style={styles.stepTitle}>
-                Inspección {totalPoints} Puntos {inspectionType === '9_puntos_contenedor' ? '(Contenedor)' : ''} <Text style={styles.counter}>({completedPoints}/{totalPoints})</Text>
+                {t('inspeccion')} {totalPoints} {t('puntos')} {inspectionType === '9_puntos_contenedor' ? `(${t('contenedor_maritimo')})` : ''} <Text style={styles.counter}>({completedPoints}/{totalPoints})</Text>
               </Text>
               {points.map((p, idx) => (
                 <View key={p.number} style={styles.pointBlock} testID={`nueva-point-${p.number}`}>
-                  <Text style={styles.pointTitle}>{p.number}. {p.name}</Text>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={styles.pointTitle}>{p.number}. {p.name}</Text>
+                    {p.number === 16 && (
+                      <Pressable
+                        onPress={() => updatePoint(idx, { estado: p.estado === 'na' ? '' : 'na', comentarios: '', photo: '' })}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingBottom: 8 }}
+                      >
+                        <View style={[styles.naCheck, p.estado === 'na' && styles.naCheckOn]}>
+                          {p.estado === 'na' && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                        </View>
+                        <Text style={styles.naText}>N/A</Text>
+                      </Pressable>
+                    )}
+                  </View>
                   <View style={styles.toggleRow}>
                     <Pressable
                       testID={`nueva-point-${p.number}-bueno`}
-                      style={[styles.toggleBtn, p.estado === 'bueno' && styles.toggleBuenoOn]}
-                      onPress={() => updatePoint(idx, { estado: 'bueno' })}
+                      style={[styles.toggleBtn, p.estado === 'bueno' && styles.toggleBuenoOn, p.estado === 'na' && { opacity: 0.3 }]}
+                      onPress={() => p.estado !== 'na' && updatePoint(idx, { estado: 'bueno' })}
+                      disabled={p.estado === 'na'}
                     >
                       <Ionicons name="checkmark-circle" size={20} color={p.estado === 'bueno' ? colors.onSuccess : colors.muted} />
-                      <Text style={[styles.toggleText, p.estado === 'bueno' && { color: colors.onSuccess }]}>BUENO</Text>
+                      <Text style={[styles.toggleText, p.estado === 'bueno' && { color: colors.onSuccess }]}>{t('bueno')}</Text>
                     </Pressable>
                     <Pressable
                       testID={`nueva-point-${p.number}-malo`}
-                      style={[styles.toggleBtn, p.estado === 'malo' && styles.toggleMaloOn]}
-                      onPress={() => updatePoint(idx, { estado: 'malo' })}
+                      style={[styles.toggleBtn, p.estado === 'malo' && styles.toggleMaloOn, p.estado === 'na' && { opacity: 0.3 }]}
+                      onPress={() => p.estado !== 'na' && updatePoint(idx, { estado: 'malo' })}
+                      disabled={p.estado === 'na'}
                     >
                       <Ionicons name="close-circle" size={20} color={p.estado === 'malo' ? colors.onError : colors.muted} />
-                      <Text style={[styles.toggleText, p.estado === 'malo' && { color: colors.onError }]}>MALO</Text>
+                      <Text style={[styles.toggleText, p.estado === 'malo' && { color: colors.onError }]}>{t('malo')}</Text>
                     </Pressable>
                   </View>
+                  {p.estado === 'na' && (
+                    <View style={{ marginTop: spacing.sm, padding: spacing.sm, backgroundColor: colors.surfaceTertiary, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 11, fontWeight: '900', color: colors.muted }}>{t('punto_no_aplica_msg')}</Text>
+                    </View>
+                  )}
                   {p.estado === 'malo' && (
                     <>
                       <TextInput
@@ -213,7 +303,7 @@ export default function Nueva() {
                         style={styles.commentInput}
                         value={p.comentarios}
                         onChangeText={(t) => updatePoint(idx, { comentarios: t })}
-                        placeholder="Describir falla, daño o observación..."
+                        placeholder={t('describir_falla_placeholder')}
                         placeholderTextColor={colors.muted}
                         multiline
                       />
@@ -229,11 +319,11 @@ export default function Nueva() {
                           <>
                             <Pressable testID={`nueva-point-${p.number}-camera`} style={styles.photoBtn} onPress={() => pickPhoto(idx, true)}>
                               <Ionicons name="camera" size={20} color={colors.onBrandPrimary} />
-                              <Text style={styles.photoBtnText}>FOTO</Text>
+                              <Text style={styles.photoBtnText}>{t('foto_caps')}</Text>
                             </Pressable>
                             <Pressable testID={`nueva-point-${p.number}-gallery`} style={[styles.photoBtn, { backgroundColor: colors.brandSecondary }]} onPress={() => pickPhoto(idx, false)}>
                               <Ionicons name="images" size={20} color={colors.onBrandSecondary} />
-                              <Text style={[styles.photoBtnText, { color: colors.onBrandSecondary }]}>GALERÍA</Text>
+                              <Text style={[styles.photoBtnText, { color: colors.onBrandSecondary }]}>{t('galeria_caps')}</Text>
                             </Pressable>
                           </>
                         )}
@@ -247,15 +337,15 @@ export default function Nueva() {
 
           {step === 2 && (
             <View>
-              <Text style={styles.stepTitle}>Observaciones</Text>
-              <Text style={styles.label}>INFORME ACTIVIDAD SOSPECHOSA A SEGURIDAD NAF</Text>
+              <Text style={styles.stepTitle}>{t('observaciones')}</Text>
+              <Text style={styles.label}>{t('informe_actividad_sospechosa_caps')}</Text>
               <TextInput
                 testID="nueva-actividad-input"
                 style={[styles.input, { minHeight: 140, textAlignVertical: 'top' }]}
                 value={actSospechosa}
                 onChangeText={setActSospechosa}
                 multiline
-                placeholder="Detallar cualquier actividad o hallazgo sospechoso (opcional)"
+                placeholder={t('detallar_actividad_placeholder')}
                 placeholderTextColor={colors.muted}
               />
             </View>
@@ -263,39 +353,22 @@ export default function Nueva() {
 
           {step === 3 && (
             <View>
-              <Text style={styles.stepTitle}>Firmas</Text>
+              <Text style={styles.stepTitle}>{t('firmas')}</Text>
 
-              <Text style={styles.label}>NOMBRE DEL INSPECTOR</Text>
+              <Text style={styles.label}>{t('nombre_inspector_caps')}</Text>
               <TextInput
                 testID="nueva-inspector-nombre"
                 style={styles.input}
                 value={inspectorNombre}
                 onChangeText={setInspectorNombre}
-                placeholder="Nombre completo"
+                placeholder={t('nombre_completo_placeholder')}
                 placeholderTextColor={colors.muted}
               />
               <Pressable testID="nueva-inspector-firma-btn" style={styles.signatureBox} onPress={() => setShowSigInspector(true)}>
                 {inspectorFirma ? (
-                  <Text style={styles.signatureDone}>FIRMA CAPTURADA ✓ (Tocar para volver a firmar)</Text>
+                  <Text style={styles.signatureDone}>{t('firma_capturada_msg')}</Text>
                 ) : (
-                  <Text style={styles.signatureCta}>Toca para firmar</Text>
-                )}
-              </Pressable>
-
-              <Text style={[styles.label, { marginTop: spacing.lg }]}>NOMBRE DEL VERIFICADOR (Opcional)</Text>
-              <TextInput
-                testID="nueva-verificador-nombre"
-                style={styles.input}
-                value={verificadorNombre}
-                onChangeText={setVerificadorNombre}
-                placeholder="Nombre completo"
-                placeholderTextColor={colors.muted}
-              />
-              <Pressable testID="nueva-verificador-firma-btn" style={styles.signatureBox} onPress={() => setShowSigVerificador(true)}>
-                {verificadorFirma ? (
-                  <Text style={styles.signatureDone}>FIRMA CAPTURADA ✓</Text>
-                ) : (
-                  <Text style={styles.signatureCta}>Toca para firmar (opcional)</Text>
+                  <Text style={styles.signatureCta}>{t('toca_para_firmar')}</Text>
                 )}
               </Pressable>
             </View>
@@ -306,7 +379,7 @@ export default function Nueva() {
         <View style={styles.footer}>
           {step > 0 && (
             <Pressable testID="nueva-prev-btn" style={styles.secondaryBtn} onPress={() => setStep(step - 1)}>
-              <Text style={styles.secondaryBtnText}>ATRÁS</Text>
+              <Text style={styles.secondaryBtnText}>{t('atras')}</Text>
             </Pressable>
           )}
           {step < TOTAL_STEPS - 1 ? (
@@ -316,7 +389,7 @@ export default function Nueva() {
               onPress={() => canNext() && setStep(step + 1)}
               disabled={!canNext()}
             >
-              <Text style={styles.primaryBtnText}>SIGUIENTE</Text>
+              <Text style={styles.primaryBtnText}>{t('siguiente')}</Text>
             </Pressable>
           ) : (
             <Pressable
@@ -325,7 +398,7 @@ export default function Nueva() {
               onPress={handleSave}
               disabled={!canNext() || saving}
             >
-              {saving ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.primaryBtnText}>GUARDAR INSPECCIÓN</Text>}
+              {saving ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.primaryBtnText}>{t('guardar_inspeccion_caps')}</Text>}
             </Pressable>
           )}
         </View>
@@ -334,7 +407,7 @@ export default function Nueva() {
       {/* Scanner */}
       <BarcodeScanner
         visible={scanning !== null}
-        title={`Escanear ${scanning === 'placas' ? 'PLACAS' : scanning === 'trailer' ? 'TRÁILER' : 'PRECINTO'}`}
+        title={`${t('escanear_title')} ${scanning === 'placas' ? t('placas_unidad_caps') : scanning === 'trailer' ? t('numero_trailer_caps') : t('numero_precinto_caps')}`}
         onClose={() => setScanning(null)}
         onScan={handleScan}
       />
@@ -344,34 +417,33 @@ export default function Nueva() {
         <SignatureModal
           onClose={() => setShowSigInspector(false)}
           onSave={(sig) => { setInspectorFirma(sig); setShowSigInspector(false); }}
-          title="Firma del Inspector"
-        />
-      )}
-      {showSigVerificador && (
-        <SignatureModal
-          onClose={() => setShowSigVerificador(false)}
-          onSave={(sig) => { setVerificadorFirma(sig); setShowSigVerificador(false); }}
-          title="Firma del Verificador"
+          title={t('firma_inspector')}
+          t={t}
         />
       )}
     </SafeAreaView>
   );
 }
 
-function Field({ label, value, onChange, testID, onScan, scanTestID }: { label: string; value: string; onChange: (v: string) => void; testID: string; onScan?: () => void; scanTestID?: string }) {
+function Field({ label, value, onChange, testID, onScan, scanTestID, disabled }: { label: string; value: string; onChange: (v: string) => void; testID: string; onScan?: () => void; scanTestID?: string; disabled?: boolean }) {
   return (
     <>
       <Text style={styles.label}>{label}</Text>
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <TextInput
           testID={testID}
-          style={[styles.input, { flex: 1 }]}
-          value={value}
+          style={[
+            styles.input,
+            { flex: 1 },
+            disabled && { backgroundColor: colors.border, opacity: 0.6 }
+          ]}
+          value={disabled ? 'N/A' : value}
           onChangeText={onChange}
           placeholderTextColor={colors.muted}
+          editable={!disabled}
         />
         {onScan && (
-          <Pressable testID={scanTestID} onPress={onScan} style={styles.scanBtn}>
+          <Pressable testID={scanTestID} onPress={onScan} style={[styles.scanBtn, disabled && { opacity: 0.5 }]} disabled={disabled}>
             <Ionicons name="barcode" size={24} color={colors.onBrandPrimary} />
           </Pressable>
         )}
@@ -380,7 +452,7 @@ function Field({ label, value, onChange, testID, onScan, scanTestID }: { label: 
   );
 }
 
-function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSave: (sig: string) => void; title: string }) {
+function SignatureModal({ onClose, onSave, title, t }: { onClose: () => void; onSave: (sig: string) => void; title: string; t: any }) {
   const sigRef = React.useRef<any>(null);
   const handleOK = (signature: string) => onSave(signature);
   const style = `.m-signature-pad--footer {display: none; margin: 0px;}
@@ -394,9 +466,9 @@ function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSav
           <Signature
             ref={sigRef}
             onOK={handleOK}
-            descriptionText="Firme dentro del recuadro"
-            clearText="Borrar"
-            confirmText="Guardar"
+            descriptionText={t('firme_dentro_desc')}
+            clearText={t('borrar')}
+            confirmText={t('guardar')}
             webStyle={style}
             autoClear={false}
             imageType="image/png"
@@ -404,14 +476,14 @@ function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSav
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
           <Pressable style={[styles.secondaryBtn, { flex: 1 }]} onPress={onClose} testID="signature-cancel">
-            <Text style={styles.secondaryBtnText}>CANCELAR</Text>
+            <Text style={styles.secondaryBtnText}>{t('cancelar_caps')}</Text>
           </Pressable>
           <Pressable
             style={[styles.primaryBtn, { flex: 1 }]}
             onPress={() => sigRef.current?.readSignature()}
             testID="signature-save"
           >
-            <Text style={styles.primaryBtnText}>GUARDAR FIRMA</Text>
+            <Text style={styles.primaryBtnText}>{t('guardar_firma_caps')}</Text>
           </Pressable>
         </View>
       </View>
@@ -433,6 +505,10 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary,
     padding: spacing.md, fontSize: typography.sizes.lg, color: colors.onSurface,
   },
+  naBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong, height: 56, paddingHorizontal: spacing.sm, gap: 4, marginTop: 25 },
+  naCheck: { width: 20, height: 20, borderWidth: 2, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF' },
+  naCheckOn: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  naText: { fontSize: 10, fontWeight: '900', color: colors.onSurface },
   scanBtn: {
     width: 56, backgroundColor: colors.brandPrimary, alignItems: 'center', justifyContent: 'center',
   },
@@ -486,4 +562,13 @@ const styles = StyleSheet.create({
   modalCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong },
   modalTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface, marginBottom: spacing.md, letterSpacing: 1 },
   signatureCanvas: { height: 280 },
+
+  selectorHeader: { backgroundColor: colors.brandPrimary, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  selectorTitle: { color: '#FFF', fontWeight: '900', fontSize: 18, letterSpacing: 1 },
+  backBtn: { padding: 4 },
+  selectorContent: { flex: 1, padding: spacing.xl, justifyContent: 'center', gap: spacing.lg },
+  selectorLabel: { fontWeight: '900', color: colors.muted, fontSize: 12, letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.md },
+  typeCard: { flexDirection: 'row', alignItems: 'center', padding: spacing.xl, gap: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong },
+  typeTitle: { color: '#FFF', fontWeight: '900', fontSize: 18, letterSpacing: 1 },
+  typeSub: { color: '#FFF', opacity: 0.8, fontSize: 12, marginTop: 2 },
 });

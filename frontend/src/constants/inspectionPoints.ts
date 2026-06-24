@@ -23,19 +23,19 @@ export const INSPECTION_POINTS_19: InspectionPointDef[] = [
   { number: 16, name: 'Unidad de refrigeración' },
   { number: 17, name: 'Escape' },
   { number: 18, name: 'Inspección Sellos VVTT', description: 'Ver, Verificar, Tirar, Torcer' },
-  { number: 19, name: 'Inspección agrícola (Ejes)' },
+  { number: 19, name: 'Inspección agrícola' },
 ];
 
 export const INSPECTION_POINTS_9: InspectionPointDef[] = [
-  { number: 1, name: 'Afuera / debajo del contenedor' },
-  { number: 2, name: 'Lateral izquierdo' },
-  { number: 3, name: 'Lateral derecho' },
-  { number: 4, name: 'Pared frontal' },
-  { number: 5, name: 'Techo (corredizo si aplica)' },
-  { number: 6, name: 'Interior y exterior de puertas' },
-  { number: 7, name: 'Fuera tren de rodaje / Chasis' },
-  { number: 8, name: 'Sellos Inspección VVTT', description: 'Ver, Verificar, Tirar, Torcer' },
-  { number: 9, name: 'Contaminación agrícola' },
+  { number: 1, name: 'Pared frontal', description: 'Verificar bloques, canales visibles y sonidos huecos.' },
+  { number: 2, name: 'Lateral izquierdo', description: 'Reparaciones poco comunes y sonidos huecos.' },
+  { number: 3, name: 'Lateral derecho', description: 'Reparaciones poco comunes y sonidos huecos.' },
+  { number: 4, name: 'Piso (Suelo)', description: 'Plano, uniforme, sin plataformas elevadas ni soldaduras raras.' },
+  { number: 5, name: 'Techo', description: 'Distancia estándar, bloques visibles y sin reparaciones externas.' },
+  { number: 6, name: 'Puertas (Interior/Exterior)', description: 'Mecanismos fiables, pernos firmes y sin placas raras.' },
+  { number: 7, name: 'Fuera tren de rodaje / Chasis', description: 'Barras de apoyo visibles, ruedas y llantas normales.' },
+  { number: 8, name: 'Inspección Sellos VVTT', description: 'Ver, Verificar, Tirar, Torcer' },
+  { number: 9, name: 'Inspección agrícola', description: 'Libre de insectos, animales, moho o contaminantes.' },
 ];
 
 // Legacy alias

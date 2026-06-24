@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView,
-  Platform, ActivityIndicator, Alert,
+  Platform, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import Signature from 'react-native-signature-canvas';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
-const TOTAL_STEPS = 3;
+const TOTAL_STEPS = 4;
 
 const REGLAS = [
   '1. No romper el sello hasta que la cortina asignada esté abierta y el almacenista responsable esté presente.',
@@ -58,10 +59,16 @@ export default function CasetaNuevo() {
   const [companiaCaja, setCompaniaCaja] = useState('');
   const [numeroCaja, setNumeroCaja] = useState('');
   const [selloEntrada, setSelloEntrada] = useState('');
+  const [selloEntradaNA, setSelloEntradaNA] = useState(false);
   const [escoltaPresente, setEscoltaPresente] = useState(false);
   const [escoltaCompania, setEscoltaCompania] = useState('');
   const [escoltaUnidad, setEscoltaUnidad] = useState('');
   const [escoltaPlacas, setEscoltaPlacas] = useState('');
+
+  // Step 1 — Fotografías
+  const [fotoFrente, setFotoFrente] = useState('');
+  const [fotoAtras, setFotoAtras] = useState('');
+  const [fotoId, setFotoId] = useState('');
 
   // Step 2 — Carga y operación
   const [cortina, setCortina] = useState('');
@@ -69,9 +76,11 @@ export default function CasetaNuevo() {
   const [condicionCarga, setCondicionCarga] = useState<'vacia' | 'consolidada' | 'otra' | 'descarga' | ''>('');
   const [descripcionCarga, setDescripcionCarga] = useState('');
   const [numGuia, setNumGuia] = useState('');
+  const [numGuiaNA, setNumGuiaNA] = useState(false);
   const [numReq, setNumReq] = useState('');
+  const [numReqNA, setNumReqNA] = useState(false);
   const [ordenCompra, setOrdenCompra] = useState(false);
-  const [cliente, setCliente] = useState('');
+  const [numOrdenCompra, setNumOrdenCompra] = useState('');
   const [destino, setDestino] = useState('');
 
   // Step 3 — Declaraciones + firma
@@ -83,9 +92,30 @@ export default function CasetaNuevo() {
 
   const canNext = () => {
     if (step === 0) return placas.trim() && chofer.trim();
-    if (step === 1) return guardiaCaseta.trim() && condicionCarga;
-    if (step === 2) return aceptaTerminos && firmaOperador;
+    if (step === 1) return fotoFrente && fotoAtras && fotoId;
+    if (step === 2) return guardiaCaseta.trim() && condicionCarga;
+    if (step === 3) return aceptaTerminos && firmaOperador;
     return false;
+  };
+
+  const pickPhoto = async (setter: (v: string) => void, fromCamera: boolean) => {
+    try {
+      if (fromCamera) {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
+        const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+        if (!r.canceled && r.assets[0]?.base64) {
+          setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
+        }
+      } else {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) { alert('Se necesita acceso a la galería'); return; }
+        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+        if (!r.canceled && r.assets[0]?.base64) {
+          setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
+        }
+      }
+    } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
   };
 
   const handleSave = async () => {
@@ -96,12 +126,18 @@ export default function CasetaNuevo() {
         placas_unidad: placas.trim().toUpperCase(), chofer_nombre: chofer.trim(),
         compania_transporte: compania, numero_tractor: tractor,
         compania_caja: companiaCaja, numero_caja: numeroCaja,
-        sello_entrada: selloEntrada,
+        sello_entrada: selloEntradaNA ? 'N/A' : selloEntrada,
         escolta: { presente: escoltaPresente, compania: escoltaCompania, unidad: escoltaUnidad, placas: escoltaPlacas },
+        foto_frente_unidad: fotoFrente,
+        foto_atras_caja: fotoAtras,
+        foto_id_chofer: fotoId,
         cortina_asignada: cortina, guardia_caseta_nombre: guardiaCaseta,
         condicion_carga: condicionCarga, descripcion_carga: descripcionCarga,
-        numero_guia: numGuia, numero_requerimiento: numReq, orden_compra: ordenCompra,
-        cliente, destino,
+        numero_guia: numGuiaNA ? 'N/A' : numGuia,
+        numero_requerimiento: numReqNA ? 'N/A' : numReq,
+        orden_compra: ordenCompra,
+        numero_orden_compra: ordenCompra ? numOrdenCompra : '',
+        destino,
         firma_operador: firmaOperador, declaraciones_aceptadas: aceptaTerminos,
       };
       const created = await apiCall<any>('/vehicle-records', { method: 'POST', body, token });
@@ -134,14 +170,14 @@ export default function CasetaNuevo() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']} testID="caseta-nuevo-screen">
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="caseta-nuevo-screen">
       <View style={styles.topBar}>
         <Pressable onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} /></Pressable>
         <Text style={styles.topTitle}>Registro Entrada</Text>
         <View style={{ width: 24 }} />
       </View>
       <View style={styles.progressBg}><View style={[styles.progressFill, { width: `${progress}%` }]} /></View>
-      <Text style={styles.stepLabel}>PASO {step + 1} DE {TOTAL_STEPS}: {['VEHÍCULO', 'CARGA Y OPERACIÓN', 'REGLAS Y FIRMA'][step]}</Text>
+      <Text style={styles.stepLabel}>PASO {step + 1} DE {TOTAL_STEPS}: {['VEHÍCULO', 'FOTOGRAFÍAS', 'CARGA Y OPERACIÓN', 'REGLAS Y FIRMA'][step]}</Text>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -156,7 +192,18 @@ export default function CasetaNuevo() {
               <Field label="# TRACTOR" value={tractor} onChange={setTractor} testID="caseta-tractor" />
               <Field label="COMPAÑÍA CAJA" value={companiaCaja} onChange={setCompaniaCaja} testID="caseta-compania-caja" />
               <Field label="# CAJA / TRÁILER" value={numeroCaja} onChange={setNumeroCaja} testID="caseta-numero-caja" />
-              <Field label="# SELLO DE ENTRADA" value={selloEntrada} onChange={setSelloEntrada} testID="caseta-sello-entrada" />
+
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Field label="# SELLO DE ENTRADA" value={selloEntrada} onChange={setSelloEntrada} testID="caseta-sello-entrada" disabled={selloEntradaNA} />
+                </View>
+                <Pressable onPress={() => setSelloEntradaNA(!selloEntradaNA)} style={styles.naBox}>
+                  <View style={[styles.naCheck, selloEntradaNA && styles.naCheckOn]}>
+                    {selloEntradaNA && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                  </View>
+                  <Text style={styles.naText}>N/A</Text>
+                </Pressable>
+              </View>
 
               <ToggleRow label="¿ESCOLTA?" value={escoltaPresente} onChange={setEscoltaPresente} testID="caseta-escolta-toggle" />
               {escoltaPresente && (
@@ -171,6 +218,36 @@ export default function CasetaNuevo() {
 
           {step === 1 && (
             <View>
+              <Text style={styles.stepTitle}>Registro Fotográfico</Text>
+
+              <PhotoBox
+                label="UNIDAD (FRENTE) - Placa y Económico"
+                value={fotoFrente}
+                onCamera={() => pickPhoto(setFotoFrente, true)}
+                onGallery={() => pickPhoto(setFotoFrente, false)}
+                onRemove={() => setFotoFrente('')}
+              />
+
+              <PhotoBox
+                label="CAJA / TRÁILER (ATRÁS) - Placa y Económico"
+                value={fotoAtras}
+                onCamera={() => pickPhoto(setFotoAtras, true)}
+                onGallery={() => pickPhoto(setFotoAtras, false)}
+                onRemove={() => setFotoAtras('')}
+              />
+
+              <PhotoBox
+                label="IDENTIFICACIÓN DEL CHOFER"
+                value={fotoId}
+                onCamera={() => pickPhoto(setFotoId, true)}
+                onGallery={() => pickPhoto(setFotoId, false)}
+                onRemove={() => setFotoId('')}
+              />
+            </View>
+          )}
+
+          {step === 2 && (
+            <View>
               <Field label="CORTINA ASIGNADA" value={cortina} onChange={setCortina} testID="caseta-cortina" />
               <Field label="NOMBRE GUARDIA CASETA *" value={guardiaCaseta} onChange={setGuardiaCaseta} testID="caseta-guardia" />
 
@@ -184,15 +261,41 @@ export default function CasetaNuevo() {
               </View>
 
               <Field label="DESCRIPCIÓN DE CARGA" value={descripcionCarga} onChange={setDescripcionCarga} testID="caseta-desc-carga" multiline />
-              <Field label="# GUÍA" value={numGuia} onChange={setNumGuia} testID="caseta-guia" />
-              <Field label="# REQUERIMIENTO" value={numReq} onChange={setNumReq} testID="caseta-requerimiento" />
+
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Field label="# GUÍA" value={numGuia} onChange={setNumGuia} testID="caseta-guia" disabled={numGuiaNA} />
+                </View>
+                <Pressable onPress={() => setNumGuiaNA(!numGuiaNA)} style={styles.naBox}>
+                  <View style={[styles.naCheck, numGuiaNA && styles.naCheckOn]}>
+                    {numGuiaNA && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                  </View>
+                  <Text style={styles.naText}>N/A</Text>
+                </Pressable>
+              </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Field label="# REQUERIMIENTO" value={numReq} onChange={setNumReq} testID="caseta-requerimiento" disabled={numReqNA} />
+                </View>
+                <Pressable onPress={() => setNumReqNA(!numReqNA)} style={styles.naBox}>
+                  <View style={[styles.naCheck, numReqNA && styles.naCheckOn]}>
+                    {numReqNA && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                  </View>
+                  <Text style={styles.naText}>N/A</Text>
+                </Pressable>
+              </View>
+
               <ToggleRow label="¿ORDEN DE COMPRA?" value={ordenCompra} onChange={setOrdenCompra} testID="caseta-orden-compra" />
-              <Field label="CLIENTE" value={cliente} onChange={setCliente} testID="caseta-cliente" />
+              {ordenCompra && (
+                <Field label="# ORDEN DE COMPRA" value={numOrdenCompra} onChange={setNumOrdenCompra} testID="caseta-num-orden-compra" />
+              )}
+
               <Field label="DESTINO" value={destino} onChange={setDestino} testID="caseta-destino" />
             </View>
           )}
 
-          {step === 2 && (
+          {step === 3 && (
             <View>
               <Text style={styles.declTitle}>INSTRUCCIONES DE SEGURIDAD</Text>
               <View style={styles.rulesBox}>
@@ -272,11 +375,23 @@ export default function CasetaNuevo() {
   );
 }
 
-function Field({ label, value, onChange, testID, multiline }: any) {
+function Field({ label, value, onChange, testID, multiline, disabled }: any) {
   return (
     <>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput testID={testID} style={[styles.input, multiline && { minHeight: 80, textAlignVertical: 'top' }]} value={value} onChangeText={onChange} multiline={!!multiline} placeholderTextColor={colors.muted} />
+      <TextInput
+        testID={testID}
+        style={[
+          styles.input,
+          multiline && { minHeight: 80, textAlignVertical: 'top' },
+          disabled && { backgroundColor: colors.border, opacity: 0.6 }
+        ]}
+        value={disabled ? 'N/A' : value}
+        onChangeText={onChange}
+        multiline={!!multiline}
+        placeholderTextColor={colors.muted}
+        editable={!disabled}
+      />
     </>
   );
 }
@@ -292,6 +407,33 @@ function ToggleRow({ label, value, onChange, testID }: any) {
   );
 }
 
+function PhotoBox({ label, value, onCamera, onGallery, onRemove }: any) {
+  return (
+    <View style={{ marginBottom: spacing.lg }}>
+      <Text style={styles.fieldLabel}>{label} *</Text>
+      {value ? (
+        <View style={styles.photoContainer}>
+          <Image source={{ uri: value }} style={styles.photoPreview} />
+          <Pressable style={styles.photoRemove} onPress={onRemove}>
+            <Ionicons name="close-circle" size={24} color={colors.error} />
+          </Pressable>
+        </View>
+      ) : (
+        <View style={styles.photoActionRow}>
+          <Pressable onPress={onCamera} style={styles.photoActionBtn}>
+            <Ionicons name="camera" size={20} color={colors.onBrandPrimary} />
+            <Text style={styles.photoActionText}>CÁMARA</Text>
+          </Pressable>
+          <Pressable onPress={onGallery} style={[styles.photoActionBtn, { backgroundColor: colors.brandSecondary }]}>
+            <Ionicons name="images" size={20} color={colors.onBrandSecondary} />
+            <Text style={[styles.photoActionText, { color: colors.onBrandSecondary }]}>GALERÍA</Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   topBar: { backgroundColor: colors.brandPrimary, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -302,6 +444,20 @@ const styles = StyleSheet.create({
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   fieldLabel: { fontSize: 11, fontWeight: '900', color: colors.onSurfaceTertiary, letterSpacing: 1, marginTop: spacing.md, marginBottom: spacing.sm },
   input: { borderWidth: 2, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary, padding: spacing.md, fontSize: typography.sizes.base, color: colors.onSurface },
+  naBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong, height: 52, paddingHorizontal: spacing.sm, gap: 4 },
+  naCheck: { width: 20, height: 20, borderWidth: 2, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF' },
+  naCheckOn: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  naText: { fontSize: 10, fontWeight: '900', color: colors.onSurface },
+  stepTitle: { fontSize: typography.sizes.xl, fontWeight: '900', color: colors.onSurface, marginBottom: spacing.md },
+  photoBox: { borderWidth: 2, borderColor: colors.borderStrong, height: 200, backgroundColor: colors.surfaceSecondary, borderStyle: 'dashed', overflow: 'hidden' },
+  photoPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  photoText: { fontWeight: '900', color: colors.brandPrimary, fontSize: 11, marginTop: 8 },
+  photoContainer: { position: 'relative', width: '100%', height: 200, borderWidth: 2, borderColor: colors.borderStrong },
+  photoPreview: { flex: 1, resizeMode: 'cover' },
+  photoRemove: { position: 'absolute', top: 8, right: 8, backgroundColor: '#FFF', borderRadius: 12 },
+  photoActionRow: { flexDirection: 'row', gap: spacing.sm },
+  photoActionBtn: { flex: 1, backgroundColor: colors.brandPrimary, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  photoActionText: { color: colors.onBrandPrimary, fontWeight: '900', fontSize: 11, letterSpacing: 1 },
   optionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   optionChip: { borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, paddingVertical: 8, flexShrink: 0 },
   optionChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },

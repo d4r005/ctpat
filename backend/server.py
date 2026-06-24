@@ -16,6 +16,9 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 import jwt as pyjwt
 import aiosmtplib
+import requests
+import base64
+from PIL import Image, ImageDraw
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -108,10 +111,13 @@ class Inspection(BaseModel):
     approval_status: str = "pendiente"  # pendiente | aprobada | rechazada
     approval_note: str = ""
     approved_by_name: str = ""
+    approved_by_signature: str = ""
     approved_at: str = ""
 
 class ApprovalBody(BaseModel):
     note: str = ""
+    name: str = ""
+    signature: str = ""
 
 
 # ========== Vehicle Record (Caseta) ==========
@@ -140,8 +146,11 @@ class VehicleEntry(BaseModel):
     numero_guia: str = ""
     numero_requerimiento: str = ""
     orden_compra: bool = False
-    cliente: str = ""
+    numero_orden_compra: str = ""
     destino: str = ""
+    foto_frente_unidad: str = ""
+    foto_atras_caja: str = ""
+    foto_id_chofer: str = ""
     firma_operador: str = ""  # base64 png
     declaraciones_aceptadas: bool = False
     fecha_entrada: Optional[str] = None
@@ -159,6 +168,8 @@ class VehicleExit(BaseModel):
     pallets: str = ""
     cajas: str = ""
     bultos: str = ""
+    sello_vvtt_estado: str = ""  # bueno | malo
+    sello_vvtt_foto: str = ""   # base64
     guardia_salida_nombre: str = ""
     firma_guardia: str = ""
     fecha_salida: Optional[str] = None
@@ -174,6 +185,51 @@ class VehicleRecord(BaseModel):
 
 
 # ========== Helpers ==========
+def add_watermark(base64_str: str) -> str:
+    """Añade marca de agua (Planta NAF, Fecha, Hora) a una imagen base64"""
+    if not base64_str or not isinstance(base64_str, str) or not base64_str.startswith('data:image'):
+        return base64_str
+
+    try:
+        # Extraer base64
+        if "," in base64_str:
+            header, encoded = base64_str.split(",", 1)
+        else:
+            header, encoded = "data:image/jpeg;base64", base64_str
+
+        image_data = base64.b64decode(encoded)
+        img = Image.open(io.BytesIO(image_data))
+
+        # Convertir a RGB si es necesario (evita errores con PNG o formatos raros)
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+
+        draw = ImageDraw.Draw(img)
+
+        # Configurar texto
+        # Usamos horario local o el de la CDMX si es posible, por ahora UTC formateado
+        now = datetime.now(timezone.utc).astimezone().strftime('%d/%m/%Y %H:%M')
+        text = f"PLANTA NAF | {now}"
+
+        width, height = img.size
+
+        # Dibujar un fondo semi-transparente para legibilidad
+        # Rectángulo negro en la parte inferior
+        font_height = max(24, int(height / 25))
+        draw.rectangle([0, height - font_height - 20, width, height], fill=(0, 0, 0))
+
+        # Escribir el texto (Pillow default font es pequeño, pero seguro)
+        draw.text((20, height - font_height - 5), text, fill=(255, 255, 255))
+
+        # Re-codificar a JPEG
+        buffered = io.BytesIO()
+        img.save(buffered, format="JPEG", quality=80)
+        new_base64 = base64.b64encode(buffered.getvalue()).decode()
+        return f"{header},{new_base64}"
+    except Exception as e:
+        print(f"Error al añadir marca de agua: {e}")
+        return base64_str
+
 def hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
@@ -192,7 +248,8 @@ def create_token(user_id: str) -> str:
     return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 def is_admin(user: Dict[str, Any]) -> bool:
-    return user.get("email") == "d.trujillo@brancoindustries.com"
+    admins = ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"]
+    return user.get("email") in admins
 
 async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
     try:
@@ -227,6 +284,91 @@ async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dic
     return user
 
 
+# ========== AppSheet Sync Utility ==========
+def flatten_dict(d, parent_key='', sep='_'):
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+async def sync_to_appsheet(table_name: str, data: Dict[str, Any]):
+    app_id = os.environ.get("APPSHEET_APP_ID")
+    access_key = os.environ.get("APPSHEET_ACCESS_KEY")
+    webhook_url = os.environ.get("GOOGLE_SHEET_WEBHOOK_URL")
+
+    # Special handling for points to include state and photos individually
+    data_to_flatten = data.copy()
+    if "points" in data_to_flatten:
+        points = data_to_flatten.pop("points")
+        data_to_flatten["total_puntos"] = len(points)
+        data_to_flatten["fallas"] = sum(1 for p in points if p.get("estado") == "malo")
+        for p in points:
+            p_num = p.get("number")
+            data_to_flatten[f"punto_{p_num}_estado"] = p.get("estado")
+            data_to_flatten[f"punto_{p_num}_comentarios"] = p.get("comentarios", "")
+            # Añadir marca de agua si hay foto
+            p_photo = p.get("photo", "")
+            if p_photo and "data:image" in p_photo:
+                data_to_flatten[f"punto_{p_num}_foto"] = add_watermark(p_photo)
+            else:
+                data_to_flatten[f"punto_{p_num}_foto"] = p_photo
+
+    flattened = flatten_dict(data_to_flatten)
+
+    # Aplicar marca de agua a fotos conocidas en Caseta y otras tablas
+    photo_fields = [
+        "entry_foto_frente_unidad", "entry_foto_atras_caja", "entry_foto_id_chofer",
+        "exit_sello_vvtt_foto", "plano_carga",
+        "foto_inicio_carga", "foto_media_carga", "foto_final_carga"
+    ]
+    for field in photo_fields:
+        if field in flattened and isinstance(flattened[field], str) and "data:image" in flattened[field]:
+            flattened[field] = add_watermark(flattened[field])
+
+    # Convert everything to string for AppSheet compatibility if it's not a basic type
+    for k, v in flattened.items():
+        if isinstance(v, (list, dict)):
+            flattened[k] = str(v)
+
+    if app_id and access_key:
+        try:
+            url = f"https://www.appsheet.com/api/v2/apps/{app_id}/tables/{table_name}/Action"
+            payload = {
+                "Action": "Add",
+                "Properties": { "Locale": "es-MX", "Timezone": "Central Standard Time" },
+                "Rows": [flattened]
+            }
+            headers = { "ApplicationAccessKey": access_key, "Content-Type": "application/json" }
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            if response.status_code == 200:
+                logger.info(f"Successfully synced {table_name} to AppSheet API")
+                return
+            else:
+                logger.error(f"AppSheet API Error ({table_name}): {response.text}")
+        except Exception as e:
+            logger.error(f"Error syncing to AppSheet API ({table_name}): {e}")
+
+    # Option 2: Fallback to Google Sheets Webhook
+    if webhook_url:
+        try:
+            payload = {
+                "table": table_name,
+                "data": flattened,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            if response.status_code == 200:
+                print(f"Successfully synced {table_name} to Google Sheets Webhook")
+            else:
+                print(f"Failed to sync to Webhook: {response.text}")
+        except Exception as e:
+            print(f"Error syncing to Webhook: {e}")
+
+
 # ========== Auth Routes ==========
 @api_router.get("/")
 async def root():
@@ -251,9 +393,9 @@ async def register(body: UserRegister):
     if existing:
         raise HTTPException(status_code=400, detail="El correo ya está registrado")
 
-    # First user or specific email becomes supervisor automatically
+    # First user or specific emails become supervisor automatically
     total_users = await db.users.count_documents({})
-    is_admin_email = body.email.lower() == "d.trujillo@brancoindustries.com"
+    is_admin_email = body.email.lower() in ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"]
     role = "supervisor" if (total_users == 0 or is_admin_email) else "inspector"
 
     user_id = str(uuid.uuid4())
@@ -282,8 +424,8 @@ async def login(body: UserLogin):
     if not user.get("active", True):
         raise HTTPException(status_code=403, detail="Cuenta desactivada")
 
-    # Auto-upgrade specific email to supervisor if it isn't already
-    if body.email.lower() == "d.trujillo@brancoindustries.com" and user.get("role") != "supervisor":
+    # Auto-upgrade specific emails to supervisor if it isn't already
+    if body.email.lower() in ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"] and user.get("role") != "supervisor":
         await db.users.update_one({"id": user["id"]}, {"$set": {"role": "supervisor"}})
         user["role"] = "supervisor"
 
@@ -447,6 +589,12 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
         "client_uuid": body.client_uuid,
     }
     await db.inspections.insert_one(doc)
+
+    # Sync to AppSheet
+    try:
+        await sync_to_appsheet("Inspecciones", doc)
+    except: pass
+
     return _serialize_inspection(doc)
 
 
@@ -568,7 +716,8 @@ async def approve_inspection(
     update = {
         "approval_status": "aprobada",
         "approval_note": body.note,
-        "approved_by_name": current_user["name"],
+        "approved_by_name": body.name or current_user["name"],
+        "approved_by_signature": body.signature,
         "approved_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.inspections.update_one({"id": inspection_id}, {"$set": update})
@@ -579,6 +728,12 @@ async def approve_inspection(
         message=f"Tu inspección {doc.get('placas_unidad','')} fue APROBADA por {current_user['name']}." + (f" Nota: {body.note}" if body.note else ""),
         inspection_id=inspection_id,
     )
+
+    # Sync update to AppSheet
+    try:
+        await sync_to_appsheet("Inspecciones", doc)
+    except: pass
+
     return _serialize_inspection(doc)
 
 
@@ -593,7 +748,8 @@ async def reject_inspection(
     update = {
         "approval_status": "rechazada",
         "approval_note": body.note,
-        "approved_by_name": current_user["name"],
+        "approved_by_name": body.name or current_user["name"],
+        "approved_by_signature": body.signature,
         "approved_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.inspections.update_one({"id": inspection_id}, {"$set": update})
@@ -604,6 +760,12 @@ async def reject_inspection(
         message=f"Tu inspección {doc.get('placas_unidad','')} fue RECHAZADA por {current_user['name']}." + (f" Motivo: {body.note}" if body.note else ""),
         inspection_id=inspection_id,
     )
+
+    # Sync update to AppSheet
+    try:
+        await sync_to_appsheet("Inspecciones", doc)
+    except: pass
+
     return _serialize_inspection(doc)
 
 
@@ -657,10 +819,11 @@ async def send_automatic_report(subject: str, recipient: str, body_html: str):
             password=smtp_pass,
             use_tls=(smtp_port == 465),
             start_tls=(smtp_port == 587),
+            timeout=15,
         )
-        print(f"Reporte enviado exitosamente a {recipient}")
+        logger.info(f"Reporte enviado exitosamente a {recipient}")
     except Exception as e:
-        print(f"Error al enviar correo: {e}")
+        logger.error(f"Error al enviar correo a {recipient}: {e}")
 
 
 @api_router.get("/notifications", response_model=List[Notification])
@@ -669,6 +832,44 @@ async def list_notifications(current_user: Dict[str, Any] = Depends(get_current_
         {"user_id": current_user["id"]}, {"_id": 0}
     ).sort("created_at", -1).to_list(200)
     return [Notification(**d) for d in docs]
+
+
+@api_router.post("/test-appsheet")
+async def test_appsheet(current_user: Dict[str, Any] = Depends(require_admin)):
+    """Ruta para probar la conexión con AppSheet API"""
+    test_data = {
+        "id": str(uuid.uuid4()),
+        "test": True,
+        "message": "Prueba de conexión desde SRIUC API",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    await sync_to_appsheet("Test", test_data)
+    return {"message": "Petición de prueba enviada a AppSheet. Revisa los logs del servidor."}
+
+
+@api_router.post("/test-email")
+async def test_email(current_user: Dict[str, Any] = Depends(require_admin)):
+    """Ruta para probar la configuración SMTP"""
+    recipient = os.environ.get("REPORT_RECIPIENT", "d4r005@gmail.com")
+    subject = "🧪 Prueba de Conexión SMTP - SRIUC"
+    html = f"""
+    <html>
+        <body style="font-family: Arial, sans-serif; padding: 20px;">
+            <h2 style="color: #0A2540;">Prueba de Sistema SRIUC</h2>
+            <p>Este es un correo de prueba para verificar que la configuración SMTP es correcta.</p>
+            <p><b>Servidor:</b> {os.environ.get('SMTP_HOST')}</p>
+            <p><b>Usuario:</b> {os.environ.get('SMTP_USER')}</p>
+            <p><b>Fecha/Hora:</b> {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}</p>
+            <hr>
+            <p style="font-size: 12px; color: #666;">Si recibiste este correo, el envío de reportes automáticos debería funcionar correctamente.</p>
+        </body>
+    </html>
+    """
+    try:
+        await send_automatic_report(subject, recipient, html)
+        return {"message": f"Correo de prueba enviado exitosamente a {recipient}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al enviar correo: {str(e)}")
 
 
 @api_router.post("/notifications/{notif_id}/read")
@@ -708,6 +909,12 @@ async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any]
         "created_at": now,
     }
     await db.vehicle_records.insert_one(doc)
+
+    # Sync to AppSheet
+    try:
+        await sync_to_appsheet("Caseta", doc)
+    except: pass
+
     return VehicleRecord(**{k: v for k, v in doc.items() if k != "_id"})
 
 
@@ -755,34 +962,47 @@ async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[
     # Intentar enviar reporte automático al finalizar la salida
     try:
         await _trigger_automatic_report(rec_id)
+        # Sync update to AppSheet
+        await sync_to_appsheet("Caseta", doc)
     except Exception as e:
-        print(f"Error al disparar reporte: {e}")
+        print(f"Error al disparar reporte o sync: {e}")
 
     return VehicleRecord(**doc)
 
 
 async def _trigger_automatic_report(rec_id: str):
+    logger.info(f"Generando reporte consolidado para ID: {rec_id}")
     record = await db.vehicle_records.find_one({"id": rec_id})
-    if not record: return
+    if not record:
+        logger.error(f"Reporte cancelado: No existe el registro {rec_id}")
+        return
 
-    # Buscar inspección vinculada
+    placas = record["entry"].get("placas_unidad", "").strip()
+
+    # Buscar inspección vinculada o por placas (respaldo)
     inspection = None
     if record.get("inspection_id"):
         inspection = await db.inspections.find_one({"id": record["inspection_id"]})
 
-    # Buscar ticket de embarque vinculado (por placas y fecha cercana)
-    # Buscamos tickets creados entre la entrada y la salida de este registro
+    if not inspection and placas:
+        logger.info(f"Buscando inspección de respaldo para placas: {placas}")
+        inspection = await db.inspections.find_one(
+            {"placas_unidad": placas},
+            sort=[("created_at", -1)]
+        )
+
+    # Buscar ticket de embarque
+    fecha_inicio = record["created_at"]
+    fecha_fin = record.get("exit", {}).get("fecha_salida") or datetime.now(timezone.utc).isoformat()
     ticket = await db.shipping_tickets.find_one({
-        "placas_unidad": record["entry"]["placas_unidad"],
-        "created_at": {
-            "$gte": record["created_at"],
-            "$lte": record.get("exit", {}).get("fecha_salida", datetime.now(timezone.utc).isoformat())
-        }
+        "placas_unidad": placas,
+        "created_at": {"$gte": fecha_inicio, "$lte": fecha_fin}
     })
 
-    subject = f"REPORTE CONSOLIDADO SRIUC - UNIDAD: {record['entry']['placas_unidad']}"
-    # Default recipient
-    recipient = os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com")
+    logger.info(f"Datos encontrados - Inspección: {'SI' if inspection else 'NO'}, Ticket: {'SI' if ticket else 'NO'}")
+
+    subject = f"REPORTE CONSOLIDADO SRIUC - UNIDAD: {placas}"
+    recipient = os.environ.get("REPORT_RECIPIENT", "d4r005@gmail.com")
 
     html = f"""
     <html>
@@ -800,6 +1020,9 @@ async def _trigger_automatic_report(rec_id: str):
                     <tr><td style="padding: 8px; font-weight: bold;">Compañía:</td><td style="padding: 8px;">{record['entry'].get('compania_transporte', 'N/A')}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold;">Fecha Entrada:</td><td style="padding: 8px;">{record['entry'].get('fecha_entrada', 'N/A')}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold; color: #16A34A;">Fecha Salida:</td><td style="padding: 8px; color: #16A34A; font-weight: bold;">{record['exit'].get('fecha_salida', 'N/A') if record.get('exit') else 'No registrada'}</td></tr>
+                    {f'''
+                    <tr><td style="padding: 8px; font-weight: bold;">Sello VVTT (Salida):</td><td style="padding: 8px; text-transform: uppercase;">{record['exit'].get('sello_vvtt_estado', 'N/A')}</td></tr>
+                    ''' if record.get('exit') else ''}
                 </table>
 
                 <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">2. Inspección C-TPAT (19 Puntos)</h2>
@@ -808,6 +1031,7 @@ async def _trigger_automatic_report(rec_id: str):
                     <p style="margin: 0;">Estado General: <b style="color: {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">{inspection.get('status_general', 'N/A').upper()}</b></p>
                     <p style="margin: 5px 0 0 0;">Inspector: {inspection.get('inspector_nombre', 'N/A')}</p>
                     <p style="margin: 5px 0 0 0;">Aprobación: <b>{inspection.get('approval_status', 'pendiente').upper()}</b></p>
+                    <p style="margin: 5px 0 0 0;">Autorizado por: {inspection.get('approved_by_name', 'N/A') if inspection.get('approval_status') != 'pendiente' else 'Pendiente'}</p>
                 </div>
                 ''' if inspection else "<p style='color: #666; font-style: italic;'>No se realizó inspección digital para esta unidad.</p>"}
 
@@ -870,6 +1094,9 @@ class ShippingTicket(BaseModel):
     observaciones: str = ""
     daño_caja: str = ""  # description of damage
     plano_carga: str = ""  # base64 image of loading diagram
+    foto_inicio_carga: str = ""
+    foto_media_carga: str = ""
+    foto_final_carga: str = ""
     firma_almacenista: str = ""
     firma_guardia: str = ""
     nombre_guardia: str = ""
@@ -896,6 +1123,9 @@ class ShippingTicketCreate(BaseModel):
     observaciones: str = ""
     daño_caja: str = ""
     plano_carga: str = ""
+    foto_inicio_carga: str = ""
+    foto_media_carga: str = ""
+    foto_final_carga: str = ""
     firma_almacenista: str = ""
     firma_guardia: str = ""
     nombre_guardia: str = ""
@@ -911,6 +1141,12 @@ async def create_ticket(body: ShippingTicketCreate, current_user: Dict[str, Any]
     doc["fecha"] = doc.get("fecha") or now
     doc["created_at"] = now
     await db.shipping_tickets.insert_one(doc)
+
+    # Sync to AppSheet
+    try:
+        await sync_to_appsheet("Embarque", doc)
+    except: pass
+
     return ShippingTicket(**{k: v for k, v in doc.items() if k != "_id"})
 
 
