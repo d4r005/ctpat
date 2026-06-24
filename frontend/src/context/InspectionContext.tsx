@@ -79,57 +79,16 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (Platform.OS === 'web') return;
-    const unsub = NetInfo.addEventListener((state) => {
-      setIsOnline(!!state.isConnected);
-    });
-    return () => unsub();
-  }, []);
-
-  useEffect(() => {
-    if (!token) {
-      setInspections([]);
-      setAllInspections([]);
-      setPendingCount(0);
-      return;
-    }
-    (async () => {
-      const cached = await AsyncStorage.getItem(CACHE_KEY);
-      if (cached) {
-        try { setInspections(JSON.parse(cached)); } catch {}
-      }
-      const queue = await getQueue();
-      setPendingCount(queue.length);
-      await refresh();
-      if (user?.role === 'supervisor') await refreshAll();
-    })();
-  }, [token, user?.role]);
-
-  useEffect(() => {
-    if (isOnline && token && pendingCount > 0) syncQueue();
-  }, [isOnline, token]);
-
-  // Periodic Refresh for better device-to-device communication
-  useEffect(() => {
-    if (!token) return;
-    const interval = setInterval(() => {
-      refresh();
-      if (user?.role === 'supervisor') refreshAll();
-    }, 60000); // Every 60 seconds
-    return () => clearInterval(interval);
-  }, [token, user?.role, refresh, refreshAll]);
-
-  const getQueue = async (): Promise<InspectionPayload[]> => {
+  const getQueue = useCallback(async (): Promise<InspectionPayload[]> => {
     const raw = await AsyncStorage.getItem(QUEUE_KEY);
     if (!raw) return [];
     try { return JSON.parse(raw); } catch { return []; }
-  };
+  }, []);
 
-  const setQueue = async (q: InspectionPayload[]) => {
+  const setQueue = useCallback(async (q: InspectionPayload[]) => {
     await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(q));
     setPendingCount(q.length);
-  };
+  }, []);
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -165,7 +124,48 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     }
     await setQueue(remaining);
     await refresh();
-  }, [token, refresh]);
+  }, [token, refresh, getQueue, setQueue]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const unsub = NetInfo.addEventListener((state) => {
+      setIsOnline(!!state.isConnected);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!token) {
+      setInspections([]);
+      setAllInspections([]);
+      setPendingCount(0);
+      return;
+    }
+    (async () => {
+      const cached = await AsyncStorage.getItem(CACHE_KEY);
+      if (cached) {
+        try { setInspections(JSON.parse(cached)); } catch {}
+      }
+      const queue = await getQueue();
+      setPendingCount(queue.length);
+      await refresh();
+      if (user?.role === 'supervisor') await refreshAll();
+    })();
+  }, [token, user?.role, refresh, refreshAll, getQueue]);
+
+  useEffect(() => {
+    if (isOnline && token && pendingCount > 0) syncQueue();
+  }, [isOnline, token, pendingCount, syncQueue]);
+
+  // Periodic Refresh for better device-to-device communication
+  useEffect(() => {
+    if (!token) return;
+    const interval = setInterval(() => {
+      refresh();
+      if (user?.role === 'supervisor') refreshAll();
+    }, 15000); // Every 15 seconds for real-time feel
+    return () => clearInterval(interval);
+  }, [token, user?.role, refresh, refreshAll]);
 
   const saveInspection = useCallback(async (payload: InspectionPayload): Promise<Inspection> => {
     const full: InspectionPayload = {

@@ -18,10 +18,12 @@ export default function Inicio() {
   const [showNotifs, setShowNotifs] = useState(false);
   const router = useRouter();
 
-  const today = new Date().toISOString().slice(0, 10);
-  const todayInspections = allInspections.length > 0
-    ? allInspections.filter((i) => i.created_at.slice(0, 10) === today)
-    : inspections.filter((i) => i.created_at.slice(0, 10) === today);
+  const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD local
+  const source = allInspections.length > 0 ? allInspections : inspections;
+  const todayInspections = source.filter((i) => {
+    const createdDate = new Date(i.created_at).toLocaleDateString('en-CA');
+    return createdDate === todayStr;
+  });
 
   const sortedInspections = [...todayInspections].sort((a, b) =>
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -52,7 +54,6 @@ export default function Inicio() {
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.hello}>{t('hola')}, {user?.name?.split(' ')[0] || t('inspector')}</Text>
-            <Text style={styles.headerSub}>{t('inspeccion_19_puntos_naf')}</Text>
           </View>
           <Pressable testID="inicio-bell-btn" style={styles.bellBtn} onPress={() => setShowNotifs(true)}>
             <Ionicons name="notifications" size={24} color={colors.onSurface} />
@@ -78,32 +79,6 @@ export default function Inicio() {
             <Text style={styles.statLabel}>{t('con_fallas')}</Text>
           </View>
         </View>
-
-        <Pressable
-          testID="inicio-nueva-button"
-          style={({ pressed }) => [styles.fabBlock, pressed && { opacity: 0.9 }]}
-          onPress={() => router.push('/(app)/nueva')}
-        >
-          <Ionicons name="add-circle" size={32} color={colors.onBrandSecondary} />
-          <View style={{ flex: 1, marginLeft: spacing.md }}>
-            <Text style={styles.fabTitle}>{t('nueva_inspeccion_19_puntos')}</Text>
-            <Text style={styles.fabSub}>{t('camion_remolque')}</Text>
-          </View>
-          <Ionicons name="arrow-forward" size={24} color={colors.onBrandSecondary} />
-        </Pressable>
-
-        <Pressable
-          testID="inicio-nueva-9-button"
-          style={({ pressed }) => [styles.fabBlock, { backgroundColor: colors.info, marginTop: 0, marginBottom: spacing.xl }, pressed && { opacity: 0.9 }]}
-          onPress={() => router.push('/(app)/nueva?type=9_puntos_contenedor')}
-        >
-          <Ionicons name="cube" size={32} color={colors.onInfo} />
-          <View style={{ flex: 1, marginLeft: spacing.md }}>
-            <Text style={[styles.fabTitle, { color: colors.onInfo }]}>{t('nueva_inspeccion_9_puntos')}</Text>
-            <Text style={[styles.fabSub, { color: colors.onInfo }]}>{t('contenedor_maritimo')}</Text>
-          </View>
-          <Ionicons name="arrow-forward" size={24} color={colors.onInfo} />
-        </Pressable>
 
         <Text style={styles.sectionTitle}>{t('inspecciones_hoy_caps')} ({t('tiempo_real')})</Text>
         {sortedInspections.length === 0 ? (
