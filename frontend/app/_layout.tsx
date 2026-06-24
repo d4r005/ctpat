@@ -9,6 +9,7 @@ import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/context/AuthContext";
 import { InspectionProvider } from "@/src/context/InspectionContext";
 import { NotificationsProvider } from "@/src/context/NotificationsContext";
+import "@/src/i18n";
 
 LogBox.ignoreAllLogs(true);
 
