@@ -104,8 +104,7 @@ export default function CasetaDetail() {
           <Row label="Descripción" value={e.descripcion_carga || '-'} />
           <Row label="# Guía" value={e.numero_guia || '-'} />
           <Row label="# Requerimiento" value={e.numero_requerimiento || '-'} />
-          <Row label="Orden compra" value={e.orden_compra ? 'SÍ' : 'NO'} />
-          <Row label="Cliente" value={e.cliente || '-'} />
+          <Row label="Orden compra" value={e.orden_compra ? (e.numero_orden_compra || 'SÍ') : 'NO'} />
           <Row label="Destino" value={e.destino || '-'} />
         </Section>
 

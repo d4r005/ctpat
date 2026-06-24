@@ -58,6 +58,7 @@ export default function CasetaNuevo() {
   const [companiaCaja, setCompaniaCaja] = useState('');
   const [numeroCaja, setNumeroCaja] = useState('');
   const [selloEntrada, setSelloEntrada] = useState('');
+  const [selloEntradaNA, setSelloEntradaNA] = useState(false);
   const [escoltaPresente, setEscoltaPresente] = useState(false);
   const [escoltaCompania, setEscoltaCompania] = useState('');
   const [escoltaUnidad, setEscoltaUnidad] = useState('');
@@ -69,9 +70,11 @@ export default function CasetaNuevo() {
   const [condicionCarga, setCondicionCarga] = useState<'vacia' | 'consolidada' | 'otra' | 'descarga' | ''>('');
   const [descripcionCarga, setDescripcionCarga] = useState('');
   const [numGuia, setNumGuia] = useState('');
+  const [numGuiaNA, setNumGuiaNA] = useState(false);
   const [numReq, setNumReq] = useState('');
+  const [numReqNA, setNumReqNA] = useState(false);
   const [ordenCompra, setOrdenCompra] = useState(false);
-  const [cliente, setCliente] = useState('');
+  const [numOrdenCompra, setNumOrdenCompra] = useState('');
   const [destino, setDestino] = useState('');
 
   // Step 3 — Declaraciones + firma
@@ -96,12 +99,15 @@ export default function CasetaNuevo() {
         placas_unidad: placas.trim().toUpperCase(), chofer_nombre: chofer.trim(),
         compania_transporte: compania, numero_tractor: tractor,
         compania_caja: companiaCaja, numero_caja: numeroCaja,
-        sello_entrada: selloEntrada,
+        sello_entrada: selloEntradaNA ? 'N/A' : selloEntrada,
         escolta: { presente: escoltaPresente, compania: escoltaCompania, unidad: escoltaUnidad, placas: escoltaPlacas },
         cortina_asignada: cortina, guardia_caseta_nombre: guardiaCaseta,
         condicion_carga: condicionCarga, descripcion_carga: descripcionCarga,
-        numero_guia: numGuia, numero_requerimiento: numReq, orden_compra: ordenCompra,
-        cliente, destino,
+        numero_guia: numGuiaNA ? 'N/A' : numGuia,
+        numero_requerimiento: numReqNA ? 'N/A' : numReq,
+        orden_compra: ordenCompra,
+        numero_orden_compra: ordenCompra ? numOrdenCompra : '',
+        destino,
         firma_operador: firmaOperador, declaraciones_aceptadas: aceptaTerminos,
       };
       const created = await apiCall<any>('/vehicle-records', { method: 'POST', body, token });
@@ -156,7 +162,18 @@ export default function CasetaNuevo() {
               <Field label="# TRACTOR" value={tractor} onChange={setTractor} testID="caseta-tractor" />
               <Field label="COMPAÑÍA CAJA" value={companiaCaja} onChange={setCompaniaCaja} testID="caseta-compania-caja" />
               <Field label="# CAJA / TRÁILER" value={numeroCaja} onChange={setNumeroCaja} testID="caseta-numero-caja" />
-              <Field label="# SELLO DE ENTRADA" value={selloEntrada} onChange={setSelloEntrada} testID="caseta-sello-entrada" />
+
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Field label="# SELLO DE ENTRADA" value={selloEntrada} onChange={setSelloEntrada} testID="caseta-sello-entrada" disabled={selloEntradaNA} />
+                </View>
+                <Pressable onPress={() => setSelloEntradaNA(!selloEntradaNA)} style={styles.naBox}>
+                  <View style={[styles.naCheck, selloEntradaNA && styles.naCheckOn]}>
+                    {selloEntradaNA && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                  </View>
+                  <Text style={styles.naText}>N/A</Text>
+                </Pressable>
+              </View>
 
               <ToggleRow label="¿ESCOLTA?" value={escoltaPresente} onChange={setEscoltaPresente} testID="caseta-escolta-toggle" />
               {escoltaPresente && (
@@ -184,10 +201,36 @@ export default function CasetaNuevo() {
               </View>
 
               <Field label="DESCRIPCIÓN DE CARGA" value={descripcionCarga} onChange={setDescripcionCarga} testID="caseta-desc-carga" multiline />
-              <Field label="# GUÍA" value={numGuia} onChange={setNumGuia} testID="caseta-guia" />
-              <Field label="# REQUERIMIENTO" value={numReq} onChange={setNumReq} testID="caseta-requerimiento" />
+
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Field label="# GUÍA" value={numGuia} onChange={setNumGuia} testID="caseta-guia" disabled={numGuiaNA} />
+                </View>
+                <Pressable onPress={() => setNumGuiaNA(!numGuiaNA)} style={styles.naBox}>
+                  <View style={[styles.naCheck, numGuiaNA && styles.naCheckOn]}>
+                    {numGuiaNA && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                  </View>
+                  <Text style={styles.naText}>N/A</Text>
+                </Pressable>
+              </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Field label="# REQUERIMIENTO" value={numReq} onChange={setNumReq} testID="caseta-requerimiento" disabled={numReqNA} />
+                </View>
+                <Pressable onPress={() => setNumReqNA(!numReqNA)} style={styles.naBox}>
+                  <View style={[styles.naCheck, numReqNA && styles.naCheckOn]}>
+                    {numReqNA && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                  </View>
+                  <Text style={styles.naText}>N/A</Text>
+                </Pressable>
+              </View>
+
               <ToggleRow label="¿ORDEN DE COMPRA?" value={ordenCompra} onChange={setOrdenCompra} testID="caseta-orden-compra" />
-              <Field label="CLIENTE" value={cliente} onChange={setCliente} testID="caseta-cliente" />
+              {ordenCompra && (
+                <Field label="# ORDEN DE COMPRA" value={numOrdenCompra} onChange={setNumOrdenCompra} testID="caseta-num-orden-compra" />
+              )}
+
               <Field label="DESTINO" value={destino} onChange={setDestino} testID="caseta-destino" />
             </View>
           )}
@@ -272,11 +315,23 @@ export default function CasetaNuevo() {
   );
 }
 
-function Field({ label, value, onChange, testID, multiline }: any) {
+function Field({ label, value, onChange, testID, multiline, disabled }: any) {
   return (
     <>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput testID={testID} style={[styles.input, multiline && { minHeight: 80, textAlignVertical: 'top' }]} value={value} onChangeText={onChange} multiline={!!multiline} placeholderTextColor={colors.muted} />
+      <TextInput
+        testID={testID}
+        style={[
+          styles.input,
+          multiline && { minHeight: 80, textAlignVertical: 'top' },
+          disabled && { backgroundColor: colors.border, opacity: 0.6 }
+        ]}
+        value={disabled ? 'N/A' : value}
+        onChangeText={onChange}
+        multiline={!!multiline}
+        placeholderTextColor={colors.muted}
+        editable={!disabled}
+      />
     </>
   );
 }
@@ -302,6 +357,10 @@ const styles = StyleSheet.create({
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   fieldLabel: { fontSize: 11, fontWeight: '900', color: colors.onSurfaceTertiary, letterSpacing: 1, marginTop: spacing.md, marginBottom: spacing.sm },
   input: { borderWidth: 2, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary, padding: spacing.md, fontSize: typography.sizes.base, color: colors.onSurface },
+  naBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong, height: 52, paddingHorizontal: spacing.sm, gap: 4 },
+  naCheck: { width: 20, height: 20, borderWidth: 2, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF' },
+  naCheckOn: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  naText: { fontSize: 10, fontWeight: '900', color: colors.onSurface },
   optionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   optionChip: { borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, paddingVertical: 8, flexShrink: 0 },
   optionChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
