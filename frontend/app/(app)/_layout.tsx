@@ -1,15 +1,16 @@
 import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors } from '@/src/constants/theme';
 import { View, ActivityIndicator } from 'react-native';
 
 export default function AppLayout() {
   const { token, loading, user } = useAuth();
+  const { t } = useTranslation();
   const router = useRouter();
   const isSupervisor = user?.role === 'supervisor' || user?.email === 'd.trujillo@brancoindustries.com';
-  const isAdmin = user?.email === 'd.trujillo@brancoindustries.com';
 
   useEffect(() => {
     if (!loading && !token) router.replace('/login');
@@ -43,42 +44,42 @@ export default function AppLayout() {
       <Tabs.Screen
         name="inicio"
         options={{
-          title: 'Inicio',
+          title: t('inicio'),
           tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="historico"
         options={{
-          title: 'Histórico',
+          title: t('historico'),
           tabBarIcon: ({ color, size }) => <Ionicons name="list" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="caseta"
         options={{
-          title: 'Caseta',
+          title: t('caseta'),
           tabBarIcon: ({ color, size }) => <Ionicons name="business" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="nueva"
         options={{
-          title: 'Inspección',
+          title: t('inspeccion'),
           tabBarIcon: ({ color, size }) => <Ionicons name="clipboard" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="embarque"
         options={{
-          title: 'Embarque',
+          title: t('embarque'),
           tabBarIcon: ({ color, size }) => <Ionicons name="cube" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="supervisor"
         options={{
-          title: 'Panel',
+          title: t('panel'),
           href: isSupervisor ? '/(app)/supervisor' : null,
           tabBarIcon: ({ color, size }) => <Ionicons name="shield-checkmark" size={size} color={color} />,
         }}
@@ -98,7 +99,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="perfil"
         options={{
-          title: 'Perfil',
+          title: t('perfil'),
           tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
         }}
       />

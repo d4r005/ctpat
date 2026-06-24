@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIn
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -16,17 +17,18 @@ interface VehicleRecord {
   created_at: string;
 }
 
-const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  entrada: { label: 'EN PATIO', color: '#F59E0B' },
-  inspeccionado: { label: 'INSPECCIONADO', color: '#0284C7' },
-  salida: { label: 'SALIÓ', color: '#16A34A' },
-};
-
 export default function Caseta() {
   const { token } = useAuth();
+  const { t } = useTranslation();
   const router = useRouter();
   const [records, setRecords] = useState<VehicleRecord[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const STATUS_LABEL: Record<string, { label: string; color: string }> = {
+    entrada: { label: t('en_patio', 'EN PATIO'), color: '#F59E0B' },
+    inspeccionado: { label: t('inspeccionado', 'INSPECCIONADO'), color: '#0284C7' },
+    salida: { label: t('salio', 'SALIÓ'), color: '#16A34A' },
+  };
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -42,8 +44,8 @@ export default function Caseta() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="caseta-screen">
       <View style={styles.header}>
-        <Text style={styles.title}>Caseta</Text>
-        <Text style={styles.subtitle}>Registro de entrada y salida de vehículos</Text>
+        <Text style={styles.title}>{t('caseta')}</Text>
+        <Text style={styles.subtitle}>{t('caseta_subtitle', 'Registro de entrada y salida de vehículos')}</Text>
       </View>
 
       <Pressable
@@ -53,8 +55,8 @@ export default function Caseta() {
       >
         <Ionicons name="add-circle" size={32} color={colors.onBrandSecondary} />
         <View style={{ flex: 1, marginLeft: spacing.md }}>
-          <Text style={styles.fabTitle}>NUEVO REGISTRO DE ENTRADA</Text>
-          <Text style={styles.fabSub}>Vehículo llegando al patio</Text>
+          <Text style={styles.fabTitle}>{t('nuevo_registro_entrada', 'NUEVO REGISTRO DE ENTRADA')}</Text>
+          <Text style={styles.fabSub}>{t('vehiculo_llegando', 'Vehículo llegando al patio')}</Text>
         </View>
         <Ionicons name="arrow-forward" size={24} color={colors.onBrandSecondary} />
       </Pressable>
@@ -65,7 +67,7 @@ export default function Caseta() {
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brandPrimary} />}
         ListHeaderComponent={
-          records.length > 0 ? <Text style={styles.sectionTitle}>VEHÍCULOS REGISTRADOS</Text> : null
+          records.length > 0 ? <Text style={styles.sectionTitle}>{t('vehiculos_registrados', 'VEHÍCULOS REGISTRADOS')}</Text> : null
         }
         ListEmptyComponent={
           loading ? (
@@ -73,8 +75,7 @@ export default function Caseta() {
           ) : (
             <View style={styles.empty}>
               <Ionicons name="car-outline" size={48} color={colors.muted} />
-              <Text style={styles.emptyText}>Sin vehículos registrados</Text>
-              <Text style={styles.emptySub}>Toca &quot;NUEVO REGISTRO DE ENTRADA&quot;</Text>
+              <Text style={styles.emptyText}>{t('sin_vehiculos', 'Sin vehículos registrados')}</Text>
             </View>
           )
         }
@@ -89,8 +90,8 @@ export default function Caseta() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowTitle}>{item.entry.placas_unidad}</Text>
                 <Text style={styles.rowSub}>{item.entry.chofer_nombre} · {item.entry.compania_transporte || '-'}</Text>
-                <Text style={styles.rowMeta}>Tráiler: {item.entry.numero_caja || '-'} · Sello: {item.entry.sello_entrada || '-'}</Text>
-                <Text style={styles.rowDate}>{new Date(item.entry.fecha_entrada || item.created_at).toLocaleString('es-MX')}</Text>
+                <Text style={styles.rowMeta}>{t('trailer', 'Tráiler')}: {item.entry.numero_caja || '-'} · {t('sello', 'Sello')}: {item.entry.sello_entrada || '-'}</Text>
+                <Text style={styles.rowDate}>{new Date(item.entry.fecha_entrada || item.created_at).toLocaleString()}</Text>
               </View>
               <View style={[styles.statusChip, { backgroundColor: st.color }]}>
                 <Text style={styles.statusChipText}>{st.label}</Text>
@@ -114,7 +115,6 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 11, fontWeight: '900', color: colors.onSurfaceTertiary, letterSpacing: 1.5, marginBottom: spacing.md },
   empty: { alignItems: 'center', padding: spacing.xxxl, marginTop: spacing.xl },
   emptyText: { fontWeight: '700', color: colors.onSurfaceTertiary, marginTop: spacing.md },
-  emptySub: { color: colors.muted, fontSize: typography.sizes.sm, marginTop: 4 },
   row: { backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center' },
   rowTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface },
   rowSub: { color: colors.muted, fontSize: typography.sizes.sm, marginTop: 2 },

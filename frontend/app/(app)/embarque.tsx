@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIn
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -21,6 +22,7 @@ interface Ticket {
 
 export default function Embarque() {
   const { token } = useAuth();
+  const { t } = useTranslation();
   const router = useRouter();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(false);
@@ -39,15 +41,15 @@ export default function Embarque() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']} testID="embarque-screen">
       <View style={styles.header}>
-        <Text style={styles.title}>Tickets de Embarque</Text>
-        <Text style={styles.subtitle}>Control de carga y despacho</Text>
+        <Text style={styles.title}>{t('tickets_embarque', 'Tickets de Embarque')}</Text>
+        <Text style={styles.subtitle}>{t('embarque_subtitle', 'Control de carga y despacho')}</Text>
       </View>
 
       <Pressable testID="embarque-new-btn" style={styles.fab} onPress={() => router.push('/embarque/nuevo')}>
         <Ionicons name="add-circle" size={32} color={colors.onBrandSecondary} />
         <View style={{ flex: 1, marginLeft: spacing.md }}>
-          <Text style={styles.fabTitle}>NUEVO TICKET DE EMBARQUE</Text>
-          <Text style={styles.fabSub}>Registrar carga y despacho</Text>
+          <Text style={styles.fabTitle}>{t('nuevo_ticket_embarque', 'NUEVO TICKET DE EMBARQUE')}</Text>
+          <Text style={styles.fabSub}>{t('registrar_carga', 'Registrar carga y despacho')}</Text>
         </View>
         <Ionicons name="arrow-forward" size={24} color={colors.onBrandSecondary} />
       </Pressable>
@@ -57,20 +59,20 @@ export default function Embarque() {
         keyExtractor={(t) => t.id}
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brandPrimary} />}
-        ListHeaderComponent={tickets.length > 0 ? <Text style={styles.sectionTitle}>TICKETS RECIENTES</Text> : null}
+        ListHeaderComponent={tickets.length > 0 ? <Text style={styles.sectionTitle}>{t('tickets_recientes', 'TICKETS RECIENTES')}</Text> : null}
         ListEmptyComponent={loading ? <ActivityIndicator color={colors.brandPrimary} style={{ marginTop: spacing.xl }} /> : (
           <View style={styles.empty}>
             <Ionicons name="cube-outline" size={48} color={colors.muted} />
-            <Text style={styles.emptyText}>Sin tickets registrados</Text>
+            <Text style={styles.emptyText}>{t('sin_tickets', 'Sin tickets registrados')}</Text>
           </View>
         )}
         renderItem={({ item }) => (
           <Pressable testID={`embarque-item-${item.id}`} style={styles.row} onPress={() => router.push(`/embarque/${item.id}`)}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.rowTitle}>{item.cliente || 'Sin cliente'}</Text>
+              <Text style={styles.rowTitle}>{item.cliente || t('sin_cliente', 'Sin cliente')}</Text>
               <Text style={styles.rowSub}>{item.operador} · {item.placas_unidad}</Text>
-              <Text style={styles.rowMeta}>Caja: {item.numero_caja} · Sello: {item.numero_sello}</Text>
-              <Text style={styles.rowDate}>{new Date(item.fecha || item.created_at).toLocaleString('es-MX')}</Text>
+              <Text style={styles.rowMeta}>{t('caja', 'Caja')}: {item.numero_caja} · {t('sello', 'Sello')}: {item.numero_sello}</Text>
+              <Text style={styles.rowDate}>{new Date(item.fecha || item.created_at).toLocaleString()}</Text>
             </View>
             <Ionicons name="chevron-forward" size={24} color={colors.muted} />
           </Pressable>

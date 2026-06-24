@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Pressable, TextInput, RefreshControl, Platform,
-  useWindowDimensions, Linking,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -9,9 +9,13 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
-import { useInspections } from '@/src/context/InspectionContext';
+import * as Print from 'expo-print';
+import { useTranslation } from 'react-i18next';
+import { useInspections, Inspection } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
+import { apiCall } from '@/src/api/client';
 import { colors, spacing, typography } from '@/src/constants/theme';
+import { generateConsolidatedReportHtml } from '@/src/utils/reportGenerator';
 
 type FilterApprov = 'todos' | 'pendiente' | 'aprobada' | 'rechazada';
 
@@ -20,14 +24,15 @@ export default function Supervisor() {
   const isAdmin = user?.email === 'd.trujillo@brancoindustries.com';
   const router = useRouter();
   const { allInspections, refreshAll, loading, exportCsvUrl } = useInspections();
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterApprov>('todos');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [reportLoading, setReportLoading] = useState<string | null>(null);
   const { width } = useWindowDimensions();
   const isWide = width >= 900;
 
-  // Restore last filter preset
   useEffect(() => {
     (async () => {
       try {
@@ -43,7 +48,6 @@ export default function Supervisor() {
     })();
   }, []);
 
-  // Persist on change
   useEffect(() => {
     AsyncStorage.setItem('naf_supervisor_filter', JSON.stringify({ query, filter, dateFrom, dateTo }));
   }, [query, filter, dateFrom, dateTo]);
@@ -88,7 +92,6 @@ export default function Supervisor() {
     if (dateTo) params.push(`date_to=${dateTo}`);
     if (params.length) url += '&' + params.join('&');
     if (Platform.OS === 'web') {
-      // Use fetch to attach Authorization header, then trigger download
       try {
         const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
         const blob = await res.blob();
@@ -96,12 +99,9 @@ export default function Supervisor() {
         link.href = URL.createObjectURL(blob);
         link.download = `naf_inspecciones_${mode}.csv`;
         link.click();
-      } catch (e: any) {
-        alert(e.message || 'Error al exportar');
-      }
+      } catch (e: any) { alert(e.message || 'Error al exportar'); }
       return;
     }
-    // Native: download then share
     try {
       const target = `${FileSystem.cacheDirectory}naf_inspecciones_${mode}.csv`;
       const dl = await FileSystem.downloadAsync(url, target, {
@@ -110,8 +110,28 @@ export default function Supervisor() {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(dl.uri, { mimeType: 'text/csv', dialogTitle: 'Exportar CSV NAF' });
       }
+    } catch (e: any) { alert(e.message || 'Error al exportar CSV'); }
+  };
+
+  const generateReport = async (inspection: Inspection, lang: 'es' | 'zh') => {
+    setReportLoading(inspection.id);
+    try {
+      const records = await apiCall<any[]>('/vehicle-records', { token });
+      const caseta = records.find(r => r.inspection_id === inspection.id || r.entry.placas_unidad === inspection.placas_unidad);
+      const tickets = await apiCall<any[]>('/shipping-tickets', { token });
+      const embarque = tickets.find(t => t.placas_unidad === inspection.placas_unidad);
+
+      const html = generateConsolidatedReportHtml({ inspection, caseta, embarque }, lang);
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: lang === 'zh' ? '分享报告' : 'Compartir Reporte NAF'
+      });
     } catch (e: any) {
-      alert(e.message || 'Error al exportar CSV');
+      alert(e.message || 'Error al generar reporte');
+    } finally {
+      setReportLoading(null);
     }
   };
 
@@ -120,7 +140,7 @@ export default function Supervisor() {
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
           <Ionicons name="lock-closed" size={48} color={colors.muted} />
-          <Text style={styles.lockText}>Acceso restringido a supervisores</Text>
+          <Text style={styles.lockText}>{t('acceso_restringido')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -129,23 +149,23 @@ export default function Supervisor() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']} testID="supervisor-screen">
       <View style={styles.header}>
-        <Text style={styles.title}>Panel Supervisor</Text>
+        <Text style={styles.title}>{t('panel_supervisor')}</Text>
 
         <View style={styles.statsRow}>
-          <StatBlock label="TOTAL" value={stats.total} />
-          <StatBlock label="PEND" value={stats.pendientes} color={colors.warning} />
-          <StatBlock label="APROB" value={stats.aprobadas} color={colors.success} />
-          <StatBlock label="RECH" value={stats.rechazadas} color={colors.error} />
+          <StatBlock label={t('total')} value={stats.total} />
+          <StatBlock label={t('pend')} value={stats.pendientes} color={colors.warning} />
+          <StatBlock label={t('aprob')} value={stats.aprobadas} color={colors.success} />
+          <StatBlock label={t('rech')} value={stats.rechazadas} color={colors.error} />
         </View>
 
         <View style={styles.exportRow}>
           <Pressable testID="supervisor-export-summary" style={styles.exportBtn} onPress={() => downloadCsv('summary')}>
             <Ionicons name="download" size={16} color={colors.onBrandPrimary} />
-            <Text style={styles.exportText}>CSV RESUMEN</Text>
+            <Text style={styles.exportText}>{t('csv_resumen')}</Text>
           </Pressable>
           <Pressable testID="supervisor-export-detailed" style={styles.exportBtn} onPress={() => downloadCsv('detailed')}>
             <Ionicons name="download" size={16} color={colors.onBrandPrimary} />
-            <Text style={styles.exportText}>CSV DETALLADO</Text>
+            <Text style={styles.exportText}>{t('csv_detallado')}</Text>
           </Pressable>
 
           {isAdmin && (
@@ -164,11 +184,11 @@ export default function Supervisor() {
 
         <View style={styles.dateRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.dateLabel}>DESDE</Text>
+            <Text style={styles.dateLabel}>{t('desde')}</Text>
             <TextInput testID="supervisor-date-from" style={styles.dateInput} value={dateFrom} onChangeText={setDateFrom} placeholder="YYYY-MM-DD" placeholderTextColor={colors.muted} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.dateLabel}>HASTA</Text>
+            <Text style={styles.dateLabel}>{t('hasta')}</Text>
             <TextInput testID="supervisor-date-to" style={styles.dateInput} value={dateTo} onChangeText={setDateTo} placeholder="YYYY-MM-DD" placeholderTextColor={colors.muted} />
           </View>
           {(dateFrom || dateTo) && (
@@ -179,15 +199,9 @@ export default function Supervisor() {
         </View>
 
         <View style={styles.presetRowSup}>
-          <Pressable testID="supervisor-preset-7" style={styles.presetChipSup} onPress={() => applyDatePreset(7)}>
-            <Text style={styles.presetTextSup}>7D</Text>
-          </Pressable>
-          <Pressable testID="supervisor-preset-30" style={styles.presetChipSup} onPress={() => applyDatePreset(30)}>
-            <Text style={styles.presetTextSup}>30D</Text>
-          </Pressable>
-          <Pressable testID="supervisor-preset-90" style={styles.presetChipSup} onPress={() => applyDatePreset(90)}>
-            <Text style={styles.presetTextSup}>90D</Text>
-          </Pressable>
+          <Pressable testID="supervisor-preset-7" style={styles.presetChipSup} onPress={() => applyDatePreset(7)}><Text style={styles.presetTextSup}>7D</Text></Pressable>
+          <Pressable testID="supervisor-preset-30" style={styles.presetChipSup} onPress={() => applyDatePreset(30)}><Text style={styles.presetTextSup}>30D</Text></Pressable>
+          <Pressable testID="supervisor-preset-90" style={styles.presetChipSup} onPress={() => applyDatePreset(90)}><Text style={styles.presetTextSup}>90D</Text></Pressable>
         </View>
 
         <View style={styles.searchBox}>
@@ -210,7 +224,7 @@ export default function Supervisor() {
               onPress={() => setFilter(f)}
               style={[styles.chip, filter === f && styles.chipActive]}
             >
-              <Text style={[styles.chipText, filter === f && styles.chipTextActive]}>{f.toUpperCase()}</Text>
+              <Text style={[styles.chipText, filter === f && styles.chipTextActive]}>{t(f).toUpperCase()}</Text>
             </Pressable>
           ))}
         </View>
@@ -222,7 +236,7 @@ export default function Supervisor() {
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={refreshAll} tintColor={colors.brandPrimary} />}
         ListEmptyComponent={
-          <View style={styles.empty}><Text style={styles.emptyText}>Sin inspecciones para mostrar</Text></View>
+          <View style={styles.empty}><Text style={styles.emptyText}>{t('sin_inspecciones')}</Text></View>
         }
         renderItem={({ item }) => {
           const status = item.approval_status || 'pendiente';
@@ -236,15 +250,34 @@ export default function Supervisor() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowTitle}>{item.placas_unidad}  ·  {item.numero_trailer}</Text>
                 <Text style={styles.rowSub}>{item.compania_transportista}</Text>
-                <Text style={styles.rowInspector}>Inspector: {item.inspector_nombre} ({item.inspector_email})</Text>
-                <Text style={styles.rowDate}>{new Date(item.created_at).toLocaleString('es-MX')}</Text>
+                <Text style={styles.rowInspector}>{t('inspector')}: {item.inspector_nombre}</Text>
+                <Text style={styles.rowDate}>{new Date(item.created_at).toLocaleString()}</Text>
+
+                <View style={styles.reportButtons}>
+                  <Pressable
+                    style={[styles.reportBtn, reportLoading === item.id && { opacity: 0.5 }]}
+                    onPress={() => generateReport(item, 'es')}
+                    disabled={!!reportLoading}
+                  >
+                    <Ionicons name="mail" size={14} color={colors.onBrandSecondary} />
+                    <Text style={styles.reportBtnText}>ESPAÑOL</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.reportBtn, { backgroundColor: colors.info }, reportLoading === item.id && { opacity: 0.5 }]}
+                    onPress={() => generateReport(item, 'zh')}
+                    disabled={!!reportLoading}
+                  >
+                    <Ionicons name="mail" size={14} color={colors.onInfo} />
+                    <Text style={[styles.reportBtnText, { color: colors.onInfo }]}>中文 (REPORT)</Text>
+                  </Pressable>
+                </View>
               </View>
               <View style={{ alignItems: 'flex-end', gap: 4 }}>
                 <View style={[styles.statusChip, { backgroundColor: item.status_general === 'bueno' ? colors.success : colors.error }]}>
-                  <Text style={styles.statusChipText}>{item.status_general === 'bueno' ? 'BUENO' : 'FALLA'}</Text>
+                  <Text style={styles.statusChipText}>{item.status_general === 'bueno' ? t('bueno') : t('falla')}</Text>
                 </View>
                 <View style={[styles.statusChip, { backgroundColor: statusColor }]}>
-                  <Text style={styles.statusChipText}>{status.toUpperCase()}</Text>
+                  <Text style={styles.statusChipText}>{t(status).toUpperCase()}</Text>
                 </View>
               </View>
             </Pressable>
@@ -308,6 +341,17 @@ const styles = StyleSheet.create({
   rowSub: { color: colors.muted, fontSize: typography.sizes.sm, marginTop: 2 },
   rowInspector: { color: colors.onSurfaceTertiary, fontSize: typography.sizes.sm, marginTop: 4 },
   rowDate: { color: colors.muted, fontSize: typography.sizes.sm, marginTop: 4 },
+  reportButtons: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  reportBtn: {
+    backgroundColor: colors.brandSecondary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 2
+  },
+  reportBtnText: { color: colors.onBrandSecondary, fontWeight: '900', fontSize: 10, letterSpacing: 0.5 },
   statusChip: { paddingHorizontal: spacing.sm, paddingVertical: 4 },
   statusChipText: { color: '#FFF', fontWeight: '900', fontSize: 9, letterSpacing: 1 },
 });
