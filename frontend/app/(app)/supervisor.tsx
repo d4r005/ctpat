@@ -45,6 +45,14 @@ export default function Supervisor() {
     if (!token) return;
     setDataLoading(true);
     try {
+      if (isAdmin || user?.role === 'admin') {
+        try {
+          await apiCall('/admin/repair-links', { method: 'POST', token });
+        } catch (e) {
+          console.warn("Repair links failed", e);
+        }
+      }
+
       const [caseta, tickets] = await Promise.all([
         apiCall('/vehicle-records', { token }).catch(e => { console.error(e); return []; }),
         apiCall('/shipping-tickets', { token }).catch(e => { console.error(e); return []; })

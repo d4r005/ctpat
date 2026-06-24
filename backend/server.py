@@ -602,13 +602,29 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
     }
     await db.inspections.insert_one(doc)
 
+    # VINCULACIÓN AUTOMÁTICA: Buscar registro de caseta en patio para estas placas
+    try:
+        placas = body.placas_unidad.strip().upper()
+        record = await db.vehicle_records.find_one(
+            {"entry.placas_unidad": {"$regex": f"^{placas}$", "$options": "i"}, "status": "entrada"},
+            sort=[("created_at", -1)]
+        )
+        if record:
+            await db.vehicle_records.update_one(
+                {"id": record["id"]},
+                {"$set": {"inspection_id": insp_id, "status": "inspeccionado"}}
+            )
+            logger.info(f"Inspección {insp_id} vinculada automáticamente a Caseta {record['id']}")
+    except Exception as e:
+        logger.error(f"Error en vinculación automática de inspección: {e}")
+
     # Notificar a inspectores, supervisores y admin
     status_emoji = "✅" if doc["status_general"] == "bueno" else "❌"
     await notify_roles(
         ["inspector", "supervisor", "admin"],
         f"Inspección Realizada {status_emoji}",
         f"Nueva inspección de {body.inspection_type.replace('_', ' ')} para placas {body.placas_unidad}. Resultado: {doc['status_general'].upper()}.",
-        inspection_id=rec_id
+        inspection_id=insp_id
     )
 
     # Sync to AppSheet
@@ -629,8 +645,8 @@ async def list_inspections(
 ):
     filt: Dict[str, Any] = {}
     if scope == "all":
-        if current_user.get("role") != "supervisor":
-            raise HTTPException(status_code=403, detail="Solo supervisores pueden ver todas las inspecciones")
+        if current_user.get("role") not in ["supervisor", "admin"]:
+            raise HTTPException(status_code=403, detail="No tienes permisos para ver todas las inspecciones")
         if inspector_id:
             filt["user_id"] = inspector_id
     else:
@@ -970,7 +986,7 @@ async def list_vehicle_records(
     status: Optional[str] = None,
 ):
     filt: Dict[str, Any] = {}
-    if current_user.get("role") != "supervisor":
+    if current_user.get("role") not in ["supervisor", "admin"]:
         filt["user_id"] = current_user["id"]
     if status:
         filt["status"] = status
@@ -981,7 +997,7 @@ async def list_vehicle_records(
 @api_router.get("/vehicle-records/{rec_id}", response_model=VehicleRecord)
 async def get_vehicle_record(rec_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     filt: Dict[str, Any] = {"id": rec_id}
-    if current_user.get("role") != "supervisor":
+    if current_user.get("role") not in ["supervisor", "admin"]:
         filt["user_id"] = current_user["id"]
     doc = await db.vehicle_records.find_one(filt, {"_id": 0})
     if not doc:
@@ -1296,6 +1312,22 @@ async def create_ticket(body: ShippingTicketCreate, current_user: Dict[str, Any]
     doc["created_at"] = now
     await db.shipping_tickets.insert_one(doc)
 
+    # VINCULACIÓN AUTOMÁTICA: Buscar registro de caseta para estas placas
+    try:
+        placas = body.placas_unidad.strip().upper()
+        record = await db.vehicle_records.find_one(
+            {"entry.placas_unidad": {"$regex": f"^{placas}$", "$options": "i"}, "status": {"$ne": "salida"}},
+            sort=[("created_at", -1)]
+        )
+        if record:
+            # If it's already inspected, keep that status, otherwise update to something?
+            # Actually just ensure the ticket has an inspection_id if the record has one
+            if record.get("inspection_id"):
+                await db.shipping_tickets.update_one({"id": tid}, {"$set": {"inspection_id": record["inspection_id"]}})
+            logger.info(f"Ticket {tid} vinculado automáticamente a Caseta {record['id']}")
+    except Exception as e:
+        logger.error(f"Error en vinculación automática de ticket: {e}")
+
     # Notificar a todos los roles
     await notify_roles(
         ["inspector", "supervisor", "admin"],
@@ -1314,7 +1346,7 @@ async def create_ticket(body: ShippingTicketCreate, current_user: Dict[str, Any]
 @api_router.get("/shipping-tickets", response_model=List[ShippingTicket])
 async def list_tickets(current_user: Dict[str, Any] = Depends(get_current_user)):
     filt: Dict[str, Any] = {}
-    if current_user.get("role") != "supervisor":
+    if current_user.get("role") not in ["supervisor", "admin"]:
         filt["user_id"] = current_user["id"]
     docs = await db.shipping_tickets.find(filt, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return [ShippingTicket(**d) for d in docs]
@@ -1323,7 +1355,7 @@ async def list_tickets(current_user: Dict[str, Any] = Depends(get_current_user))
 @api_router.get("/shipping-tickets/{ticket_id}", response_model=ShippingTicket)
 async def get_ticket(ticket_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     filt: Dict[str, Any] = {"id": ticket_id}
-    if current_user.get("role") != "supervisor":
+    if current_user.get("role") not in ["supervisor", "admin"]:
         filt["user_id"] = current_user["id"]
     doc = await db.shipping_tickets.find_one(filt, {"_id": 0})
     if not doc:
@@ -1493,6 +1525,30 @@ async def admin_update_inspection_photo(insp_id: str, point_num: int, body: Phot
 async def admin_update_ticket_photo(ticket_id: str, body: PhotoUpdateBody, current_user: Dict[str, Any] = Depends(require_admin)):
     await db.shipping_tickets.update_one({"id": ticket_id}, {"$set": {body.field_path: body.photo_data}})
     return {"ok": True}
+
+
+@api_router.post("/admin/repair-links")
+async def admin_repair_links(current_user: Dict[str, Any] = Depends(require_admin)):
+    """Busca registros de caseta sin inspección y trata de vincularlos por placas."""
+    records = await db.vehicle_records.find({"inspection_id": None}).to_list(1000)
+    linked_count = 0
+    for r in records:
+        placas = r["entry"].get("placas_unidad", "").strip().upper()
+        if not placas: continue
+
+        # Buscar inspección para estas placas creada cerca de la fecha de entrada
+        insp = await db.inspections.find_one(
+            {"placas_unidad": {"$regex": f"^{placas}$", "$options": "i"}},
+            sort=[("created_at", -1)]
+        )
+        if insp:
+            await db.vehicle_records.update_one(
+                {"id": r["id"]},
+                {"$set": {"inspection_id": insp["id"], "status": "inspeccionado"}}
+            )
+            linked_count += 1
+
+    return {"message": f"Se vincularon {linked_count} registros automáticamente"}
 
 
 app.include_router(api_router)
