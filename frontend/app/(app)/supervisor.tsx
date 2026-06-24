@@ -36,7 +36,6 @@ export default function Supervisor() {
   const [shippingTickets, setShippingTickets] = useState<any[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
 
-  // Email Modal State
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
   const [emailList, setEmailList] = useState<string>('');
@@ -99,18 +98,33 @@ export default function Supervisor() {
   const downloadConsolidatedPdf = async (item: any) => {
     try {
       setDataLoading(true);
-      const record = activeTab === 'caseta' ? item : null;
-      if (!record) {
-        alert('Solo disponible desde la pestaña de CASETA');
+      const record = item;
+      if (!record || !record.entry) {
+        alert('Datos de registro incompletos');
         return;
       }
 
-      const insp = (allInspections || []).find(i => i.id === record.inspection_id);
-      const ship = (shippingTickets || []).find(s => s.inspection_id === record.inspection_id);
+      // Busqueda inteligente: Primero por ID, luego por Placas (más reciente)
+      let insp = (allInspections || []).find(i => i.id === record.inspection_id);
+      const placas = record.entry?.placas_unidad?.trim();
+
+      if (!insp && placas) {
+        insp = (allInspections || [])
+          .filter(i => i.placas_unidad?.trim() === placas)
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+      }
 
       if (!insp) {
-        alert('No se encontró la inspección vinculada');
+        alert('No se encontró la inspección vinculada para la placa: ' + placas);
         return;
+      }
+
+      // Buscar ticket de embarque vinculado
+      let ship = (shippingTickets || []).find(s => s.inspection_id === record.inspection_id);
+      if (!ship && placas) {
+        ship = (shippingTickets || [])
+          .filter(s => s.placas_unidad?.trim() === placas)
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
       }
 
       const reportData = { inspection: insp, caseta: record, embarque: ship };
@@ -123,13 +137,11 @@ export default function Supervisor() {
         ${htmlZh}
       `;
 
-      const { uri } = await Print.printToFileAsync({ html: combinedHtml, base64: true });
+      // Forzar base64 para evitar ventana de impresión en web
+      const result = await Print.printToFileAsync({ html: combinedHtml, base64: true });
+      const base64Data = result.base64;
 
-      if (Platform.OS === 'web') {
-        // En web, Print.printToFileAsync con base64 devuelve la data en base64
-        // Extraemos la parte base64 si es un data URI o lo usamos directamente
-        const base64Data = uri.includes('base64,') ? uri.split('base64,')[1] : uri;
-
+      if (Platform.OS === 'web' && base64Data) {
         const byteCharacters = atob(base64Data);
         const byteNumbers = new Array(byteCharacters.length);
         for (let i = 0; i < byteCharacters.length; i++) {
@@ -147,7 +159,7 @@ export default function Supervisor() {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
       } else {
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Descargar Reporte Consolidado' });
+        await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: 'Descargar Reporte Consolidado' });
       }
     } catch (e: any) {
       alert('Error al generar PDF: ' + e.message);
