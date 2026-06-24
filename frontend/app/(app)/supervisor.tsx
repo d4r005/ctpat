@@ -21,7 +21,7 @@ type FilterApprov = 'todos' | 'pendiente' | 'aprobada' | 'rechazada';
 
 export default function Supervisor() {
   const { user, token } = useAuth();
-  const isAdmin = user?.email === 'd.trujillo@brancoindustries.com';
+  const isAdmin = ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
   const router = useRouter();
   const { allInspections, refreshAll, loading, exportCsvUrl } = useInspections();
   const { t } = useTranslation();

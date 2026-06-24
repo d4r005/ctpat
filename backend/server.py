@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 import jwt as pyjwt
 import aiosmtplib
+import requests
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -200,7 +201,8 @@ def create_token(user_id: str) -> str:
     return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 def is_admin(user: Dict[str, Any]) -> bool:
-    return user.get("email") == "d.trujillo@brancoindustries.com"
+    admins = ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"]
+    return user.get("email") in admins
 
 async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
     try:
@@ -235,6 +237,98 @@ async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dic
     return user
 
 
+# ========== AppSheet Sync Utility ==========
+def flatten_dict(d, parent_key='', sep='_'):
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+async def sync_to_appsheet(table_name: str, data: Dict[str, Any]):
+    app_id = os.environ.get("APPSHEET_APP_ID")
+    access_key = os.environ.get("APPSHEET_ACCESS_KEY")
+    webhook_url = os.environ.get("GOOGLE_SHEET_WEBHOOK_URL")
+
+    # Special handling for points to include state and photos individually
+    data_to_flatten = data.copy()
+    if "points" in data_to_flatten:
+        points = data_to_flatten.pop("points")
+        data_to_flatten["total_puntos"] = len(points)
+        data_to_flatten["fallas"] = sum(1 for p in points if p.get("estado") == "malo")
+        for p in points:
+            p_num = p.get("number")
+            data_to_flatten[f"punto_{p_num}_estado"] = p.get("estado")
+            data_to_flatten[f"punto_{p_num}_comentarios"] = p.get("comentarios", "")
+            data_to_flatten[f"punto_{p_num}_foto"] = p.get("photo", "")
+
+    flattened = flatten_dict(data_to_flatten)
+
+    # Convert everything to string for AppSheet compatibility if it's not a basic type
+    for k, v in flattened.items():
+        if isinstance(v, (list, dict)):
+            flattened[k] = str(v)
+
+    if app_id and access_key:
+        try:
+            url = f"https://www.appsheet.com/api/v2/apps/{app_id}/tables/{table_name}/Action"
+            payload = {
+                "Action": "Add",
+                "Properties": { "Locale": "es-MX", "Timezone": "Central Standard Time" },
+                "Rows": [flattened]
+            }
+            headers = { "ApplicationAccessKey": access_key, "Content-Type": "application/json" }
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            if response.status_code == 200:
+                print(f"Successfully synced {table_name} to AppSheet API")
+                return
+            else:
+                print(f"AppSheet API Error: {response.text}")
+        except Exception as e:
+            print(f"Error syncing to AppSheet API: {e}")
+        try:
+            url = f"https://www.appsheet.com/api/v2/apps/{app_id}/tables/{table_name}/Action"
+            payload = {
+                "Action": "Add",
+                "Properties": {
+                    "Locale": "es-MX",
+                    "Timezone": "Central Standard Time"
+                },
+                "Rows": [flattened]
+            }
+            headers = {
+                "ApplicationAccessKey": access_key,
+                "Content-Type": "application/json"
+            }
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            if response.status_code == 200:
+                print(f"Successfully synced {table_name} to AppSheet API")
+                return
+            else:
+                print(f"AppSheet API Error: {response.text}")
+        except Exception as e:
+            print(f"Error syncing to AppSheet API: {e}")
+
+    # Option 2: Fallback to Google Sheets Webhook
+    if webhook_url:
+        try:
+            payload = {
+                "table": table_name,
+                "data": flattened,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            if response.status_code == 200:
+                print(f"Successfully synced {table_name} to Google Sheets Webhook")
+            else:
+                print(f"Failed to sync to Webhook: {response.text}")
+        except Exception as e:
+            print(f"Error syncing to Webhook: {e}")
+
+
 # ========== Auth Routes ==========
 @api_router.get("/")
 async def root():
@@ -259,9 +353,9 @@ async def register(body: UserRegister):
     if existing:
         raise HTTPException(status_code=400, detail="El correo ya está registrado")
 
-    # First user or specific email becomes supervisor automatically
+    # First user or specific emails become supervisor automatically
     total_users = await db.users.count_documents({})
-    is_admin_email = body.email.lower() == "d.trujillo@brancoindustries.com"
+    is_admin_email = body.email.lower() in ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"]
     role = "supervisor" if (total_users == 0 or is_admin_email) else "inspector"
 
     user_id = str(uuid.uuid4())
@@ -290,8 +384,8 @@ async def login(body: UserLogin):
     if not user.get("active", True):
         raise HTTPException(status_code=403, detail="Cuenta desactivada")
 
-    # Auto-upgrade specific email to supervisor if it isn't already
-    if body.email.lower() == "d.trujillo@brancoindustries.com" and user.get("role") != "supervisor":
+    # Auto-upgrade specific emails to supervisor if it isn't already
+    if body.email.lower() in ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"] and user.get("role") != "supervisor":
         await db.users.update_one({"id": user["id"]}, {"$set": {"role": "supervisor"}})
         user["role"] = "supervisor"
 
@@ -455,6 +549,12 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
         "client_uuid": body.client_uuid,
     }
     await db.inspections.insert_one(doc)
+
+    # Sync to AppSheet
+    try:
+        await sync_to_appsheet("Inspecciones", doc)
+    except: pass
+
     return _serialize_inspection(doc)
 
 
@@ -588,6 +688,12 @@ async def approve_inspection(
         message=f"Tu inspección {doc.get('placas_unidad','')} fue APROBADA por {current_user['name']}." + (f" Nota: {body.note}" if body.note else ""),
         inspection_id=inspection_id,
     )
+
+    # Sync update to AppSheet
+    try:
+        await sync_to_appsheet("Inspecciones", doc)
+    except: pass
+
     return _serialize_inspection(doc)
 
 
@@ -614,6 +720,12 @@ async def reject_inspection(
         message=f"Tu inspección {doc.get('placas_unidad','')} fue RECHAZADA por {current_user['name']}." + (f" Motivo: {body.note}" if body.note else ""),
         inspection_id=inspection_id,
     )
+
+    # Sync update to AppSheet
+    try:
+        await sync_to_appsheet("Inspecciones", doc)
+    except: pass
+
     return _serialize_inspection(doc)
 
 
@@ -681,6 +793,19 @@ async def list_notifications(current_user: Dict[str, Any] = Depends(get_current_
     return [Notification(**d) for d in docs]
 
 
+@api_router.post("/test-appsheet")
+async def test_appsheet(current_user: Dict[str, Any] = Depends(require_admin)):
+    """Ruta para probar la conexión con AppSheet API"""
+    test_data = {
+        "id": str(uuid.uuid4()),
+        "test": True,
+        "message": "Prueba de conexión desde SRIUC API",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    await sync_to_appsheet("Test", test_data)
+    return {"message": "Petición de prueba enviada a AppSheet. Revisa los logs del servidor."}
+
+
 @api_router.post("/notifications/{notif_id}/read")
 async def mark_notification_read(notif_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     res = await db.notifications.update_one(
@@ -718,6 +843,12 @@ async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any]
         "created_at": now,
     }
     await db.vehicle_records.insert_one(doc)
+
+    # Sync to AppSheet
+    try:
+        await sync_to_appsheet("Caseta", doc)
+    except: pass
+
     return VehicleRecord(**{k: v for k, v in doc.items() if k != "_id"})
 
 
@@ -765,8 +896,10 @@ async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[
     # Intentar enviar reporte automático al finalizar la salida
     try:
         await _trigger_automatic_report(rec_id)
+        # Sync update to AppSheet
+        await sync_to_appsheet("Caseta", doc)
     except Exception as e:
-        print(f"Error al disparar reporte: {e}")
+        print(f"Error al disparar reporte o sync: {e}")
 
     return VehicleRecord(**doc)
 
@@ -925,6 +1058,12 @@ async def create_ticket(body: ShippingTicketCreate, current_user: Dict[str, Any]
     doc["fecha"] = doc.get("fecha") or now
     doc["created_at"] = now
     await db.shipping_tickets.insert_one(doc)
+
+    # Sync to AppSheet
+    try:
+        await sync_to_appsheet("Embarque", doc)
+    except: pass
+
     return ShippingTicket(**{k: v for k, v in doc.items() if k != "_id"})
 
 
