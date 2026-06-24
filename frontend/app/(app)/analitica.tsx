@@ -5,7 +5,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { apiCall } from '@/src/api/client';
+import { documentDirectory, downloadAsync } from 'expo-file-system';
+import { apiCall, API_BASE } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
@@ -94,6 +95,47 @@ ${data.top_failed_points.length ? data.top_failed_points.map((p) => `<tr><td sty
     } catch (e: any) { alert(e.message); }
   };
 
+  const exportCsv = async () => {
+    if (!token) return;
+    try {
+      setLoading(true);
+      const qs = new URLSearchParams();
+      qs.append('mode', 'summary');
+      qs.append('scope', 'all');
+      if (dateFrom) qs.append('date_from', dateFrom);
+      if (dateTo) qs.append('date_to', dateTo);
+
+      const url = `${API_BASE}/inspections/export?${qs.toString()}`;
+
+      if (Platform.OS === 'web') {
+        const response = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `Analitica_NAF_${dateFrom || 'report'}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(downloadUrl);
+        document.body.removeChild(a);
+      } else {
+        const filename = `${documentDirectory}reporte_naf.csv`;
+        const res = await downloadAsync(url, filename, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(res.uri, { mimeType: 'text/csv', dialogTitle: 'Descargar CSV' });
+        }
+      }
+    } catch (e: any) {
+      alert('Error al exportar CSV: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!isSupervisorOrAdmin) {
     return (
       <View style={styles.center}>
@@ -152,6 +194,12 @@ ${data.top_failed_points.length ? data.top_failed_points.map((p) => `<tr><td sty
             <Pressable testID="analitica-pdf-btn" style={[styles.presetChip, { backgroundColor: colors.brandSecondary, flex: 1 }]} onPress={exportPdf}>
               <Ionicons name="document-text" size={14} color={colors.onBrandSecondary} />
               <Text style={[styles.presetText, { color: colors.onBrandSecondary, marginLeft: 4 }]}>PDF</Text>
+            </Pressable>
+          )}
+          {data && (
+            <Pressable testID="analitica-csv-btn" style={[styles.presetChip, { backgroundColor: colors.success, flex: 1 }]} onPress={exportCsv}>
+              <Ionicons name="download" size={14} color="#FFF" />
+              <Text style={[styles.presetText, { color: '#FFF', marginLeft: 4 }]}>CSV</Text>
             </Pressable>
           )}
         </View>

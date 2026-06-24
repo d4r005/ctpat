@@ -163,9 +163,10 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!token) return;
     const interval = setInterval(() => {
+      // Solo refrescar si la pestaña está activa o cada más tiempo para ahorrar recursos
       refresh();
       if (user?.role === 'supervisor' || user?.role === 'admin') refreshAll();
-    }, 15000); // Every 15 seconds for real-time feel
+    }, 45000); // Increasado a 45s para reducir carga de red
     return () => clearInterval(interval);
   }, [token, user?.role, refresh, refreshAll]);
 

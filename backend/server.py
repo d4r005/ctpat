@@ -660,7 +660,8 @@ async def list_inspections(
             date_filt["$lte"] = date_to + "T23:59:59.999999"
         filt["created_at"] = date_filt
 
-    docs = await db.inspections.find(filt, {"_id": 0, "client_uuid": 0}).sort("created_at", -1).to_list(2000)
+    limit = 1000 if scope == "all" else 300
+    docs = await db.inspections.find(filt, {"_id": 0, "client_uuid": 0}).sort("created_at", -1).to_list(limit)
     return [_serialize_inspection(d) for d in docs]
 
 
@@ -674,8 +675,8 @@ async def export_csv(
 ):
     filt: Dict[str, Any] = {}
     if scope == "all":
-        if current_user.get("role") != "supervisor":
-            raise HTTPException(status_code=403, detail="Solo supervisores")
+        if current_user.get("role") not in ["supervisor", "admin"]:
+            raise HTTPException(status_code=403, detail="No tienes permisos para ver todas las inspecciones")
     else:
         filt["user_id"] = current_user["id"]
 
@@ -1464,23 +1465,23 @@ async def get_recent_activities(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """Retorna una lista unificada de las actividades más recientes (inspecciones, caseta, embarque)."""
-    # 1. Inspections
+    # 1. Inspections (Excluding large fields like photos)
     insp_filt = {}
     if current_user["role"] not in ["supervisor", "admin"]:
         insp_filt["user_id"] = current_user["id"]
-    inspections = await db.inspections.find(insp_filt, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    inspections = await db.inspections.find(insp_filt, {"_id": 0, "points": 0, "inspector_firma": 0, "verificador_firma": 0}).sort("created_at", -1).to_list(limit)
 
     # 2. Vehicle Records
     vec_filt = {}
     if current_user["role"] not in ["supervisor", "admin"]:
         vec_filt["user_id"] = current_user["id"]
-    records = await db.vehicle_records.find(vec_filt, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    records = await db.vehicle_records.find(vec_filt, {"_id": 0, "entry.foto_frente_unidad": 0, "entry.foto_atras_caja": 0, "entry.foto_id_chofer": 0, "exit.sello_vvtt_foto": 0, "entry.firma_operador": 0}).sort("created_at", -1).to_list(limit)
 
     # 3. Shipping Tickets
     ship_filt = {}
     if current_user["role"] not in ["supervisor", "admin"]:
         ship_filt["user_id"] = current_user["id"]
-    tickets = await db.shipping_tickets.find(ship_filt, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    tickets = await db.shipping_tickets.find(ship_filt, {"_id": 0, "foto_inicio_carga": 0, "foto_media_carga": 0, "foto_final_carga": 0, "firma_almacenista": 0, "firma_guardia": 0}).sort("created_at", -1).to_list(limit)
 
     # Unify
     activities = []

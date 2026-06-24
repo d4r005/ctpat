@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl, Platform, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -138,16 +138,11 @@ export default function Inicio() {
         </View>
 
         <Text style={styles.sectionTitle}>{t('actividad_reciente', 'ACTIVIDAD RECIENTE')} ({t('tiempo_real')})</Text>
-        {(!activities || activities.length === 0) ? (
-          <View style={styles.emptyBox} testID="inicio-empty">
-            <Ionicons name="flash-outline" size={48} color={colors.muted} />
-            <Text style={styles.emptyText}>{t('no_hay_actividad', 'No hay actividad reciente')}</Text>
-            <Text style={styles.emptySub}>{t('nuevas_apareceran_aqui')}</Text>
-          </View>
-        ) : (
-          Array.isArray(activities) && activities.filter(a => !!a).map((a) => (
+        <FlatList
+          data={activities}
+          keyExtractor={(a) => `${a.type}-${a.id}`}
+          renderItem={({ item: a }) => (
             <Pressable
-              key={`${a.type}-${a.id}`}
               testID={`inicio-activity-${a.id}`}
               style={styles.listItem}
               onPress={() => navigateToActivity(a)}
@@ -169,8 +164,20 @@ export default function Inicio() {
                 </View>
               )}
             </Pressable>
-          ))
-        )}
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyBox} testID="inicio-empty">
+              <Ionicons name="flash-outline" size={48} color={colors.muted} />
+              <Text style={styles.emptyText}>{t('no_hay_actividad', 'No hay actividad reciente')}</Text>
+              <Text style={styles.emptySub}>{t('nuevas_apareceran_aqui')}</Text>
+            </View>
+          }
+          scrollEnabled={false} // Since it's inside a ScrollView
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={true}
+        />
       </ScrollView>
 
       <NotificationsPanel visible={showNotifs} onClose={() => setShowNotifs(false)} />
