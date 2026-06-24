@@ -249,7 +249,7 @@ def create_token(user_id: str) -> str:
 
 def is_admin(user: Dict[str, Any]) -> bool:
     admins = ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"]
-    return user.get("email") in admins
+    return user.get("email") in admins or user.get("role") == "admin"
 
 async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
     try:
@@ -424,10 +424,15 @@ async def login(body: UserLogin):
     if not user.get("active", True):
         raise HTTPException(status_code=403, detail="Cuenta desactivada")
 
-    # Auto-upgrade specific emails to supervisor if it isn't already
-    if body.email.lower() in ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"] and user.get("role") != "supervisor":
-        await db.users.update_one({"id": user["id"]}, {"$set": {"role": "supervisor"}})
-        user["role"] = "supervisor"
+    # Auto-upgrade specific emails to admin and cleanup typos
+    if body.email.lower() == "d.trujillo@brancoindustries.com":
+        if user.get("role") != "admin":
+            await db.users.update_one({"id": user["id"]}, {"$set": {"role": "admin"}})
+            user["role"] = "admin"
+
+        # Cleanup users with common typos in this specific email
+        typos = ["d.trujillo##brancoindustries.com", "d.trujillo@brancoindustries.comd"]
+        await db.users.delete_many({"email": {"$in": typos}})
 
     token = create_token(user["id"])
     return TokenResponse(
@@ -767,6 +772,14 @@ async def reject_inspection(
     except: pass
 
     return _serialize_inspection(doc)
+
+
+@api_router.delete("/inspections/{inspection_id}")
+async def delete_inspection(inspection_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
+    res = await db.inspections.delete_one({"id": inspection_id})
+    if (res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Inspección no encontrada")
+    return {"ok": True}
 
 
 # ========== Notifications ==========
