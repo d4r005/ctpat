@@ -784,7 +784,7 @@ async def reject_inspection(
 @api_router.delete("/inspections/{inspection_id}")
 async def delete_inspection(inspection_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
     res = await db.inspections.delete_one({"id": inspection_id})
-    if (res.deleted_count == 0:
+    if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Inspección no encontrada")
     return {"ok": True}
 
