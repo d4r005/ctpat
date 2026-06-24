@@ -87,9 +87,9 @@ ${data.top_failed_points.length ? data.top_failed_points.map((p) => `<tr><td sty
 </table>
 </body></html>`;
     try {
-      const { uri } = await Print.printToFileAsync({ html, base64: false });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Reporte Analítica NAF' });
+      const result = await Print.printToFileAsync({ html, base64: false });
+      if (result && result.uri && await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: 'Reporte Analítica NAF' });
       }
     } catch (e: any) { alert(e.message); }
   };
