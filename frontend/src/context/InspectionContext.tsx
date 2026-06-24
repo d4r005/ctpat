@@ -107,7 +107,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   }, [token]);
 
   const refreshAll = useCallback(async () => {
-    if (!token || user?.role !== 'supervisor') return;
+    if (!token || (user?.role !== 'supervisor' && user?.role !== 'admin')) return;
     try {
       const data = await apiCall<Inspection[]>('/inspections?scope=all', { token });
       setAllInspections(data);
@@ -151,7 +151,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
       const queue = await getQueue();
       setPendingCount(queue.length);
       await refresh();
-      if (user?.role === 'supervisor') await refreshAll();
+      if (user?.role === 'supervisor' || user?.role === 'admin') await refreshAll();
     })();
   }, [token, user?.role, refresh, refreshAll, getQueue]);
 
@@ -164,7 +164,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     if (!token) return;
     const interval = setInterval(() => {
       refresh();
-      if (user?.role === 'supervisor') refreshAll();
+      if (user?.role === 'supervisor' || user?.role === 'admin') refreshAll();
     }, 15000); // Every 15 seconds for real-time feel
     return () => clearInterval(interval);
   }, [token, user?.role, refresh, refreshAll]);

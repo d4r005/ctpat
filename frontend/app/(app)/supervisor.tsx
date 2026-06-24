@@ -22,7 +22,7 @@ type TabType = 'inspecciones' | 'caseta' | 'embarque' | 'usuarios' | 'kpis';
 
 export default function Supervisor() {
   const { user, token } = useAuth();
-  const isAdmin = user?.email === 'd.trujillo@brancoindustries.com';
+  const isAdmin = user?.role === 'admin' || user?.email === 'd.trujillo@brancoindustries.com';
   const router = useRouter();
   const { allInspections, refreshAll, loading } = useInspections();
   const { t } = useTranslation();
@@ -104,29 +104,41 @@ export default function Supervisor() {
         return;
       }
 
-      const placas = record.entry?.placas_unidad?.trim();
+      const placas = record.entry?.placas_unidad?.trim().toUpperCase();
       let insp = (allInspections || []).find(i => i.id === record.inspection_id);
 
       if (!insp && placas) {
         insp = (allInspections || [])
-          .filter(i => i.placas_unidad?.trim() === placas)
+          .filter(i => i.placas_unidad?.trim().toUpperCase() === placas)
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
       }
 
       if (!insp) {
-        alert('No se encontró la inspección vinculada para la placa: ' + placas);
-        return;
+        const proceed = window.confirm(`No se encontró una inspección digital para la placa: ${placas}. ¿Desea generar el reporte solo con los datos de Caseta y Embarque?`);
+        if (!proceed) return;
       }
 
       let ship = (shippingTickets || []).find(s => s.inspection_id === record.inspection_id);
       if (!ship && placas) {
         ship = (shippingTickets || [])
-          .filter(s => s.placas_unidad?.trim() === placas)
+          .filter(s => s.placas_unidad?.trim().toUpperCase() === placas)
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
       }
 
-      const htmlEs = generateConsolidatedReportHtml({ inspection: insp, caseta: record, embarque: ship }, 'es');
-      const htmlZh = generateConsolidatedReportHtml({ inspection: insp, caseta: record, embarque: ship }, 'zh');
+      // We need a dummy inspection object if none found to avoid crash in generator
+      const finalInsp = insp || {
+        points: [],
+        inspector_nombre: 'N/A',
+        status_general: 'pendiente',
+        placas_unidad: placas,
+        compania_transportista: record.entry?.compania_transporte || 'N/A',
+        numero_trailer: record.entry?.numero_caja || 'N/A',
+        created_at: record.created_at,
+        inspection_type: '19_puntos'
+      } as any;
+
+      const htmlEs = generateConsolidatedReportHtml({ inspection: finalInsp, caseta: record, embarque: ship }, 'es');
+      const htmlZh = generateConsolidatedReportHtml({ inspection: finalInsp, caseta: record, embarque: ship }, 'zh');
 
       const combinedHtml = `
         <style>@media print { .page-break { page-break-before: always; } }</style>
