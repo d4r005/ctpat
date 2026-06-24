@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, Platform, TextInput, Image } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, Platform, TextInput, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,7 +13,7 @@ import { colors, spacing, typography } from '@/src/constants/theme';
 export default function InspectionDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { getById, approveInspection, rejectInspection } = useInspections();
+  const { getById, approveInspection, rejectInspection, deleteInspection } = useInspections();
   const { user } = useAuth();
   const [insp, setInsp] = useState<Inspection | undefined>(undefined);
   const [generating, setGenerating] = useState(false);
@@ -22,7 +22,8 @@ export default function InspectionDetail() {
   const [approvalSignature, setApprovalSignature] = useState('');
   const [showSigModal, setShowSigModal] = useState(false);
   const [acting, setActing] = useState(false);
-  const isSupervisor = user?.role === 'supervisor';
+  const isSupervisor = user?.role === 'supervisor' || user?.role === 'admin';
+  const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
     if (id) {
@@ -65,6 +66,35 @@ export default function InspectionDetail() {
       setApprovalSignature('');
     } catch (e: any) { alert(e.message); }
     finally { setActing(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!id) return;
+
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm('¿Estás seguro de que deseas eliminar esta inspección de prueba?')
+      : await new Promise(resolve => {
+          Alert.alert(
+            "Eliminar Inspección",
+            "¿Estás seguro de que deseas eliminar esta inspección de prueba?",
+            [
+              { text: "Cancelar", style: "cancel", onPress: () => resolve(false) },
+              { text: "Eliminar", style: "destructive", onPress: () => resolve(true) }
+            ]
+          );
+        });
+
+    if (!confirmed) return;
+
+    setActing(true);
+    try {
+      await deleteInspection(id);
+      router.back();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setActing(false);
+    }
   };
 
   if (!insp) {
@@ -323,6 +353,24 @@ export default function InspectionDetail() {
             </>
           )}
         </Pressable>
+
+        {isAdmin && (
+          <Pressable
+            testID="detail-delete-btn"
+            style={[styles.deleteBtn, acting && { opacity: 0.6 }]}
+            onPress={handleDelete}
+            disabled={acting}
+          >
+            {acting ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <>
+                <Ionicons name="trash" size={20} color="#FFF" />
+                <Text style={styles.deleteBtnText}>ELIMINAR INSPECCIÓN (PRUEBA)</Text>
+              </>
+            )}
+          </Pressable>
+        )}
       </ScrollView>
       {showSigModal && (
         <SignatureModal
@@ -431,6 +479,11 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.lg, minHeight: 64,
   },
   exportText: { color: colors.onBrandSecondary, fontWeight: '900', letterSpacing: 1, fontSize: typography.sizes.base },
+  deleteBtn: {
+    backgroundColor: colors.error, padding: spacing.lg, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.md, minHeight: 52,
+  },
+  deleteBtnText: { color: '#FFF', fontWeight: '900', letterSpacing: 1, fontSize: typography.sizes.sm },
   approvBadge: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderWidth: 2 },
   approvBadgeText: { color: '#FFF', fontWeight: '900', fontSize: 10, letterSpacing: 1 },
   approvalInfo: { borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, backgroundColor: colors.surfaceSecondary, marginBottom: spacing.lg },

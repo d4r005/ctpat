@@ -58,6 +58,7 @@ interface InspectionContextValue {
   syncQueue: () => Promise<void>;
   approveInspection: (id: string, note: string, name: string, signature: string) => Promise<void>;
   rejectInspection: (id: string, note: string, name: string, signature: string) => Promise<void>;
+  deleteInspection: (id: string) => Promise<void>;
   exportCsvUrl: (mode: 'summary' | 'detailed', scope: 'mine' | 'all') => string;
 }
 
@@ -221,6 +222,12 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     await Promise.all([refresh(), refreshAll()]);
   }, [token, refresh, refreshAll]);
 
+  const deleteInspection = useCallback(async (id: string) => {
+    if (!token) return;
+    await apiCall(`/inspections/${id}`, { method: 'DELETE', token });
+    await Promise.all([refresh(), refreshAll()]);
+  }, [token, refresh, refreshAll]);
+
   const exportCsvUrl = useCallback((mode: 'summary' | 'detailed', scope: 'mine' | 'all') => {
     return `${API_BASE}/inspections/export?mode=${mode}&scope=${scope}`;
   }, []);
@@ -230,7 +237,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
       value={{
         inspections, allInspections, pendingCount, isOnline, loading,
         refresh, refreshAll, saveInspection, getById, syncQueue,
-        approveInspection, rejectInspection, exportCsvUrl,
+        approveInspection, rejectInspection, deleteInspection, exportCsvUrl,
       }}
     >
       {children}
