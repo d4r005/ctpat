@@ -5,7 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import Signature from 'react-native-signature-canvas';
+import Signature from '@/src/components/SignaturePad';
 import { useInspections, Inspection } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -504,6 +504,13 @@ const styles = StyleSheet.create({
   },
   signatureCta: { color: colors.muted, fontWeight: '700', letterSpacing: 1 },
   signatureDone: { color: colors.success, fontWeight: '900', letterSpacing: 1 },
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
+    padding: spacing.lg,
+    zIndex: 1000,
+  },
   modalCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong },
   modalTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface, marginBottom: spacing.md, letterSpacing: 1 },
   signatureCanvas: { height: 280 },

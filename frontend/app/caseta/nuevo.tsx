@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import Signature from 'react-native-signature-canvas';
+import Signature from '@/src/components/SignaturePad';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -347,7 +347,7 @@ export default function CasetaNuevo() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Firma del Operador</Text>
-            <View style={{ height: 280 }}>
+            <View style={{ height: 280, justifyContent: 'center', alignItems: 'center', backgroundColor: '#EEE', borderWidth: 2, borderColor: colors.borderStrong }}>
               <Signature
                 ref={sigRef}
                 onOK={(sig) => { setFirmaOperador(sig); setShowSig(false); }}

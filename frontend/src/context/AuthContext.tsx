@@ -10,7 +10,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role?: 'inspector' | 'supervisor';
+  role?: 'inspector' | 'supervisor' | 'admin';
   active?: boolean;
 }
 

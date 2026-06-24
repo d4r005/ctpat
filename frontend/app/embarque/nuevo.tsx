@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import Signature from 'react-native-signature-canvas';
+import Signature from '@/src/components/SignaturePad';
 import { useTranslation } from 'react-i18next';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
