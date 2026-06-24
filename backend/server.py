@@ -1122,6 +1122,61 @@ class ShippingTicket(BaseModel):
     nombre_guardia: str = ""
     created_at: str
 
+class SendConsolidatedRequest(BaseModel):
+    record_id: str
+    emails: List[EmailStr]
+
+@api_router.post("/reports/send-consolidated")
+async def send_consolidated_manual(body: SendConsolidatedRequest, current_user: Dict[str, Any] = Depends(require_supervisor)):
+    record = await db.vehicle_records.find_one({"id": body.record_id})
+    if not record:
+        raise HTTPException(status_code=404, detail="Registro de caseta no encontrado")
+
+    # Generate HTML (reusing logic from _trigger_automatic_report)
+    placas = record["entry"].get("placas_unidad", "").strip()
+    inspection = await db.inspections.find_one({"id": record.get("inspection_id")})
+    if not inspection and placas:
+        inspection = await db.inspections.find_one({"placas_unidad": placas}, sort=[("created_at", -1)])
+
+    fecha_inicio = record["created_at"]
+    fecha_fin = record.get("exit", {}).get("fecha_salida") or datetime.now(timezone.utc).isoformat()
+    ticket = await db.shipping_tickets.find_one({
+        "placas_unidad": placas,
+        "created_at": {"$gte": fecha_inicio, "$lte": fecha_fin}
+    })
+
+    subject = f"REPORTE CONSOLIDADO SRIUC - UNIDAD: {placas}"
+
+    # Simplified HTML for manual send
+    html = f"""
+    <html>
+        <body style="font-family: Arial, sans-serif; color: #1a1a1a; max-width: 800px; margin: auto; border: 1px solid #eee; padding: 20px;">
+            <div style="background-color: #0A2540; padding: 20px; text-align: center; color: white;">
+                <h1 style="margin: 0;">Reporte Consolidado Manual</h1>
+                <p style="margin: 5px 0 0 0;">Solicitado por: {current_user['name']}</p>
+            </div>
+            <div style="padding: 20px;">
+                <h2>1. Movimiento de Caseta</h2>
+                <p><b>Placas:</b> {record['entry']['placas_unidad']}</p>
+                <p><b>Chofer:</b> {record['entry']['chofer_nombre']}</p>
+                <p><b>Entrada:</b> {record['entry'].get('fecha_entrada', 'N/A')}</p>
+                <p><b>Salida:</b> {record['exit'].get('fecha_salida', 'N/A') if record.get('exit') else 'No registrada'}</p>
+
+                <h2>2. Inspección C-TPAT</h2>
+                {f"<p>Estado: <b>{inspection.get('status_general', '').upper()}</b></p>" if inspection else "<p>No realizada</p>"}
+
+                <h2>3. Embarque</h2>
+                {f"<p>Cliente: {ticket.get('cliente')}</p><p>Pallets: {ticket.get('numero_pallets')}</p>" if ticket else "<p>No realizado</p>"}
+            </div>
+        </body>
+    </html>
+    """
+
+    for email in body.emails:
+        await send_automatic_report(subject, email, html)
+
+    return {"message": f"Reporte enviado a {len(body.emails)} destinatarios"}
+
 class ShippingTicketCreate(BaseModel):
     almacenista: str
     fecha: Optional[str] = None

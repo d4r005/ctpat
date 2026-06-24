@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Pressable, TextInput, RefreshControl, Platform,
-  useWindowDimensions,
+  useWindowDimensions, Modal, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -17,7 +17,7 @@ import { apiCall } from '@/src/api/client';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import { generateConsolidatedReportHtml } from '@/src/utils/reportGenerator';
 
-type FilterApprov = 'todos' | 'pendiente' | 'aprobada' | 'rechazada';
+type TabType = 'inspecciones' | 'caseta' | 'embarque';
 
 export default function Supervisor() {
   const { user, token } = useAuth();
@@ -25,333 +25,231 @@ export default function Supervisor() {
   const router = useRouter();
   const { allInspections, refreshAll, loading, exportCsvUrl } = useInspections();
   const { t } = useTranslation();
+
+  const [activeTab, setActiveTab] = useState<TabType>('inspecciones');
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<FilterApprov>('todos');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [reportLoading, setReportLoading] = useState<string | null>(null);
-  const { width } = useWindowDimensions();
-  const isWide = width >= 900;
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const raw = await AsyncStorage.getItem('naf_supervisor_filter');
-        if (raw) {
-          const f = JSON.parse(raw);
-          if (f.query) setQuery(f.query);
-          if (f.filter) setFilter(f.filter);
-          if (f.dateFrom) setDateFrom(f.dateFrom);
-          if (f.dateTo) setDateTo(f.dateTo);
-        }
-      } catch {}
-    })();
-  }, []);
+  const [casetaRecords, setCasetaRecords] = useState<any[]>([]);
+  const [shippingTickets, setShippingTickets] = useState<any[]>([]);
+  const [dataLoading, setDataLoading] = useState(false);
 
-  useEffect(() => {
-    AsyncStorage.setItem('naf_supervisor_filter', JSON.stringify({ query, filter, dateFrom, dateTo }));
-  }, [query, filter, dateFrom, dateTo]);
+  // Email Modal State
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
+  const [emailList, setEmailList] = useState<string>('');
+  const [sendingEmail, setSendingEmail] = useState(false);
 
-  const applyDatePreset = (days: number) => {
-    const to = new Date();
-    const from = new Date();
-    from.setDate(to.getDate() - days);
-    const fmt = (d: Date) => d.toISOString().slice(0, 10);
-    setDateFrom(fmt(from));
-    setDateTo(fmt(to));
+  const loadData = async () => {
+    if (!token) return;
+    setDataLoading(true);
+    try {
+      const [caseta, tickets] = await Promise.all([
+        apiCall('/vehicle-records', { token }),
+        apiCall('/shipping-tickets', { token })
+      ]);
+      setCasetaRecords(caseta);
+      setShippingTickets(tickets);
+      await refreshAll();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setDataLoading(false);
+    }
   };
 
-  const filtered = useMemo(() => {
-    return allInspections.filter((i) => {
-      if (filter !== 'todos' && (i.approval_status || 'pendiente') !== filter) return false;
-      if (dateFrom && i.created_at < dateFrom) return false;
-      if (dateTo && i.created_at > dateTo + 'T23:59:59') return false;
-      if (!query.trim()) return true;
+  useEffect(() => {
+    if (user?.role === 'supervisor' || user?.role === 'admin') loadData();
+  }, [token]);
+
+  const filteredInspections = useMemo(() => {
+    return allInspections.filter(i => {
       const q = query.toLowerCase();
-      return (
-        i.placas_unidad?.toLowerCase().includes(q) ||
-        i.compania_transportista?.toLowerCase().includes(q) ||
-        i.numero_trailer?.toLowerCase().includes(q) ||
-        i.inspector_nombre?.toLowerCase().includes(q) ||
-        i.inspector_email?.toLowerCase().includes(q)
-      );
+      const matchQuery = !query || i.placas_unidad?.toLowerCase().includes(q) || i.compania_transportista?.toLowerCase().includes(q);
+      const matchDate = (!dateFrom || i.created_at >= dateFrom) && (!dateTo || i.created_at <= dateTo + 'T23:59:59');
+      return matchQuery && matchDate;
     });
-  }, [allInspections, query, filter, dateFrom, dateTo]);
+  }, [allInspections, query, dateFrom, dateTo]);
 
-  const stats = useMemo(() => ({
-    total: allInspections.length,
-    pendientes: allInspections.filter((i) => (i.approval_status || 'pendiente') === 'pendiente').length,
-    aprobadas: allInspections.filter((i) => i.approval_status === 'aprobada').length,
-    rechazadas: allInspections.filter((i) => i.approval_status === 'rechazada').length,
-  }), [allInspections]);
+  const filteredCaseta = useMemo(() => {
+    return casetaRecords.filter(r => {
+      const q = query.toLowerCase();
+      const matchQuery = !query || r.entry.placas_unidad?.toLowerCase().includes(q) || r.entry.chofer_nombre?.toLowerCase().includes(q);
+      const matchDate = (!dateFrom || r.created_at >= dateFrom) && (!dateTo || r.created_at <= dateTo + 'T23:59:59');
+      return matchQuery && matchDate;
+    });
+  }, [casetaRecords, query, dateFrom, dateTo]);
 
-  const downloadCsv = async (mode: 'summary' | 'detailed') => {
-    let url = exportCsvUrl(mode, 'all');
-    const params: string[] = [];
-    if (dateFrom) params.push(`date_from=${dateFrom}`);
-    if (dateTo) params.push(`date_to=${dateTo}`);
-    if (params.length) url += '&' + params.join('&');
-    if (Platform.OS === 'web') {
-      try {
-        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-        const blob = await res.blob();
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `naf_inspecciones_${mode}.csv`;
-        link.click();
-      } catch (e: any) { alert(e.message || 'Error al exportar'); }
+  const filteredTickets = useMemo(() => {
+    return shippingTickets.filter(t => {
+      const q = query.toLowerCase();
+      const matchQuery = !query || t.placas_unidad?.toLowerCase().includes(q) || t.operador?.toLowerCase().includes(q);
+      const matchDate = (!dateFrom || t.created_at >= dateFrom) && (!dateTo || t.created_at <= dateTo + 'T23:59:59');
+      return matchQuery && matchDate;
+    });
+  }, [shippingTickets, query, dateFrom, dateTo]);
+
+  const handleSendEmail = async () => {
+    if (!selectedRecordId || !emailList.trim()) return;
+    const emails = emailList.split(',').map(e => e.trim()).filter(e => e.includes('@'));
+    if (emails.length === 0) {
+      alert('Ingresa al menos un correo válido');
       return;
     }
+
+    setSendingEmail(true);
     try {
-      const target = `${FileSystem.cacheDirectory}naf_inspecciones_${mode}.csv`;
-      const dl = await FileSystem.downloadAsync(url, target, {
-        headers: { Authorization: `Bearer ${token}` },
+      await apiCall('/reports/send-consolidated', {
+        method: 'POST',
+        token,
+        body: { record_id: selectedRecordId, emails }
       });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(dl.uri, { mimeType: 'text/csv', dialogTitle: 'Exportar CSV NAF' });
-      }
-    } catch (e: any) { alert(e.message || 'Error al exportar CSV'); }
-  };
-
-  const generateReport = async (inspection: Inspection, lang: 'es' | 'zh') => {
-    setReportLoading(inspection.id);
-    try {
-      const records = await apiCall<any[]>('/vehicle-records', { token });
-      const caseta = records.find(r => r.inspection_id === inspection.id || r.entry.placas_unidad === inspection.placas_unidad);
-      const tickets = await apiCall<any[]>('/shipping-tickets', { token });
-      const embarque = tickets.find(t => t.placas_unidad === inspection.placas_unidad);
-
-      const html = generateConsolidatedReportHtml({ inspection, caseta, embarque }, lang);
-      const { uri } = await Print.printToFileAsync({ html, base64: false });
-
-      await Sharing.shareAsync(uri, {
-        mimeType: 'application/pdf',
-        dialogTitle: lang === 'zh' ? '分享报告' : 'Compartir Reporte NAF'
-      });
+      alert('Reporte enviado con éxito');
+      setShowEmailModal(false);
+      setEmailList('');
     } catch (e: any) {
-      alert(e.message || 'Error al generar reporte');
+      alert(e.message || 'Error al enviar');
     } finally {
-      setReportLoading(null);
+      setSendingEmail(false);
     }
   };
 
-  if (user?.role !== 'supervisor') {
+  const openEmailModal = (recordId: string) => {
+    setSelectedRecordId(recordId);
+    setShowEmailModal(true);
+  };
+
+  if (user?.role !== 'supervisor' && user?.role !== 'admin') {
     return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.center}>
-          <Ionicons name="lock-closed" size={48} color={colors.muted} />
-          <Text style={styles.lockText}>{t('acceso_restringido')}</Text>
-        </View>
-      </SafeAreaView>
+      <SafeAreaView style={styles.safe}><View style={styles.center}><Text>Acceso restringido</Text></View></SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']} testID="supervisor-screen">
+    <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>{t('panel_supervisor')}</Text>
+        <Text style={styles.title}>Panel Maestro</Text>
 
-        <View style={styles.statsRow}>
-          <StatBlock label={t('total')} value={stats.total} />
-          <StatBlock label={t('pend')} value={stats.pendientes} color={colors.warning} />
-          <StatBlock label={t('aprob')} value={stats.aprobadas} color={colors.success} />
-          <StatBlock label={t('rech')} value={stats.rechazadas} color={colors.error} />
-        </View>
-
-        <View style={styles.exportRow}>
-          <Pressable testID="supervisor-export-summary" style={styles.exportBtn} onPress={() => downloadCsv('summary')}>
-            <Ionicons name="download" size={16} color={colors.onBrandPrimary} />
-            <Text style={styles.exportText}>{t('csv_resumen')}</Text>
-          </Pressable>
-          <Pressable testID="supervisor-export-detailed" style={styles.exportBtn} onPress={() => downloadCsv('detailed')}>
-            <Ionicons name="download" size={16} color={colors.onBrandPrimary} />
-            <Text style={styles.exportText}>{t('csv_detallado')}</Text>
-          </Pressable>
-
-          {isAdmin && (
-            <>
-              <Pressable testID="supervisor-analitica-btn" style={[styles.exportBtn, { backgroundColor: colors.success }]} onPress={() => router.push('/(app)/analitica')}>
-                <Ionicons name="stats-chart" size={16} color={colors.onSuccess} />
-                <Text style={[styles.exportText, { color: colors.onSuccess }]}>{t('kpis')}</Text>
-              </Pressable>
-              <Pressable testID="supervisor-users-btn" style={[styles.exportBtn, { backgroundColor: colors.brandSecondary }]} onPress={() => router.push('/(app)/usuarios')}>
-                <Ionicons name="people" size={16} color={colors.onBrandSecondary} />
-                <Text style={[styles.exportText, { color: colors.onBrandSecondary }]}>{t('usuarios_caps')}</Text>
-              </Pressable>
-            </>
-          )}
-        </View>
-
-        <View style={styles.dateRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.dateLabel}>{t('desde')}</Text>
-            <TextInput testID="supervisor-date-from" style={styles.dateInput} value={dateFrom} onChangeText={setDateFrom} placeholder="YYYY-MM-DD" placeholderTextColor={colors.muted} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.dateLabel}>{t('hasta')}</Text>
-            <TextInput testID="supervisor-date-to" style={styles.dateInput} value={dateTo} onChangeText={setDateTo} placeholder="YYYY-MM-DD" placeholderTextColor={colors.muted} />
-          </View>
-          {(dateFrom || dateTo) && (
-            <Pressable testID="supervisor-date-clear" style={styles.clearBtn} onPress={() => { setDateFrom(''); setDateTo(''); }}>
-              <Ionicons name="close" size={16} color={colors.onError} />
-            </Pressable>
-          )}
-        </View>
-
-        <View style={styles.presetRowSup}>
-          <Pressable testID="supervisor-preset-7" style={styles.presetChipSup} onPress={() => applyDatePreset(7)}><Text style={styles.presetTextSup}>7D</Text></Pressable>
-          <Pressable testID="supervisor-preset-30" style={styles.presetChipSup} onPress={() => applyDatePreset(30)}><Text style={styles.presetTextSup}>30D</Text></Pressable>
-          <Pressable testID="supervisor-preset-90" style={styles.presetChipSup} onPress={() => applyDatePreset(90)}><Text style={styles.presetTextSup}>90D</Text></Pressable>
-        </View>
-
-        <View style={styles.searchBox}>
-          <Ionicons name="search" size={18} color={colors.muted} />
+        <View style={styles.searchRow}>
           <TextInput
-            testID="supervisor-search"
             style={styles.searchInput}
-            placeholder={t('buscar_placeholder')}
-            placeholderTextColor={colors.muted}
+            placeholder="Buscar por placa, chofer o compañía..."
             value={query}
             onChangeText={setQuery}
           />
+          <Ionicons name="search" size={20} color={colors.muted} />
         </View>
 
-        <View style={styles.chipsRow}>
-          {(['todos', 'pendiente', 'aprobada', 'rechazada'] as FilterApprov[]).map((f) => (
+        <View style={styles.dateRow}>
+          <TextInput style={styles.dateInput} placeholder="Desde YYYY-MM-DD" value={dateFrom} onChangeText={setDateFrom} />
+          <TextInput style={styles.dateInput} placeholder="Hasta YYYY-MM-DD" value={dateTo} onChangeText={setDateTo} />
+        </View>
+
+        <View style={styles.tabRow}>
+          {(['inspecciones', 'caseta', 'embarque'] as TabType[]).map(t => (
             <Pressable
-              key={f}
-              testID={`supervisor-filter-${f}`}
-              onPress={() => setFilter(f)}
-              style={[styles.chip, filter === f && styles.chipActive]}
+              key={t}
+              style={[styles.tab, activeTab === t && styles.tabActive]}
+              onPress={() => setActiveTab(t)}
             >
-              <Text style={[styles.chipText, filter === f && styles.chipTextActive]}>{t(f).toUpperCase()}</Text>
+              <Text style={[styles.tabText, activeTab === t && styles.tabTextActive]}>{t.toUpperCase()}</Text>
             </Pressable>
           ))}
         </View>
       </View>
 
       <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={refreshAll} tintColor={colors.brandPrimary} />}
-        ListEmptyComponent={
-          <View style={styles.empty}><Text style={styles.emptyText}>{t('sin_inspecciones')}</Text></View>
-        }
-        renderItem={({ item }) => {
-          const status = item.approval_status || 'pendiente';
-          const statusColor = status === 'aprobada' ? colors.success : status === 'rechazada' ? colors.error : colors.warning;
-          return (
-            <Pressable
-              testID={`supervisor-item-${item.id}`}
-              style={[styles.row, isWide && styles.rowWide]}
-              onPress={() => router.push(`/inspection/${item.id}`)}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.rowTitle}>{item.placas_unidad}  ·  {item.numero_trailer}</Text>
-                <Text style={styles.rowSub}>{item.compania_transportista}</Text>
-                <Text style={styles.rowInspector}>{t('inspector')}: {item.inspector_nombre}</Text>
-                <Text style={styles.rowDate}>{new Date(item.created_at).toLocaleString()}</Text>
+        data={activeTab === 'inspecciones' ? filteredInspections : activeTab === 'caseta' ? filteredCaseta : filteredTickets}
+        keyExtractor={item => item.id}
+        refreshControl={<RefreshControl refreshing={loading || dataLoading} onRefresh={loadData} />}
+        contentContainerStyle={{ padding: spacing.md }}
+        renderItem={({ item }) => (
+          <View style={styles.card}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>{item.placas_unidad || (activeTab === 'caseta' ? item.entry.placas_unidad : '')}</Text>
+              <Text style={styles.cardSub}>
+                {activeTab === 'inspecciones' ? item.compania_transportista :
+                 activeTab === 'caseta' ? item.entry.chofer_nombre : item.operador}
+              </Text>
+              <Text style={styles.cardDate}>{new Date(item.created_at).toLocaleString()}</Text>
+            </View>
 
-                <View style={styles.reportButtons}>
-                  <Pressable
-                    style={[styles.reportBtn, reportLoading === item.id && { opacity: 0.5 }]}
-                    onPress={() => generateReport(item, 'es')}
-                    disabled={!!reportLoading}
-                  >
-                    <Ionicons name="mail" size={14} color={colors.onBrandSecondary} />
-                    <Text style={styles.reportBtnText}>{t('espanol_caps')}</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.reportBtn, { backgroundColor: colors.info }, reportLoading === item.id && { opacity: 0.5 }]}
-                    onPress={() => generateReport(item, 'zh')}
-                    disabled={!!reportLoading}
-                  >
-                    <Ionicons name="mail" size={14} color={colors.onInfo} />
-                    <Text style={[styles.reportBtnText, { color: colors.onInfo }]}>{t('chino_caps')} (REPORT)</Text>
-                  </Pressable>
-                </View>
-              </View>
-              <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                <View style={[styles.statusChip, { backgroundColor: item.status_general === 'bueno' ? colors.success : colors.error }]}>
-                  <Text style={styles.statusChipText}>{item.status_general === 'bueno' ? t('bueno') : t('falla')}</Text>
-                </View>
-                <View style={[styles.statusChip, { backgroundColor: statusColor }]}>
-                  <Text style={styles.statusChipText}>{t(status).toUpperCase()}</Text>
-                </View>
-              </View>
-            </Pressable>
-          );
-        }}
+            <View style={styles.cardActions}>
+              {activeTab === 'caseta' && (
+                <Pressable style={styles.emailBtn} onPress={() => openEmailModal(item.id)}>
+                  <Ionicons name="mail" size={18} color="#FFF" />
+                  <Text style={styles.emailBtnText}>ENVIAR REPORTE</Text>
+                </Pressable>
+              )}
+              <Pressable
+                style={styles.viewBtn}
+                onPress={() => router.push(activeTab === 'inspecciones' ? `/inspection/${item.id}` : activeTab === 'caseta' ? `/caseta/${item.id}` : `/embarque/${item.id}`)}
+              >
+                <Ionicons name="eye" size={18} color={colors.onBrandPrimary} />
+              </Pressable>
+            </View>
+          </View>
+        )}
       />
-    </SafeAreaView>
-  );
-}
 
-function StatBlock({ label, value, color }: { label: string; value: number; color?: string }) {
-  return (
-    <View style={styles.statBlock}>
-      <Text style={[styles.statValue, color && { color }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
+      <Modal visible={showEmailModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Enviar Reporte Consolidado</Text>
+            <Text style={styles.modalLabel}>Correos adicionales (separados por coma):</Text>
+            <TextInput
+              style={styles.emailInput}
+              placeholder="ejemplo@correo.com, otro@correo.com"
+              value={emailList}
+              onChangeText={setEmailList}
+              multiline
+            />
+            <View style={styles.modalButtons}>
+              <Pressable style={styles.cancelBtn} onPress={() => setShowEmailModal(false)}>
+                <Text style={styles.cancelBtnText}>CANCELAR</Text>
+              </Pressable>
+              <Pressable style={styles.sendBtn} onPress={handleSendEmail} disabled={sendingEmail}>
+                {sendingEmail ? <ActivityIndicator color="#FFF" /> : <Text style={styles.sendBtnText}>ENVIAR AHORA</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  lockText: { color: colors.muted, marginTop: spacing.md, fontWeight: '700' },
-  header: { padding: spacing.lg, borderBottomWidth: 2, borderBottomColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary },
-  title: { fontSize: typography.sizes.xxl, fontWeight: '900', color: colors.onSurface, marginBottom: spacing.md },
-  statsRow: { flexDirection: 'row', borderWidth: 2, borderColor: colors.borderStrong, marginBottom: spacing.md },
-  statBlock: { flex: 1, padding: spacing.sm, alignItems: 'center', borderLeftWidth: 1, borderLeftColor: colors.borderStrong },
-  statValue: { fontSize: 22, fontWeight: '900', color: colors.onSurface },
-  statLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, letterSpacing: 1, marginTop: 2 },
-  exportRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, flexWrap: 'wrap' },
-  dateRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-end', marginBottom: spacing.md },
-  dateLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, letterSpacing: 1, marginBottom: 4 },
-  dateInput: { borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.sm, backgroundColor: colors.surface, color: colors.onSurface, height: 40 },
-  clearBtn: { backgroundColor: colors.error, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  presetRowSup: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-  presetChipSup: { borderWidth: 2, borderColor: colors.borderStrong, backgroundColor: colors.surface, paddingHorizontal: spacing.md, paddingVertical: 6, flexShrink: 0 },
-  presetTextSup: { fontWeight: '900', fontSize: 11, color: colors.onSurface, letterSpacing: 1 },
-  exportBtn: {
-    backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-  },
-  exportText: { color: colors.onBrandPrimary, fontWeight: '900', fontSize: 11, letterSpacing: 1 },
-  searchBox: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface,
-    borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, marginBottom: spacing.md,
-  },
-  searchInput: { flex: 1, padding: spacing.sm, fontSize: typography.sizes.base, color: colors.onSurface, height: 44, marginLeft: spacing.sm },
-  chipsRow: { flexDirection: 'row', gap: spacing.sm },
-  chip: { borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, paddingVertical: 6, flexShrink: 0 },
-  chipActive: { backgroundColor: colors.brandPrimary },
-  chipText: { fontWeight: '900', fontSize: 10, color: colors.onSurface, letterSpacing: 1 },
-  chipTextActive: { color: colors.onBrandPrimary },
-  empty: { alignItems: 'center', padding: spacing.xxxl },
-  emptyText: { color: colors.muted },
-  row: {
-    backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong,
-    padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center',
-  },
-  rowWide: { maxWidth: 1000, alignSelf: 'stretch' },
-  rowTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface },
-  rowSub: { color: colors.muted, fontSize: typography.sizes.sm, marginTop: 2 },
-  rowInspector: { color: colors.onSurfaceTertiary, fontSize: typography.sizes.sm, marginTop: 4 },
-  rowDate: { color: colors.muted, fontSize: typography.sizes.sm, marginTop: 4 },
-  reportButtons: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  reportBtn: {
-    backgroundColor: colors.brandSecondary,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 2
-  },
-  reportBtnText: { color: colors.onBrandSecondary, fontWeight: '900', fontSize: 10, letterSpacing: 0.5 },
-  statusChip: { paddingHorizontal: spacing.sm, paddingVertical: 4 },
-  statusChipText: { color: '#FFF', fontWeight: '900', fontSize: 9, letterSpacing: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  header: { padding: spacing.lg, backgroundColor: colors.surfaceSecondary, borderBottomWidth: 2, borderBottomColor: colors.borderStrong },
+  title: { fontSize: 24, fontWeight: '900', color: colors.brandPrimary, marginBottom: spacing.md },
+  searchRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, backgroundColor: colors.surface, marginBottom: spacing.sm },
+  searchInput: { flex: 1, height: 44, color: colors.onSurface },
+  dateRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  dateInput: { flex: 1, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.sm, height: 40, backgroundColor: colors.surface },
+  tabRow: { flexDirection: 'row', gap: spacing.xs },
+  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderBottomWidth: 4, borderBottomColor: 'transparent' },
+  tabActive: { borderBottomColor: colors.brandPrimary },
+  tabText: { fontWeight: '900', fontSize: 10, color: colors.muted },
+  tabTextActive: { color: colors.brandPrimary },
+  card: { backgroundColor: '#FFF', borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center' },
+  cardTitle: { fontWeight: '900', fontSize: 16 },
+  cardSub: { color: colors.muted, fontSize: 12, marginTop: 2 },
+  cardDate: { color: colors.onSurfaceTertiary, fontSize: 10, marginTop: 4 },
+  cardActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  viewBtn: { backgroundColor: colors.brandPrimary, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  emailBtn: { backgroundColor: colors.success, paddingHorizontal: 12, height: 36, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  emailBtnText: { color: '#FFF', fontWeight: '900', fontSize: 10 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: spacing.xl },
+  modalCard: { backgroundColor: '#FFF', padding: spacing.xl, borderWidth: 2, borderColor: colors.borderStrong },
+  modalTitle: { fontWeight: '900', fontSize: 18, marginBottom: spacing.lg },
+  modalLabel: { fontSize: 12, fontWeight: '700', marginBottom: 8 },
+  emailInput: { borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, minHeight: 80, textAlignVertical: 'top', marginBottom: spacing.lg },
+  modalButtons: { flexDirection: 'row', gap: spacing.md },
+  cancelBtn: { flex: 1, padding: spacing.md, alignItems: 'center', borderWidth: 2, borderColor: colors.borderStrong },
+  cancelBtnText: { fontWeight: '900' },
+  sendBtn: { flex: 1, padding: spacing.md, alignItems: 'center', backgroundColor: colors.brandPrimary },
+  sendBtnText: { color: '#FFF', fontWeight: '900' },
 });

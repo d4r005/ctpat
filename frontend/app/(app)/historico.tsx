@@ -82,7 +82,9 @@ export default function Historico() {
               <Text style={styles.itemTitle}>{item.placas_unidad || t('sin_placas')}</Text>
               <Text style={styles.itemSub}>{item.compania_transportista}</Text>
               <Text style={styles.itemMeta}>
-                {t('trailer')}: {item.numero_trailer} · {t('precinto')}: {item.numero_precinto}
+                <Text style={{ fontWeight: '700', color: colors.onSurface }}>{t('trailer')}:</Text> {item.numero_trailer}
+                {'  •  '}
+                <Text style={{ fontWeight: '700', color: colors.onSurface }}>{t('precinto')}:</Text> {item.numero_precinto?.toUpperCase() === 'NA' ? 'N/A' : item.numero_precinto}
               </Text>
               <Text style={styles.itemDate}>{new Date(item.created_at).toLocaleString()}</Text>
             </View>
