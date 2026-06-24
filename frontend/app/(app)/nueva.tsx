@@ -135,6 +135,7 @@ export default function Nueva() {
         const proceed = window.confirm(`${t('inspeccion_guardada')}. ${t('desea_generar_ticket')}`);
         if (proceed) {
           const queryParams = new URLSearchParams({
+            record_id: params.record_id || '',
             inspection_id: created.id,
             compania: compania,
             placas: placas,
@@ -144,7 +145,7 @@ export default function Nueva() {
           });
           router.replace(`/embarque/nuevo?${queryParams.toString()}`);
         } else {
-          router.replace(`/inspection/${created.id}`);
+          router.replace(`/inspection/${created.id}${params.record_id ? `?record_id=${params.record_id}` : ''}`);
         }
         return;
       }
@@ -155,12 +156,13 @@ export default function Nueva() {
         [
           {
             text: t('ver_detalle'),
-            onPress: () => router.replace(`/inspection/${created.id}`)
+            onPress: () => router.replace(`/inspection/${created.id}${params.record_id ? `?record_id=${params.record_id}` : ''}`)
           },
           {
             text: t('si_generar_ticket_caps'),
             onPress: () => {
               const queryParams = new URLSearchParams({
+                record_id: params.record_id || '',
                 inspection_id: created.id,
                 compania: compania,
                 placas: placas,

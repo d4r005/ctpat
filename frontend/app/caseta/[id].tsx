@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -71,9 +71,23 @@ export default function CasetaDetail() {
     try {
       await apiCall(`/vehicle-records/${id}/exit`, { method: 'PATCH', body: exitData, token });
       setShowExit(false);
-      await load();
-    } catch (e: any) { alert(e.message); }
-    finally { setSaving(false); }
+
+      if (Platform.OS === 'web') {
+        alert("Salida Registrada Exitosamente. El movimiento de la unidad ha concluido.");
+        await load();
+        return;
+      }
+
+      Alert.alert(
+        "Salida Registrada",
+        "El movimiento de la unidad ha concluido exitosamente.",
+        [{ text: "OK", onPress: load }]
+      );
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading || !rec) {

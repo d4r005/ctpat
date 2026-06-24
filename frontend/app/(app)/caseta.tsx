@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -41,6 +41,10 @@ export default function Caseta() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  const pendingInspections = useMemo(() => {
+    return records.filter(r => r.status === 'entrada' && !r.inspection_id);
+  }, [records]);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="caseta-screen">
       <View style={styles.header}>
@@ -67,7 +71,39 @@ export default function Caseta() {
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brandPrimary} />}
         ListHeaderComponent={
-          records.length > 0 ? <Text style={styles.sectionTitle}>{t('vehiculos_registrados')}</Text> : null
+          <>
+            {pendingInspections.length > 0 && (
+              <View style={styles.pendingSection}>
+                <Text style={styles.sectionTitle}>UNIDADES PENDIENTES DE INSPECCIÓN</Text>
+                {pendingInspections.map((r: VehicleRecord) => (
+                  <Pressable
+                    key={r.id}
+                    style={styles.pendingCard}
+                    onPress={() => {
+                      const params = new URLSearchParams({
+                        record_id: r.id,
+                        compania: r.entry.compania_transporte || '',
+                        placas: r.entry.placas_unidad || '',
+                        trailer: r.entry.numero_caja || '',
+                        sello: r.entry.sello_entrada !== 'N/A' ? r.entry.sello_entrada : ''
+                      });
+                      router.push(`/(app)/nueva?${params.toString()}`);
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.pendingTitle}>{r.entry.placas_unidad}</Text>
+                      <Text style={styles.pendingSub}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
+                    </View>
+                    <View style={styles.pendingBtn}>
+                      <Text style={styles.pendingBtnText}>INSPECCIONAR</Text>
+                    </View>
+                  </Pressable>
+                ))}
+                <View style={{ height: spacing.xl }} />
+              </View>
+            )}
+            {records.length > 0 ? <Text style={styles.sectionTitle}>{t('vehiculos_registrados')}</Text> : null}
+          </>
         }
         ListEmptyComponent={
           loading ? (
@@ -122,4 +158,18 @@ const styles = StyleSheet.create({
   rowDate: { color: colors.muted, fontSize: 11, marginTop: 4 },
   statusChip: { paddingHorizontal: spacing.sm, paddingVertical: 4 },
   statusChipText: { color: '#FFF', fontWeight: '900', fontSize: 10, letterSpacing: 1 },
+  pendingSection: { marginBottom: spacing.sm },
+  pendingCard: {
+    backgroundColor: colors.brandPrimary,
+    borderWidth: 2,
+    borderColor: colors.borderStrong,
+    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  pendingTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onBrandPrimary },
+  pendingSub: { color: colors.onBrandPrimary, opacity: 0.8, fontSize: typography.sizes.sm },
+  pendingBtn: { backgroundColor: colors.brandSecondary, paddingHorizontal: spacing.md, paddingVertical: 6 },
+  pendingBtnText: { color: colors.onBrandSecondary, fontWeight: '900', fontSize: 10 },
 });

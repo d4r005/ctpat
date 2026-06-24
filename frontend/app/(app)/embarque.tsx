@@ -60,9 +60,18 @@ export default function Embarque() {
     return candidates.filter(i => {
       const plates = i.placas_unidad?.trim().toUpperCase();
       if (!plates) return false;
-      return !tickets.some(t => t.placas_unidad?.trim().toUpperCase() === plates);
-    }).slice(0, 5); // Limit to top 5 most recent pending
+      // Also filter by id if available to be more precise
+      return !tickets.some(t =>
+        (t.placas_unidad?.trim().toUpperCase() === plates) ||
+        (t as any).inspection_id === i.id
+      );
+    }).slice(0, 8); // Show more pending ones
   }, [inspections, allInspections, tickets, user?.role]);
+
+  const pendingExits = useMemo(() => {
+    // Records that are 'inspeccionado' (have inspection and maybe ticket) but not yet 'salida'
+    return vehicleRecords.filter(r => r.status === 'inspeccionado');
+  }, [vehicleRecords]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']} testID="embarque-screen">
@@ -99,6 +108,7 @@ export default function Embarque() {
                       const record = vehicleRecords.find(r => r.entry.placas_unidad === i.placas_unidad);
 
                       const params = new URLSearchParams({
+                        record_id: record?.id || '',
                         inspection_id: i.id,
                         compania: i.compania_transportista,
                         placas: i.placas_unidad,
@@ -127,6 +137,28 @@ export default function Embarque() {
             )}
             {tickets.length > 0 ? <Text style={styles.sectionTitle}>{t('tickets_recientes')}</Text> : null}
           </>
+        }
+        ListFooterComponent={
+          pendingExits.length > 0 ? (
+            <View style={[styles.pendingSection, { marginTop: spacing.xl }]}>
+              <Text style={styles.sectionTitle}>UNIDADES LISTAS PARA SALIDA</Text>
+              {pendingExits.map((r) => (
+                <Pressable
+                  key={r.id}
+                  style={[styles.pendingCard, { backgroundColor: colors.success }]}
+                  onPress={() => router.push(`/caseta/${r.id}`)}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.pendingTitle, { color: '#FFF' }]}>{r.entry.placas_unidad}</Text>
+                    <Text style={[styles.pendingSub, { color: '#FFF' }]}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
+                  </View>
+                  <View style={[styles.pendingBtn, { backgroundColor: '#FFF' }]}>
+                    <Text style={[styles.pendingBtnText, { color: colors.success }]}>DAR SALIDA</Text>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          ) : null
         }
         ListEmptyComponent={loading ? <ActivityIndicator color={colors.brandPrimary} style={{ marginTop: spacing.xl }} /> : (
           <View style={styles.empty}>

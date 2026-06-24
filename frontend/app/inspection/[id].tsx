@@ -11,7 +11,7 @@ import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
 export default function InspectionDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, record_id } = useLocalSearchParams<{ id: string; record_id?: string }>();
   const router = useRouter();
   const { getById, approveInspection, rejectInspection, deleteInspection } = useInspections();
   const { user } = useAuth();
@@ -281,6 +281,27 @@ export default function InspectionDetail() {
               </Pressable>
             </View>
           </View>
+        )}
+
+        {(insp.status_general === 'bueno' || insp.approval_status === 'aprobada') && (
+          <Pressable
+            style={[styles.exportBtn, { backgroundColor: colors.brandSecondary, marginTop: spacing.md, marginBottom: spacing.lg }]}
+            onPress={() => {
+              const queryParams = new URLSearchParams({
+                record_id: record_id || '',
+                inspection_id: insp.id,
+                compania: insp.compania_transportista,
+                placas: insp.placas_unidad,
+                trailer: insp.numero_trailer,
+                sello: insp.numero_precinto !== 'N/A' ? insp.numero_precinto : '',
+                operador: insp.inspector_nombre
+              });
+              router.push(`/embarque/nuevo?${queryParams.toString()}`);
+            }}
+          >
+            <Ionicons name="cube" size={24} color={colors.onBrandSecondary} />
+            <Text style={[styles.exportText, { color: colors.onBrandSecondary }]}>GENERAR TICKET DE EMBARQUE</Text>
+          </Pressable>
         )}
 
         <Section title="DATOS GENERALES">
