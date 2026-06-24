@@ -98,15 +98,24 @@ export default function CasetaNuevo() {
     return false;
   };
 
-  const pickPhoto = async (setter: (v: string) => void) => {
+  const pickPhoto = async (setter: (v: string) => void, fromCamera: boolean) => {
     try {
-      const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
-      const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
-      if (!r.canceled && r.assets[0]?.base64) {
-        setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
+      if (fromCamera) {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
+        const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+        if (!r.canceled && r.assets[0]?.base64) {
+          setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
+        }
+      } else {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) { alert('Se necesita acceso a la galería'); return; }
+        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+        if (!r.canceled && r.assets[0]?.base64) {
+          setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
+        }
       }
-    } catch (e: any) { alert(e.message || 'Error al capturar foto'); }
+    } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
   };
 
   const handleSave = async () => {
@@ -214,19 +223,25 @@ export default function CasetaNuevo() {
               <PhotoBox
                 label="UNIDAD (FRENTE) - Placa y Económico"
                 value={fotoFrente}
-                onPress={() => pickPhoto(setFotoFrente)}
+                onCamera={() => pickPhoto(setFotoFrente, true)}
+                onGallery={() => pickPhoto(setFotoFrente, false)}
+                onRemove={() => setFotoFrente('')}
               />
 
               <PhotoBox
                 label="CAJA / TRÁILER (ATRÁS) - Placa y Económico"
                 value={fotoAtras}
-                onPress={() => pickPhoto(setFotoAtras)}
+                onCamera={() => pickPhoto(setFotoAtras, true)}
+                onGallery={() => pickPhoto(setFotoAtras, false)}
+                onRemove={() => setFotoAtras('')}
               />
 
               <PhotoBox
                 label="IDENTIFICACIÓN DEL CHOFER"
                 value={fotoId}
-                onPress={() => pickPhoto(setFotoId)}
+                onCamera={() => pickPhoto(setFotoId, true)}
+                onGallery={() => pickPhoto(setFotoId, false)}
+                onRemove={() => setFotoId('')}
               />
             </View>
           )}
@@ -392,20 +407,29 @@ function ToggleRow({ label, value, onChange, testID }: any) {
   );
 }
 
-function PhotoBox({ label, value, onPress }: any) {
+function PhotoBox({ label, value, onCamera, onGallery, onRemove }: any) {
   return (
     <View style={{ marginBottom: spacing.lg }}>
       <Text style={styles.fieldLabel}>{label} *</Text>
-      <Pressable onPress={onPress} style={styles.photoBox}>
-        {value ? (
+      {value ? (
+        <View style={styles.photoContainer}>
           <Image source={{ uri: value }} style={styles.photoPreview} />
-        ) : (
-          <View style={styles.photoPlaceholder}>
-            <Ionicons name="camera" size={40} color={colors.brandPrimary} />
-            <Text style={styles.photoText}>TOCAR PARA TOMAR FOTO</Text>
-          </View>
-        )}
-      </Pressable>
+          <Pressable style={styles.photoRemove} onPress={onRemove}>
+            <Ionicons name="close-circle" size={24} color={colors.error} />
+          </Pressable>
+        </View>
+      ) : (
+        <View style={styles.photoActionRow}>
+          <Pressable onPress={onCamera} style={styles.photoActionBtn}>
+            <Ionicons name="camera" size={20} color={colors.onBrandPrimary} />
+            <Text style={styles.photoActionText}>CÁMARA</Text>
+          </Pressable>
+          <Pressable onPress={onGallery} style={[styles.photoActionBtn, { backgroundColor: colors.brandSecondary }]}>
+            <Ionicons name="images" size={20} color={colors.onBrandSecondary} />
+            <Text style={[styles.photoActionText, { color: colors.onBrandSecondary }]}>GALERÍA</Text>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
@@ -428,7 +452,12 @@ const styles = StyleSheet.create({
   photoBox: { borderWidth: 2, borderColor: colors.borderStrong, height: 200, backgroundColor: colors.surfaceSecondary, borderStyle: 'dashed', overflow: 'hidden' },
   photoPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   photoText: { fontWeight: '900', color: colors.brandPrimary, fontSize: 11, marginTop: 8 },
+  photoContainer: { position: 'relative', width: '100%', height: 200, borderWidth: 2, borderColor: colors.borderStrong },
   photoPreview: { flex: 1, resizeMode: 'cover' },
+  photoRemove: { position: 'absolute', top: 8, right: 8, backgroundColor: '#FFF', borderRadius: 12 },
+  photoActionRow: { flexDirection: 'row', gap: spacing.sm },
+  photoActionBtn: { flex: 1, backgroundColor: colors.brandPrimary, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  photoActionText: { color: colors.onBrandPrimary, fontWeight: '900', fontSize: 11, letterSpacing: 1 },
   optionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   optionChip: { borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, paddingVertical: 8, flexShrink: 0 },
   optionChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },

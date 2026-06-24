@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import Signature from 'react-native-signature-canvas';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
@@ -19,10 +20,31 @@ export default function EmbarqueNuevo() {
     hora_llegada: '', hora_apertura_cortina: '', hora_cierre_cortina: '', hora_salida: '',
     numero_pallets: '', numero_sello: '', observaciones: '', daño_caja: '',
     nombre_guardia: '', firma_almacenista: '', firma_guardia: '',
+    foto_inicio_carga: '', foto_media_carga: '', foto_final_carga: '',
   });
   const [sigTarget, setSigTarget] = useState<'almacenista' | 'guardia' | null>(null);
 
   const set = (k: string, v: any) => setForm({ ...form, [k]: v });
+
+  const pickPhoto = async (field: string, fromCamera: boolean) => {
+    try {
+      if (fromCamera) {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
+        const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true, allowsEditing: false });
+        if (!r.canceled && r.assets[0]?.base64) {
+          set(field, `data:image/jpeg;base64,${r.assets[0].base64}`);
+        }
+      } else {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) { alert('Se necesita acceso a la galería'); return; }
+        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.5, base64: true, allowsEditing: false });
+        if (!r.canceled && r.assets[0]?.base64) {
+          set(field, `data:image/jpeg;base64,${r.assets[0].base64}`);
+        }
+      }
+    } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
+  };
 
   const save = async () => {
     if (!form.almacenista.trim() || !form.cliente.trim()) {
@@ -75,6 +97,30 @@ export default function EmbarqueNuevo() {
           <Section title="OBSERVACIONES Y DAÑOS">
             <F label="OBSERVACIONES" v={form.observaciones} on={(t: string) => set('observaciones', t)} tid="emb-obs" multiline />
             <F label="SEÑALA EL DAÑO EN LA CAJA (descripción)" v={form.daño_caja} on={(t: string) => set('daño_caja', t)} tid="emb-dano" multiline />
+          </Section>
+
+          <Section title="EVIDENCIA DE CARGA">
+            <PhotoField
+              label="FOTO INICIO DE CARGA"
+              value={form.foto_inicio_carga}
+              onCamera={() => pickPhoto('foto_inicio_carga', true)}
+              onGallery={() => pickPhoto('foto_inicio_carga', false)}
+              onRemove={() => set('foto_inicio_carga', '')}
+            />
+            <PhotoField
+              label="FOTO MEDIA CARGA"
+              value={form.foto_media_carga}
+              onCamera={() => pickPhoto('foto_media_carga', true)}
+              onGallery={() => pickPhoto('foto_media_carga', false)}
+              onRemove={() => set('foto_media_carga', '')}
+            />
+            <PhotoField
+              label="FOTO FINALIZACIÓN DE CARGA"
+              value={form.foto_final_carga}
+              onCamera={() => pickPhoto('foto_final_carga', true)}
+              onGallery={() => pickPhoto('foto_final_carga', false)}
+              onRemove={() => set('foto_final_carga', '')}
+            />
           </Section>
 
           <Section title="FIRMAS">
@@ -136,6 +182,33 @@ function F({ label, v, on, tid, multiline, kb, placeholder }: any) {
     </>
   );
 }
+
+function PhotoField({ label, value, onCamera, onGallery, onRemove }: any) {
+  return (
+    <View style={{ marginBottom: spacing.md }}>
+      <Text style={styles.label}>{label}</Text>
+      {value ? (
+        <View style={styles.photoWrap}>
+          <Image source={{ uri: value }} style={styles.photoImg} />
+          <Pressable style={styles.photoRemove} onPress={onRemove}>
+            <Ionicons name="close-circle" size={24} color={colors.error} />
+          </Pressable>
+        </View>
+      ) : (
+        <View style={styles.photoActionRow}>
+          <Pressable style={styles.photoBtn} onPress={onCamera}>
+            <Ionicons name="camera" size={20} color={colors.onBrandPrimary} />
+            <Text style={styles.photoBtnText}>CÁMARA</Text>
+          </Pressable>
+          <Pressable style={[styles.photoBtn, { backgroundColor: colors.brandSecondary }]} onPress={onGallery}>
+            <Ionicons name="images" size={20} color={colors.onBrandSecondary} />
+            <Text style={[styles.photoBtnText, { color: colors.onBrandSecondary }]}>GALERÍA</Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
 function Section({ title, children }: any) {
   return (
     <View style={{ marginBottom: spacing.lg }}>
@@ -164,4 +237,10 @@ const styles = StyleSheet.create({
   modalTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface, marginBottom: spacing.md, letterSpacing: 1 },
   secBtn: { backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, alignItems: 'center', justifyContent: 'center' },
   secBtnText: { color: colors.onSurface, fontWeight: '900', letterSpacing: 1 },
+  photoBtn: { backgroundColor: colors.brandPrimary, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4, flex: 1 },
+  photoBtnText: { color: colors.onBrandPrimary, fontWeight: '900', fontSize: 11, letterSpacing: 1 },
+  photoWrap: { position: 'relative', marginTop: 4, borderWidth: 2, borderColor: colors.borderStrong },
+  photoImg: { width: '100%', height: 200, resizeMode: 'cover' },
+  photoRemove: { position: 'absolute', top: 8, right: 8, backgroundColor: '#FFF', borderRadius: 12 },
+  photoActionRow: { flexDirection: 'row', gap: spacing.sm },
 });
