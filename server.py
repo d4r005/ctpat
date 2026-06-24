@@ -1047,8 +1047,9 @@ async def _trigger_automatic_report(rec_id: str):
 
     if not inspection and placas:
         logger.info(f"Buscando inspección de respaldo para placas: {placas}")
+        # Case insensitive search with regex
         inspection = await db.inspections.find_one(
-            {"placas_unidad": placas},
+            {"placas_unidad": {"$regex": f"^{placas}$", "$options": "i"}},
             sort=[("created_at", -1)]
         )
 
@@ -1211,7 +1212,10 @@ async def send_consolidated_manual(body: SendConsolidatedRequest, current_user: 
     placas = record["entry"].get("placas_unidad", "").strip()
     inspection = await db.inspections.find_one({"id": record.get("inspection_id")})
     if not inspection and placas:
-        inspection = await db.inspections.find_one({"placas_unidad": placas}, sort=[("created_at", -1)])
+        inspection = await db.inspections.find_one(
+            {"placas_unidad": {"$regex": f"^{placas}$", "$options": "i"}},
+            sort=[("created_at", -1)]
+        )
 
     fecha_inicio = record["created_at"]
     fecha_fin = record.get("exit", {}).get("fecha_salida") or datetime.now(timezone.utc).isoformat()
