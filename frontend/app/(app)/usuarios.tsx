@@ -10,7 +10,7 @@ import { apiCall } from '@/src/api/client';
 import { useAuth, User } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
-export default function Usuarios() {
+export default function Usuarios({ nested = false }: { nested?: boolean }) {
   const { user, token } = useAuth();
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
@@ -19,7 +19,7 @@ export default function Usuarios() {
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [newRole, setNewRole] = useState<'inspector' | 'supervisor'>('inspector');
+  const [newRole, setNewRole] = useState<'inspector' | 'supervisor' | 'admin'>('inspector');
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -115,21 +115,30 @@ export default function Usuarios() {
 
   if (!isSupervisorOrAdmin) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.center}><Text style={{ color: colors.muted }}>Acceso restringido</Text></View>
-      </SafeAreaView>
+      <View style={styles.center}><Text style={{ color: colors.muted }}>Acceso restringido</Text></View>
     );
   }
 
-  return (
-    <SafeAreaView style={styles.safe} edges={['top']} testID="usuarios-screen">
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} testID="usuarios-back"><Ionicons name="arrow-back" size={24} color={colors.onSurface} /></Pressable>
-        <Text style={styles.title}>Gestión de Usuarios</Text>
-        <Pressable testID="usuarios-add-btn" onPress={() => setShowCreate(true)}>
-          <Ionicons name="person-add" size={24} color={colors.brandPrimary} />
-        </Pressable>
-      </View>
+  const Content = (
+    <View style={{ flex: 1 }}>
+      {!nested && (
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} testID="usuarios-back"><Ionicons name="arrow-back" size={24} color={colors.onSurface} /></Pressable>
+          <Text style={styles.title}>Gestión de Usuarios</Text>
+          <Pressable testID="usuarios-add-btn" onPress={() => setShowCreate(true)}>
+            <Ionicons name="person-add" size={24} color={colors.brandPrimary} />
+          </Pressable>
+        </View>
+      )}
+
+      {nested && (
+        <View style={{ padding: spacing.md, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+           <Text style={[styles.title, { fontSize: 14 }]}>CONTROL DE ACCESO</Text>
+           <Pressable testID="usuarios-add-btn" onPress={() => setShowCreate(true)} style={{ backgroundColor: colors.brandPrimary, padding: 8 }}>
+            <Ionicons name="person-add" size={18} color="#FFF" />
+          </Pressable>
+        </View>
+      )}
 
       {loading ? (
         <ActivityIndicator color={colors.brandPrimary} style={{ marginTop: spacing.xl }} />
@@ -137,12 +146,12 @@ export default function Usuarios() {
         <FlatList
           data={users}
           keyExtractor={(u) => u.id}
-          contentContainerStyle={{ padding: spacing.lg }}
+          contentContainerStyle={{ padding: nested ? spacing.md : spacing.lg }}
           renderItem={({ item }) => (
-            <View style={styles.userRow} testID={`usuario-${item.id}`}>
+            <View style={[styles.userRow, nested && { padding: spacing.sm, marginBottom: spacing.xs }]} testID={`usuario-${item.id}`}>
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
-                  <Text style={styles.userName}>{item.name}</Text>
+                  <Text style={[styles.userName, nested && { fontSize: 12 }]}>{item.name}</Text>
                   {item.role === 'admin' && (
                     <View style={[styles.roleChip, { backgroundColor: colors.info }]}><Text style={styles.roleChipText}>ADMIN</Text></View>
                   )}
@@ -155,30 +164,23 @@ export default function Usuarios() {
                     </View>
                   )}
                 </View>
-                <Text style={styles.userEmail}>{item.email}</Text>
+                <Text style={[styles.userEmail, nested && { fontSize: 10 }]}>{item.email}</Text>
               </View>
-              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              <View style={{ flexDirection: 'row', gap: spacing.xs }}>
                 <Pressable
-                  style={[styles.toggleBtn, { backgroundColor: colors.brandPrimary }]}
+                  style={[styles.toggleBtn, { backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.sm }]}
                   onPress={() => handleEditClick(item)}
                 >
-                  <Ionicons name="pencil" size={16} color="#FFF" />
+                  <Ionicons name="pencil" size={14} color="#FFF" />
                 </Pressable>
                 {item.id !== user.id && (
                   <>
                     <Pressable
                       testID={`usuario-toggle-${item.id}`}
-                      style={[styles.toggleBtn, { backgroundColor: item.active ? colors.warning : colors.success }]}
+                      style={[styles.toggleBtn, { backgroundColor: item.active ? colors.warning : colors.success, paddingHorizontal: spacing.sm }]}
                       onPress={() => handleToggle(item)}
                     >
-                      <Text style={styles.toggleBtnText}>{item.active ? 'PAUSAR' : 'ACTIVAR'}</Text>
-                    </Pressable>
-                    <Pressable
-                      testID={`usuario-delete-${item.id}`}
-                      style={[styles.toggleBtn, { backgroundColor: colors.error }]}
-                      onPress={() => handleDelete(item)}
-                    >
-                      <Ionicons name="trash" size={16} color="#FFF" />
+                      <Text style={[styles.toggleBtnText, { fontSize: 9 }]}>{item.active ? 'PAUSAR' : 'ACTIVAR'}</Text>
                     </Pressable>
                   </>
                 )}
@@ -231,6 +233,14 @@ export default function Usuarios() {
           </KeyboardAvoidingView>
         </View>
       )}
+    </View>
+  );
+
+  if (nested) return Content;
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']} testID="usuarios-screen">
+      {Content}
     </SafeAreaView>
   );
 }
