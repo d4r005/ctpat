@@ -131,6 +131,49 @@ export default function CasetaDetail() {
   const isAdmin = user?.role === 'admin';
   const STATUS_COLOR: any = { entrada: colors.warning, inspeccionado: colors.info, salida: colors.success };
 
+  const adminUpdatePhoto = async (field: string) => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) return;
+      const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+      if (r.canceled || !r.assets[0]?.base64) return;
+
+      const photo_data = `data:image/jpeg;base64,${r.assets[0].base64}`;
+      await apiCall(`/admin/vehicle-records/${id}/photo`, {
+        method: 'PATCH',
+        body: { field_path: field, photo_data },
+        token
+      });
+      load();
+    } catch (e: any) { alert(e.message); }
+  };
+
+  const adminDeletePhoto = async (field: string) => {
+    if (!window.confirm('¿Eliminar esta foto permanentemente?')) return;
+    try {
+      await apiCall(`/admin/vehicle-records/${id}/photo`, {
+        method: 'PATCH',
+        body: { field_path: field, photo_data: '' },
+        token
+      });
+      load();
+    } catch (e: any) { alert(e.message); }
+  };
+
+  const AdminPhotoActions = ({ field }: { field: string }) => {
+    if (!isAdmin) return null;
+    return (
+      <View style={styles.adminPhotoOverlay}>
+        <Pressable onPress={() => adminUpdatePhoto(field)} style={styles.adminPhotoBtn}>
+          <Ionicons name="pencil" size={16} color="#FFF" />
+        </Pressable>
+        <Pressable onPress={() => adminDeletePhoto(field)} style={[styles.adminPhotoBtn, { backgroundColor: colors.error }]}>
+          <Ionicons name="trash" size={16} color="#FFF" />
+        </Pressable>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="caseta-detail">
       <View style={styles.topBar}>
@@ -176,15 +219,30 @@ export default function CasetaDetail() {
           <View style={styles.photoGrid}>
             <View style={styles.photoItem}>
               <Text style={styles.photoLabel}>FRENTE UNIDAD</Text>
-              {e.foto_frente_unidad ? <Image source={{ uri: e.foto_frente_unidad }} style={styles.photoImg} /> : <Text style={styles.noPhoto}>Sin foto</Text>}
+              {e.foto_frente_unidad ? (
+                <View>
+                  <Image source={{ uri: e.foto_frente_unidad }} style={styles.photoImg} />
+                  <AdminPhotoActions field="entry.foto_frente_unidad" />
+                </View>
+              ) : <Text style={styles.noPhoto}>Sin foto</Text>}
             </View>
             <View style={styles.photoItem}>
               <Text style={styles.photoLabel}>ATRÁS CAJA</Text>
-              {e.foto_atras_caja ? <Image source={{ uri: e.foto_atras_caja }} style={styles.photoImg} /> : <Text style={styles.noPhoto}>Sin foto</Text>}
+              {e.foto_atras_caja ? (
+                <View>
+                  <Image source={{ uri: e.foto_atras_caja }} style={styles.photoImg} />
+                  <AdminPhotoActions field="entry.foto_atras_caja" />
+                </View>
+              ) : <Text style={styles.noPhoto}>Sin foto</Text>}
             </View>
             <View style={styles.photoItem}>
               <Text style={styles.photoLabel}>ID CHOFER</Text>
-              {e.foto_id_chofer ? <Image source={{ uri: e.foto_id_chofer }} style={styles.photoImg} /> : <Text style={styles.noPhoto}>Sin foto</Text>}
+              {e.foto_id_chofer ? (
+                <View>
+                  <Image source={{ uri: e.foto_id_chofer }} style={styles.photoImg} />
+                  <AdminPhotoActions field="entry.foto_id_chofer" />
+                </View>
+              ) : <Text style={styles.noPhoto}>Sin foto</Text>}
             </View>
           </View>
         </Section>
@@ -218,6 +276,7 @@ export default function CasetaDetail() {
             {x.sello_vvtt_foto ? (
               <View style={{ padding: spacing.sm, alignItems: 'center' }}>
                 <Image source={{ uri: x.sello_vvtt_foto }} style={{ width: '100%', height: 200, resizeMode: 'contain', borderWidth: 1, borderColor: colors.border }} />
+                <AdminPhotoActions field="exit.sello_vvtt_foto" />
               </View>
             ) : null}
             <Row label="Guardia salida" value={x.guardia_salida_nombre} />
@@ -369,4 +428,12 @@ const styles = StyleSheet.create({
   photoLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, marginBottom: 4, letterSpacing: 0.5 },
   photoImg: { width: '100%', height: 120, resizeMode: 'cover', borderWidth: 2, borderColor: colors.borderStrong },
   noPhoto: { fontSize: 10, color: colors.muted, fontStyle: 'italic' },
+  adminPhotoOverlay: {
+    position: 'absolute', top: 5, right: 5, flexDirection: 'row', gap: 5,
+  },
+  adminPhotoBtn: {
+    width: 30, height: 30, borderRadius: 15, backgroundColor: colors.brandPrimary,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3,
+  },
 });

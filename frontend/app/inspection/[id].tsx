@@ -5,16 +5,18 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as ImagePicker from 'expo-image-picker';
 import Signature from '@/src/components/SignaturePad';
 import { useInspections, Inspection } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
+import { apiCall } from '@/src/api/client';
 
 export default function InspectionDetail() {
   const { id, record_id } = useLocalSearchParams<{ id: string; record_id?: string }>();
   const router = useRouter();
-  const { getById, approveInspection, rejectInspection, deleteInspection } = useInspections();
-  const { user } = useAuth();
+  const { getById, approveInspection, rejectInspection, deleteInspection, refreshAll } = useInspections();
+  const { user, token } = useAuth();
   const [insp, setInsp] = useState<Inspection | undefined>(undefined);
   const [generating, setGenerating] = useState(false);
   const [approvalNote, setApprovalNote] = useState('');
@@ -24,6 +26,51 @@ export default function InspectionDetail() {
   const [acting, setActing] = useState(false);
   const isSupervisor = user?.role === 'supervisor' || user?.role === 'admin';
   const isAdmin = user?.role === 'admin';
+
+  const adminUpdatePointPhoto = async (pointNum: number) => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) return;
+      const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+      if (r.canceled || !r.assets[0]?.base64) return;
+
+      const photo_data = `data:image/jpeg;base64,${r.assets[0].base64}`;
+      await apiCall(`/admin/inspections/${id}/point/${pointNum}/photo`, {
+        method: 'PATCH',
+        body: { field_path: 'photo', photo_data },
+        token
+      });
+      await refreshAll();
+      setInsp(getById(id));
+    } catch (e: any) { alert(e.message); }
+  };
+
+  const adminDeletePointPhoto = async (pointNum: number) => {
+    if (!window.confirm('¿Eliminar esta foto permanentemente?')) return;
+    try {
+      await apiCall(`/admin/inspections/${id}/point/${pointNum}/photo`, {
+        method: 'PATCH',
+        body: { field_path: 'photo', photo_data: '' },
+        token
+      });
+      await refreshAll();
+      setInsp(getById(id));
+    } catch (e: any) { alert(e.message); }
+  };
+
+  const AdminPointPhotoActions = ({ pointNum }: { pointNum: number }) => {
+    if (!isAdmin) return null;
+    return (
+      <View style={styles.adminPhotoOverlay}>
+        <Pressable onPress={() => adminUpdatePointPhoto(pointNum)} style={styles.adminPhotoBtn}>
+          <Ionicons name="pencil" size={14} color="#FFF" />
+        </Pressable>
+        <Pressable onPress={() => adminDeletePointPhoto(pointNum)} style={[styles.adminPhotoBtn, { backgroundColor: colors.error }]}>
+          <Ionicons name="trash" size={14} color="#FFF" />
+        </Pressable>
+      </View>
+    );
+  };
 
   useEffect(() => {
     if (id) {
@@ -322,7 +369,10 @@ export default function InspectionDetail() {
                 <Text style={styles.pointName}>{p.name}</Text>
                 {p.comentarios ? <Text style={styles.pointComment}>{p.comentarios}</Text> : null}
                 {p.photo ? (
-                  <Image source={{ uri: p.photo }} style={styles.pointPhoto} testID={`detail-point-${p.number}-photo`} />
+                  <View>
+                    <Image source={{ uri: p.photo }} style={styles.pointPhoto} testID={`detail-point-${p.number}-photo`} />
+                    <AdminPointPhotoActions pointNum={p.number} />
+                  </View>
                 ) : null}
               </View>
               <View style={[styles.pointChip, { backgroundColor: p.estado === 'bueno' ? colors.success : p.estado === 'malo' ? colors.error : colors.muted }]}>
@@ -539,4 +589,12 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: colors.onBrandPrimary, fontWeight: '900', letterSpacing: 1 },
   secondaryBtn: { backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
   secondaryBtnText: { color: colors.onSurface, fontWeight: '900', letterSpacing: 1 },
+  adminPhotoOverlay: {
+    position: 'absolute', top: 15, right: 10, flexDirection: 'row', gap: 5,
+  },
+  adminPhotoBtn: {
+    width: 28, height: 28, borderRadius: 14, backgroundColor: colors.brandPrimary,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3,
+  },
 });

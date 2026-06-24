@@ -1065,9 +1065,42 @@ async def _trigger_automatic_report(rec_id: str):
     subject = f"REPORTE CONSOLIDADO SRIUC - UNIDAD: {placas}"
     recipient = os.environ.get("REPORT_RECIPIENT", "d4r005@gmail.com")
 
+    # Helper to generate photo HTML
+    def get_photo_html(title, photo_url):
+        if not photo_url or not isinstance(photo_url, str) or "data:image" not in photo_url:
+            return ""
+        return f"""
+        <div style="display: inline-block; margin: 10px; width: 220px; vertical-align: top; border: 1px solid #ddd; padding: 5px;">
+            <p style="margin: 0 0 5px 0; font-size: 10px; font-weight: bold; color: #666; text-transform: uppercase;">{title}</p>
+            <img src="{photo_url}" style="width: 100%; height: 150px; object-fit: cover;" />
+        </div>
+        """
+
+    entry_photos = ""
+    if record.get("entry"):
+        entry_photos += get_photo_html("Frente Unidad", record["entry"].get("foto_frente_unidad"))
+        entry_photos += get_photo_html("Atrás Caja", record["entry"].get("foto_atras_caja"))
+        entry_photos += get_photo_html("ID Chofer", record["entry"].get("foto_id_chofer"))
+
+    inspection_photos = ""
+    if inspection and inspection.get("points"):
+        for p in inspection["points"]:
+            if p.get("photo"):
+                inspection_photos += get_photo_html(f"Punto {p.get('number')}: {p.get('name')[:20]}...", p["photo"])
+
+    ticket_photos = ""
+    if ticket:
+        ticket_photos += get_photo_html("Inicio Carga", ticket.get("foto_inicio_carga"))
+        ticket_photos += get_photo_html("Media Carga", ticket.get("foto_media_carga"))
+        ticket_photos += get_photo_html("Final Carga", ticket.get("foto_final_carga"))
+
+    exit_photos = ""
+    if record.get("exit"):
+        exit_photos += get_photo_html("Sello VVTT (Salida)", record["exit"].get("sello_vvtt_foto"))
+
     html = f"""
     <html>
-        <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; line-height: 1.6; max-width: 800px; margin: auto; border: 1px solid #eee; padding: 20px;">
+        <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; line-height: 1.6; max-width: 850px; margin: auto; border: 1px solid #eee; padding: 20px;">
             <div style="background-color: #0A2540; padding: 20px; text-align: center; color: white;">
                 <h1 style="margin: 0;">Reporte Consolidado de Unidad</h1>
                 <p style="margin: 5px 0 0 0; opacity: 0.8;">Sistema de Registro e Inspección (SRIUC)</p>
@@ -1085,6 +1118,7 @@ async def _trigger_automatic_report(rec_id: str):
                     <tr><td style="padding: 8px; font-weight: bold;">Sello VVTT (Salida):</td><td style="padding: 8px; text-transform: uppercase;">{record['exit'].get('sello_vvtt_estado', 'N/A')}</td></tr>
                     ''' if record.get('exit') else ''}
                 </table>
+                <div style="margin-top: 15px;">{entry_photos}{exit_photos}</div>
 
                 <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">2. Inspección C-TPAT (19 Puntos)</h2>
                 {f'''
@@ -1092,8 +1126,8 @@ async def _trigger_automatic_report(rec_id: str):
                     <p style="margin: 0;">Estado General: <b style="color: {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">{inspection.get('status_general', 'N/A').upper()}</b></p>
                     <p style="margin: 5px 0 0 0;">Inspector: {inspection.get('inspector_nombre', 'N/A')}</p>
                     <p style="margin: 5px 0 0 0;">Aprobación: <b>{inspection.get('approval_status', 'pendiente').upper()}</b></p>
-                    <p style="margin: 5px 0 0 0;">Autorizado por: {inspection.get('approved_by_name', 'N/A') if inspection.get('approval_status') != 'pendiente' else 'Pendiente'}</p>
                 </div>
+                <div style="margin-top: 15px;">{inspection_photos}</div>
                 ''' if inspection else "<p style='color: #666; font-style: italic;'>No se realizó inspección digital para esta unidad.</p>"}
 
                 <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">3. Ticket de Embarque</h2>
@@ -1102,8 +1136,8 @@ async def _trigger_automatic_report(rec_id: str):
                     <tr><td style="padding: 8px; font-weight: bold; width: 30%;">Cliente:</td><td style="padding: 8px;">{ticket.get('cliente', 'N/A')}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold;">Almacenista:</td><td style="padding: 8px;">{ticket.get('almacenista', 'N/A')}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold;">Pallets:</td><td style="padding: 8px;">{ticket.get('numero_pallets', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Sellos:</td><td style="padding: 8px;">{ticket.get('sellos', 'N/A')}</td></tr>
                 </table>
+                <div style="margin-top: 15px;">{ticket_photos}</div>
                 ''' if ticket else "<p style='color: #666; font-style: italic;'>No se generó ticket de embarque para este movimiento.</p>"}
             </div>
 
@@ -1429,6 +1463,32 @@ async def get_recent_activities(
     # Sort all by created_at descending
     activities.sort(key=lambda x: x["created_at"], reverse=True)
     return activities[:limit]
+
+
+# ========== Admin Photo Management ==========
+class PhotoUpdateBody(BaseModel):
+    field_path: str  # e.g. "entry.foto_frente_unidad" or "foto_inicio_carga"
+    photo_data: str  # base64 or empty string to delete
+
+@api_router.patch("/admin/vehicle-records/{rec_id}/photo")
+async def admin_update_vehicle_photo(rec_id: str, body: PhotoUpdateBody, current_user: Dict[str, Any] = Depends(require_admin)):
+    # Support paths like "entry.foto_frente_unidad"
+    await db.vehicle_records.update_one({"id": rec_id}, {"$set": {body.field_path: body.photo_data}})
+    return {"ok": True}
+
+@api_router.patch("/admin/inspections/{insp_id}/point/{point_num}/photo")
+async def admin_update_inspection_photo(insp_id: str, point_num: int, body: PhotoUpdateBody, current_user: Dict[str, Any] = Depends(require_admin)):
+    # Update nested point photo
+    await db.inspections.update_one(
+        {"id": insp_id, "points.number": point_num},
+        {"$set": {"points.$.photo": body.photo_data}}
+    )
+    return {"ok": True}
+
+@api_router.patch("/admin/shipping-tickets/{ticket_id}/photo")
+async def admin_update_ticket_photo(ticket_id: str, body: PhotoUpdateBody, current_user: Dict[str, Any] = Depends(require_admin)):
+    await db.shipping_tickets.update_one({"id": ticket_id}, {"$set": {body.field_path: body.photo_data}})
+    return {"ok": True}
 
 
 app.include_router(api_router)

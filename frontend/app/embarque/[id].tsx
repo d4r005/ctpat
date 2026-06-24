@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Platform, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -50,6 +51,59 @@ export default function EmbarqueDetail() {
 
   const isAdmin = user?.role === 'admin';
 
+  const load = async () => {
+    if (!id) return;
+    try {
+      const data = await apiCall<any>(`/shipping-tickets/${id}`, { token });
+      setT(data);
+    } catch (e: any) { alert(e.message); }
+  };
+
+  useEffect(() => { load(); }, [id, token]);
+
+  const adminUpdatePhoto = async (field: string) => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) return;
+      const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+      if (r.canceled || !r.assets[0]?.base64) return;
+
+      const photo_data = `data:image/jpeg;base64,${r.assets[0].base64}`;
+      await apiCall(`/admin/shipping-tickets/${id}/photo`, {
+        method: 'PATCH',
+        body: { field_path: field, photo_data },
+        token
+      });
+      load();
+    } catch (e: any) { alert(e.message); }
+  };
+
+  const adminDeletePhoto = async (field: string) => {
+    if (!window.confirm('¿Eliminar esta foto permanentemente?')) return;
+    try {
+      await apiCall(`/admin/shipping-tickets/${id}/photo`, {
+        method: 'PATCH',
+        body: { field_path: field, photo_data: '' },
+        token
+      });
+      load();
+    } catch (e: any) { alert(e.message); }
+  };
+
+  const AdminPhotoActions = ({ field }: { field: string }) => {
+    if (!isAdmin) return null;
+    return (
+      <View style={styles.adminPhotoOverlay}>
+        <Pressable onPress={() => adminUpdatePhoto(field)} style={styles.adminPhotoBtn}>
+          <Ionicons name="pencil" size={14} color="#FFF" />
+        </Pressable>
+        <Pressable onPress={() => adminDeletePhoto(field)} style={[styles.adminPhotoBtn, { backgroundColor: colors.error }]}>
+          <Ionicons name="trash" size={14} color="#FFF" />
+        </Pressable>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']} testID="embarque-detail">
       <View style={styles.topBar}>
@@ -84,6 +138,37 @@ export default function EmbarqueDetail() {
         <Section title="OBSERVACIONES Y DAÑOS">
           <Row k="Observaciones" v={t.observaciones || '-'} />
           <Row k="Daño en caja" v={t.daño_caja || '-'} />
+        </Section>
+        <Section title="EVIDENCIA DE CARGA">
+          <View style={styles.photoGrid}>
+            <View style={styles.photoItem}>
+              <Text style={styles.photoLabel}>INICIO CARGA</Text>
+              {t.foto_inicio_carga ? (
+                <View>
+                  <Image source={{ uri: t.foto_inicio_carga }} style={styles.photoImg} />
+                  <AdminPhotoActions field="foto_inicio_carga" />
+                </View>
+              ) : <Text style={styles.noPhoto}>Sin foto</Text>}
+            </View>
+            <View style={styles.photoItem}>
+              <Text style={styles.photoLabel}>MEDIA CARGA</Text>
+              {t.foto_media_carga ? (
+                <View>
+                  <Image source={{ uri: t.foto_media_carga }} style={styles.photoImg} />
+                  <AdminPhotoActions field="foto_media_carga" />
+                </View>
+              ) : <Text style={styles.noPhoto}>Sin foto</Text>}
+            </View>
+            <View style={styles.photoItem}>
+              <Text style={styles.photoLabel}>FINAL CARGA</Text>
+              {t.foto_final_carga ? (
+                <View>
+                  <Image source={{ uri: t.foto_final_carga }} style={styles.photoImg} />
+                  <AdminPhotoActions field="foto_final_carga" />
+                </View>
+              ) : <Text style={styles.noPhoto}>Sin foto</Text>}
+            </View>
+          </View>
         </Section>
         <Section title="FIRMAS">
           <Row k="Guardia" v={t.nombre_guardia} />
@@ -135,4 +220,17 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.xl, minHeight: 52,
   },
   deleteBtnText: { color: '#FFF', fontWeight: '900', letterSpacing: 1, fontSize: typography.sizes.sm },
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: spacing.sm, gap: spacing.sm, justifyContent: 'space-between' },
+  photoItem: { width: '31%', marginBottom: spacing.sm },
+  photoLabel: { fontSize: 8, fontWeight: '900', color: colors.muted, marginBottom: 4, letterSpacing: 0.5 },
+  photoImg: { width: '100%', height: 100, resizeMode: 'cover', borderWidth: 2, borderColor: colors.borderStrong },
+  noPhoto: { fontSize: 8, color: colors.muted, fontStyle: 'italic' },
+  adminPhotoOverlay: {
+    position: 'absolute', top: 2, right: 2, flexDirection: 'row', gap: 2,
+  },
+  adminPhotoBtn: {
+    width: 24, height: 24, borderRadius: 12, backgroundColor: colors.brandPrimary,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3,
+  },
 });
