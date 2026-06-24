@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl } from 'react-native';
+import React, { useState, useCallback, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { useInspections } from '@/src/context/InspectionContext';
 import { useNotifications } from '@/src/context/NotificationsContext';
 import NotificationsPanel from '@/src/components/NotificationsPanel';
 import { colors, spacing, radius, typography } from '@/src/constants/theme';
+import { apiCall } from '@/src/api/client';
 
 export default function Inicio() {
   const { user, token } = useAuth();
@@ -26,9 +27,10 @@ export default function Inicio() {
     setLoadingActivities(true);
     try {
       const data = await apiCall<any[]>('/activities', { token });
-      setActivities(data);
+      setActivities(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error('Error fetching activities:', e);
+      setActivities([]);
     } finally {
       setLoadingActivities(false);
     }
@@ -42,7 +44,7 @@ export default function Inicio() {
     ]);
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     loadActivities();
     const interval = setInterval(loadActivities, 30000); // refresh activities every 30s
     return () => clearInterval(interval);
@@ -55,15 +57,25 @@ export default function Inicio() {
     return createdDate === todayStr;
   });
 
-  const totalBuenas = todayInspections.filter((i) => i.status_general === 'bueno').length;
-  const totalMalas = todayInspections.filter((i) => i.status_general === 'malo').length;
+  const totalBuenas = (todayInspections || []).filter((i) => i.status_general === 'bueno').length;
+  const totalMalas = (todayInspections || []).filter((i) => i.status_general === 'malo').length;
 
-  const getActivityIcon = (type: string) => {
+  const getActivityIcon = (type: string): any => {
     switch (type) {
-      case 'inspection': return 'clipboard';
-      case 'caseta': return 'car-sport';
-      case 'embarque': return 'cube';
-      default: return 'radio-button-on';
+      case 'inspection': return 'clipboard-outline';
+      case 'caseta': return 'car-outline';
+      case 'embarque': return 'cube-outline';
+      default: return 'radio-button-on-outline';
+    }
+  };
+
+  const formatTime = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
     }
   };
 
@@ -126,14 +138,14 @@ export default function Inicio() {
         </View>
 
         <Text style={styles.sectionTitle}>{t('actividad_reciente', 'ACTIVIDAD RECIENTE')} ({t('tiempo_real')})</Text>
-        {activities.length === 0 ? (
+        {(!activities || activities.length === 0) ? (
           <View style={styles.emptyBox} testID="inicio-empty">
             <Ionicons name="flash-outline" size={48} color={colors.muted} />
             <Text style={styles.emptyText}>{t('no_hay_actividad', 'No hay actividad reciente')}</Text>
             <Text style={styles.emptySub}>{t('nuevas_apareceran_aqui')}</Text>
           </View>
         ) : (
-          activities.map((a) => (
+          Array.isArray(activities) && activities.filter(a => !!a).map((a) => (
             <Pressable
               key={`${a.type}-${a.id}`}
               testID={`inicio-activity-${a.id}`}
@@ -147,7 +159,7 @@ export default function Inicio() {
                 <Text style={styles.listTitle}>{a.title}</Text>
                 <Text style={styles.listSub}>{a.subtitle}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 8 }}>
-                  <Text style={styles.listTime}>{new Date(a.created_at).toLocaleTimeString()}</Text>
+                  <Text style={styles.listTime}>{formatTime(a.created_at)}</Text>
                   <Text style={{ fontSize: 10, color: colors.muted }}>• {a.user_name}</Text>
                 </View>
               </View>
