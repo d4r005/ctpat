@@ -248,7 +248,7 @@ def create_token(user_id: str) -> str:
     return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 def is_admin(user: Dict[str, Any]) -> bool:
-    admins = ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"]
+    admins = ["d.trujillo@brancoindustries.com"]
     return user.get("email") in admins or user.get("role") == "admin"
 
 async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
@@ -519,7 +519,7 @@ async def create_inspector(body: UserRegister, current_user: Dict[str, Any] = De
     if existing:
         raise HTTPException(status_code=400, detail="El correo ya está registrado")
     user_id = str(uuid.uuid4())
-    role = body.role if body.role in ("inspector", "supervisor") else "inspector"
+    role = body.role if body.role in ("inspector", "supervisor", "admin") else "inspector"
     doc = {
         "id": user_id, "email": body.email.lower(), "name": body.name,
         "role": role, "active": True,
