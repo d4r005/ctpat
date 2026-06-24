@@ -21,6 +21,15 @@
         "backgroundColor": "#0A2540"
       },
       "edgeToEdgeEnabled": false,
+      "statusBar": {
+        "barStyle": "dark-content",
+        "backgroundColor": "#F4F4F5",
+        "translucent": false
+      },
+      "navigationBar": {
+        "backgroundColor": "#FFFFFF",
+        "barStyle": "dark-content"
+      },
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
