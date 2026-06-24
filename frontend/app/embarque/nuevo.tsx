@@ -21,16 +21,19 @@ export default function EmbarqueNuevo() {
     trailer?: string;
     sello?: string;
     operador?: string;
+    destino?: string;
+    economico?: string;
+    hora_llegada?: string;
   }>();
 
   const [saving, setSaving] = useState(false);
   const sigRef = React.useRef<any>(null);
   const [form, setForm] = useState({
-    almacenista: user?.name || '', area: '', sellos: '', cliente: '', operador: params.operador || '',
-    linea_transporte: params.compania || '', numero_economico: '', placas_unidad: params.placas || '',
+    almacenista: '', area: '', sellos: '', cliente: '', operador: params.operador || '',
+    linea_transporte: params.compania || '', numero_economico: params.economico || '', placas_unidad: params.placas || '',
     numero_caja: params.trailer || '', placas_caja: '',
-    hora_llegada: '', hora_apertura_cortina: '', hora_cierre_cortina: '', hora_salida: '',
-    numero_pallets: '', numero_sello: params.sello || '', observaciones: '', daño_caja: '',
+    hora_llegada: params.hora_llegada || '', hora_apertura_cortina: '', hora_cierre_cortina: '', hora_salida: '',
+    numero_pallets: '', numero_sello: params.sello || '', observaciones: params.destino ? `Destino: ${params.destino}` : '', daño_caja: '',
     nombre_guardia: '', firma_almacenista: '', firma_guardia: '',
     foto_inicio_carga: '', foto_media_carga: '', foto_final_carga: '',
     inspection_id: params.inspection_id || '',

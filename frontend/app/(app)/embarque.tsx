@@ -27,14 +27,19 @@ export default function Embarque() {
   const router = useRouter();
   const { inspections, allInspections, refresh: refreshInspections } = useInspections();
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [vehicleRecords, setVehicleRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const data = await apiCall<Ticket[]>('/shipping-tickets', { token });
-      setTickets(data);
+      const [ticketsData, recordsData] = await Promise.all([
+        apiCall<Ticket[]>('/shipping-tickets', { token }),
+        apiCall<any[]>('/vehicle-records', { token })
+      ]);
+      setTickets(ticketsData);
+      setVehicleRecords(recordsData);
       await refreshInspections();
     } catch {} finally { setLoading(false); }
   }, [token, refreshInspections]);
@@ -90,13 +95,20 @@ export default function Embarque() {
                     key={i.id}
                     style={styles.pendingCard}
                     onPress={() => {
+                      // Find caseta record for additional data
+                      const record = vehicleRecords.find(r => r.entry.placas_unidad === i.placas_unidad);
+
                       const params = new URLSearchParams({
                         inspection_id: i.id,
                         compania: i.compania_transportista,
                         placas: i.placas_unidad,
                         trailer: i.numero_trailer,
                         sello: i.numero_precinto !== 'N/A' ? i.numero_precinto : '',
-                        operador: i.inspector_nombre
+                        operador: i.inspector_nombre,
+                        // Additional data from caseta record
+                        destino: record?.entry?.destino || '',
+                        economico: record?.entry?.numero_tractor || '',
+                        hora_llegada: record?.entry?.fecha_entrada ? new Date(record.entry.fecha_entrada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
                       });
                       router.push(`/embarque/nuevo?${params.toString()}`);
                     }}
