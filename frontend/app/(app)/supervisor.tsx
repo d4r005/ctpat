@@ -136,41 +136,23 @@ export default function Supervisor() {
       `;
 
       if (Platform.OS === 'web') {
-        // En Web, Print.printToFileAsync puede ser inestable.
-        // Intentamos generar el PDF y descargarlo.
-        try {
-          const result = await Print.printToFileAsync({ html: combinedHtml });
-          if (result && result.uri) {
-            const response = await fetch(result.uri);
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Reporte_Consolidado_${placas}.pdf`;
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => {
-              document.body.removeChild(a);
-              window.URL.revokeObjectURL(url);
-            }, 100);
-          } else {
-            // Si falla printToFileAsync, abrimos ventana de impresión enfocada al contenido
-            const printWindow = window.open('', '_blank');
-            if (printWindow) {
-              printWindow.document.write(combinedHtml);
-              printWindow.document.close();
-              printWindow.focus();
-              printWindow.print();
-            }
-          }
-        } catch (webErr) {
-          console.error('Web PDF error:', webErr);
-          // Último recurso: imprimir ventana actual con el contenido
+        // En Web, usamos base64 para forzar la descarga directa del archivo
+        const result = await Print.printToFileAsync({ html: combinedHtml, base64: true });
+
+        if (result && result.base64) {
+          const a = document.createElement('a');
+          const cleanBase64 = result.base64.includes('base64,') ? result.base64.split('base64,')[1] : result.base64;
+          a.href = `data:application/pdf;base64,${cleanBase64}`;
+          a.download = `Reporte_Consolidado_${placas}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        } else {
+          // Fallback: Si falla el PDF, abrimos el contenido en una ventana limpia
           const printWindow = window.open('', '_blank');
           if (printWindow) {
-            printWindow.document.write(combinedHtml);
+            printWindow.document.write(`<html><head><title>Reporte ${placas}</title></head><body>${combinedHtml}</body></html>`);
             printWindow.document.close();
-            printWindow.print();
           }
         }
       } else {
