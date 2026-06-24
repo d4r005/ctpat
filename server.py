@@ -17,6 +17,8 @@ import bcrypt
 import jwt as pyjwt
 import aiosmtplib
 import requests
+import base64
+from PIL import Image, ImageDraw
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -183,6 +185,51 @@ class VehicleRecord(BaseModel):
 
 
 # ========== Helpers ==========
+def add_watermark(base64_str: str) -> str:
+    """Añade marca de agua (Planta NAF, Fecha, Hora) a una imagen base64"""
+    if not base64_str or not isinstance(base64_str, str) or not base64_str.startswith('data:image'):
+        return base64_str
+
+    try:
+        # Extraer base64
+        if "," in base64_str:
+            header, encoded = base64_str.split(",", 1)
+        else:
+            header, encoded = "data:image/jpeg;base64", base64_str
+
+        image_data = base64.b64decode(encoded)
+        img = Image.open(io.BytesIO(image_data))
+
+        # Convertir a RGB si es necesario (evita errores con PNG o formatos raros)
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+
+        draw = ImageDraw.Draw(img)
+
+        # Configurar texto
+        # Usamos horario local o el de la CDMX si es posible, por ahora UTC formateado
+        now = datetime.now(timezone.utc).astimezone().strftime('%d/%m/%Y %H:%M')
+        text = f"PLANTA NAF | {now}"
+
+        width, height = img.size
+
+        # Dibujar un fondo semi-transparente para legibilidad
+        # Rectángulo negro en la parte inferior
+        font_height = max(24, int(height / 25))
+        draw.rectangle([0, height - font_height - 20, width, height], fill=(0, 0, 0))
+
+        # Escribir el texto (Pillow default font es pequeño, pero seguro)
+        draw.text((20, height - font_height - 5), text, fill=(255, 255, 255))
+
+        # Re-codificar a JPEG
+        buffered = io.BytesIO()
+        img.save(buffered, format="JPEG", quality=80)
+        new_base64 = base64.b64encode(buffered.getvalue()).decode()
+        return f"{header},{new_base64}"
+    except Exception as e:
+        print(f"Error al añadir marca de agua: {e}")
+        return base64_str
+
 def hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
@@ -263,9 +310,24 @@ async def sync_to_appsheet(table_name: str, data: Dict[str, Any]):
             p_num = p.get("number")
             data_to_flatten[f"punto_{p_num}_estado"] = p.get("estado")
             data_to_flatten[f"punto_{p_num}_comentarios"] = p.get("comentarios", "")
-            data_to_flatten[f"punto_{p_num}_foto"] = p.get("photo", "")
+            # Añadir marca de agua si hay foto
+            p_photo = p.get("photo", "")
+            if p_photo and "data:image" in p_photo:
+                data_to_flatten[f"punto_{p_num}_foto"] = add_watermark(p_photo)
+            else:
+                data_to_flatten[f"punto_{p_num}_foto"] = p_photo
 
     flattened = flatten_dict(data_to_flatten)
+
+    # Aplicar marca de agua a fotos conocidas en Caseta y otras tablas
+    photo_fields = [
+        "entry_foto_frente_unidad", "entry_foto_atras_caja", "entry_foto_id_chofer",
+        "exit_sello_vvtt_foto", "plano_carga",
+        "foto_inicio_carga", "foto_media_carga", "foto_final_carga"
+    ]
+    for field in photo_fields:
+        if field in flattened and isinstance(flattened[field], str) and "data:image" in flattened[field]:
+            flattened[field] = add_watermark(flattened[field])
 
     # Convert everything to string for AppSheet compatibility if it's not a basic type
     for k, v in flattened.items():
@@ -1017,6 +1079,9 @@ class ShippingTicket(BaseModel):
     observaciones: str = ""
     daño_caja: str = ""  # description of damage
     plano_carga: str = ""  # base64 image of loading diagram
+    foto_inicio_carga: str = ""
+    foto_media_carga: str = ""
+    foto_final_carga: str = ""
     firma_almacenista: str = ""
     firma_guardia: str = ""
     nombre_guardia: str = ""
@@ -1043,6 +1108,9 @@ class ShippingTicketCreate(BaseModel):
     observaciones: str = ""
     daño_caja: str = ""
     plano_carga: str = ""
+    foto_inicio_carga: str = ""
+    foto_media_carga: str = ""
+    foto_final_carga: str = ""
     firma_almacenista: str = ""
     firma_guardia: str = ""
     nombre_guardia: str = ""
