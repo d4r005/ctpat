@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { LogBox, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { StatusBar } from "expo-status-bar";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/context/AuthContext";
@@ -32,6 +33,7 @@ export default function RootLayout() {
         <AuthProvider>
           <InspectionProvider>
             <NotificationsProvider>
+              <StatusBar style="dark" />
               <Stack screenOptions={{ headerShown: false }} />
             </NotificationsProvider>
           </InspectionProvider>

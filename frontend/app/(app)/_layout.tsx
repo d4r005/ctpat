@@ -4,10 +4,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors } from '@/src/constants/theme';
 import { View, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function AppLayout() {
   const { token, loading, user } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const isSupervisor = user?.role === 'supervisor' || user?.email === 'd.trujillo@brancoindustries.com';
   const isAdmin = user?.email === 'd.trujillo@brancoindustries.com';
 
@@ -33,9 +35,9 @@ export default function AppLayout() {
           backgroundColor: colors.surfaceSecondary,
           borderTopWidth: 2,
           borderTopColor: colors.borderStrong,
-          height: 64,
+          height: 64 + (insets.bottom > 0 ? insets.bottom - 8 : 0),
           paddingTop: 6,
-          paddingBottom: 8,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
         },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
       }}
