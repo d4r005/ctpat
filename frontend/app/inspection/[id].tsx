@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import Signature from 'react-native-signature-canvas';
 import { useInspections, Inspection } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -17,20 +18,31 @@ export default function InspectionDetail() {
   const [insp, setInsp] = useState<Inspection | undefined>(undefined);
   const [generating, setGenerating] = useState(false);
   const [approvalNote, setApprovalNote] = useState('');
+  const [approvalName, setApprovalName] = useState(user?.name || '');
+  const [approvalSignature, setApprovalSignature] = useState('');
+  const [showSigModal, setShowSigModal] = useState(false);
   const [acting, setActing] = useState(false);
   const isSupervisor = user?.role === 'supervisor';
 
   useEffect(() => {
-    if (id) setInsp(getById(id));
+    if (id) {
+      const data = getById(id);
+      setInsp(data);
+    }
   }, [id, getById]);
 
   const handleApprove = async () => {
     if (!id) return;
+    if (!approvalSignature) {
+      alert('La firma del supervisor es obligatoria');
+      return;
+    }
     setActing(true);
     try {
-      await approveInspection(id, approvalNote.trim());
+      await approveInspection(id, approvalNote.trim(), approvalName.trim(), approvalSignature);
       setInsp(getById(id));
       setApprovalNote('');
+      setApprovalSignature('');
     } catch (e: any) { alert(e.message); }
     finally { setActing(false); }
   };
@@ -41,11 +53,16 @@ export default function InspectionDetail() {
       alert('Por favor agrega una nota explicando el rechazo');
       return;
     }
+    if (!approvalSignature) {
+      alert('La firma del supervisor es obligatoria');
+      return;
+    }
     setActing(true);
     try {
-      await rejectInspection(id, approvalNote.trim());
+      await rejectInspection(id, approvalNote.trim(), approvalName.trim(), approvalSignature);
       setInsp(getById(id));
       setApprovalNote('');
+      setApprovalSignature('');
     } catch (e: any) { alert(e.message); }
     finally { setActing(false); }
   };
@@ -73,7 +90,8 @@ export default function InspectionDetail() {
       )
       .join('');
     const inspectorImg = i.inspector_firma ? `<img src="${i.inspector_firma}" style="height:80px;border:1px solid #999;background:#fff;" />` : '<div style="height:80px;border:1px dashed #999;"></div>';
-    const verImg = i.verificador_firma ? `<img src="${i.verificador_firma}" style="height:80px;border:1px solid #999;background:#fff;" />` : '<div style="height:80px;border:1px dashed #999;"></div>';
+    const appSigImg = i.approved_by_signature ? `<img src="${i.approved_by_signature}" style="height:80px;border:1px solid #999;background:#fff;" />` : '<div style="height:80px;border:1px dashed #999;"></div>';
+
     return `
 <!DOCTYPE html><html><head><meta charset="utf-8"><title>Inspección NAF</title></head>
 <body style="font-family:Arial,sans-serif;color:#09090B;padding:20px;font-size:11px;">
@@ -124,7 +142,7 @@ export default function InspectionDetail() {
         <b>INSPECCIÓN REALIZADA POR:</b><br/>${i.inspector_nombre}<br/><br/>${inspectorImg}
       </td>
       <td style="padding:10px;border:1px solid #999;width:50%;vertical-align:top;">
-        <b>VERIFICADO POR:</b><br/>${i.verificador_nombre || '-'}<br/><br/>${verImg}
+        <b>APROBACIÓN / RECHAZO POR:</b><br/>${i.approved_by_name || '-'}<br/><br/>${appSigImg}
       </td>
     </tr>
   </table>
@@ -196,6 +214,16 @@ export default function InspectionDetail() {
         {isSupervisor && (insp.approval_status || 'pendiente') === 'pendiente' && (
           <View style={styles.approvalActionBox} testID="approval-action-box">
             <Text style={styles.sectionTitleLocal}>ACCIÓN DE SUPERVISOR</Text>
+
+            <Text style={styles.approvalLabel}>NOMBRE DEL SUPERVISOR</Text>
+            <TextInput
+              style={[styles.noteInput, { minHeight: 48, marginBottom: spacing.md }]}
+              value={approvalName}
+              onChangeText={setApprovalName}
+              placeholder="Nombre del supervisor"
+            />
+
+            <Text style={styles.approvalLabel}>NOTA</Text>
             <TextInput
               testID="approval-note-input"
               style={styles.noteInput}
@@ -205,6 +233,15 @@ export default function InspectionDetail() {
               onChangeText={setApprovalNote}
               multiline
             />
+
+            <Pressable testID="approval-firma-btn" style={styles.signatureBox} onPress={() => setShowSigModal(true)}>
+              {approvalSignature ? (
+                <Text style={styles.signatureDone}>FIRMA CAPTURADA ✓ (Tocar para volver a firmar)</Text>
+              ) : (
+                <Text style={styles.signatureCta}>Toca para firmar aprobación/rechazo</Text>
+              )}
+            </Pressable>
+
             <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
               <Pressable testID="approval-approve-btn" style={[styles.actionBtn, { backgroundColor: colors.success }]} onPress={handleApprove} disabled={acting}>
                 {acting ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="checkmark-circle" size={20} color="#FFF" /><Text style={styles.actionBtnText}>APROBAR</Text></>}
@@ -258,10 +295,15 @@ export default function InspectionDetail() {
               </View>
             </View>
           ) : null}
-          {insp.verificador_nombre ? (
+          {insp.approved_by_signature ? (
             <>
-              <Text style={[styles.label, { marginTop: spacing.md }]}>VERIFICADOR</Text>
-              <Text style={styles.value}>{insp.verificador_nombre}</Text>
+              <Text style={[styles.label, { marginTop: spacing.md }]}>APROBACIÓN / RECHAZO POR</Text>
+              <Text style={styles.value}>{insp.approved_by_name}</Text>
+              <View style={styles.firmaWrap}>
+                <View style={[styles.firmaImagePlaceholder, { borderColor: insp.approval_status === 'aprobada' ? colors.success : colors.error }]}>
+                  <Text style={[styles.firmaLabel, { color: insp.approval_status === 'aprobada' ? colors.success : colors.error }]}>FIRMA SUPERVISOR</Text>
+                </View>
+              </View>
             </>
           ) : null}
         </Section>
@@ -282,7 +324,53 @@ export default function InspectionDetail() {
           )}
         </Pressable>
       </ScrollView>
+      {showSigModal && (
+        <SignatureModal
+          onClose={() => setShowSigModal(false)}
+          onSave={(sig) => { setApprovalSignature(sig); setShowSigModal(false); }}
+          title="Firma del Supervisor"
+        />
+      )}
     </SafeAreaView>
+  );
+}
+
+function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSave: (sig: string) => void; title: string }) {
+  const sigRef = React.useRef<any>(null);
+  const handleOK = (signature: string) => onSave(signature);
+  const style = `.m-signature-pad--footer {display: none; margin: 0px;}
+                 .m-signature-pad {box-shadow: none; border: 2px solid #09090B;}
+                 body,html { background-color: #FFF; height: 100%; }`;
+  return (
+    <View style={styles.modalOverlay} testID="signature-modal">
+      <View style={styles.modalCard}>
+        <Text style={styles.modalTitle}>{title}</Text>
+        <View style={styles.signatureCanvas}>
+          <Signature
+            ref={sigRef}
+            onOK={handleOK}
+            descriptionText="Firme dentro del recuadro"
+            clearText="Borrar"
+            confirmText="Guardar"
+            webStyle={style}
+            autoClear={false}
+            imageType="image/png"
+          />
+        </View>
+        <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+          <Pressable style={[styles.secondaryBtn, { flex: 1 }]} onPress={onClose} testID="signature-cancel">
+            <Text style={styles.secondaryBtnText}>CANCELAR</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.primaryBtn, { flex: 1 }]}
+            onPress={() => sigRef.current?.readSignature()}
+            testID="signature-save"
+          >
+            <Text style={styles.primaryBtnText}>GUARDAR FIRMA</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
   );
 }
 
@@ -357,4 +445,17 @@ const styles = StyleSheet.create({
   },
   actionBtn: { flex: 1, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 52 },
   actionBtnText: { color: '#FFF', fontWeight: '900', letterSpacing: 1 },
+  signatureBox: {
+    borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.lg,
+    backgroundColor: colors.surfaceSecondary, alignItems: 'center', marginTop: spacing.sm, minHeight: 72, justifyContent: 'center',
+  },
+  signatureCta: { color: colors.muted, fontWeight: '700', letterSpacing: 1 },
+  signatureDone: { color: colors.success, fontWeight: '900', letterSpacing: 1 },
+  modalCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong },
+  modalTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface, marginBottom: spacing.md, letterSpacing: 1 },
+  signatureCanvas: { height: 280 },
+  primaryBtn: { flex: 1, backgroundColor: colors.brandPrimary, padding: spacing.md, alignItems: 'center', justifyContent: 'center', minHeight: 52 },
+  primaryBtnText: { color: colors.onBrandPrimary, fontWeight: '900', letterSpacing: 1 },
+  secondaryBtn: { backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  secondaryBtnText: { color: colors.onSurface, fontWeight: '900', letterSpacing: 1 },
 });

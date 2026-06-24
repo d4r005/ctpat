@@ -108,10 +108,13 @@ class Inspection(BaseModel):
     approval_status: str = "pendiente"  # pendiente | aprobada | rechazada
     approval_note: str = ""
     approved_by_name: str = ""
+    approved_by_signature: str = ""
     approved_at: str = ""
 
 class ApprovalBody(BaseModel):
     note: str = ""
+    name: str = ""
+    signature: str = ""
 
 
 # ========== Vehicle Record (Caseta) ==========
@@ -568,7 +571,8 @@ async def approve_inspection(
     update = {
         "approval_status": "aprobada",
         "approval_note": body.note,
-        "approved_by_name": current_user["name"],
+        "approved_by_name": body.name or current_user["name"],
+        "approved_by_signature": body.signature,
         "approved_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.inspections.update_one({"id": inspection_id}, {"$set": update})
@@ -593,7 +597,8 @@ async def reject_inspection(
     update = {
         "approval_status": "rechazada",
         "approval_note": body.note,
-        "approved_by_name": current_user["name"],
+        "approved_by_name": body.name or current_user["name"],
+        "approved_by_signature": body.signature,
         "approved_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.inspections.update_one({"id": inspection_id}, {"$set": update})
@@ -808,6 +813,7 @@ async def _trigger_automatic_report(rec_id: str):
                     <p style="margin: 0;">Estado General: <b style="color: {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">{inspection.get('status_general', 'N/A').upper()}</b></p>
                     <p style="margin: 5px 0 0 0;">Inspector: {inspection.get('inspector_nombre', 'N/A')}</p>
                     <p style="margin: 5px 0 0 0;">Aprobación: <b>{inspection.get('approval_status', 'pendiente').upper()}</b></p>
+                    <p style="margin: 5px 0 0 0;">Autorizado por: {inspection.get('approved_by_name', 'N/A') if inspection.get('approval_status') != 'pendiente' else 'Pendiente'}</p>
                 </div>
                 ''' if inspection else "<p style='color: #666; font-style: italic;'>No se realizó inspección digital para esta unidad.</p>"}
 

@@ -27,8 +27,6 @@ export interface InspectionPayload {
   actividad_sospechosa: string;
   inspector_nombre: string;
   inspector_firma: string;
-  verificador_nombre: string;
-  verificador_firma: string;
   fecha_hora: string;
   client_uuid: string;
 }
@@ -42,6 +40,7 @@ export interface Inspection extends InspectionPayload {
   approval_status?: 'pendiente' | 'aprobada' | 'rechazada';
   approval_note?: string;
   approved_by_name?: string;
+  approved_by_signature?: string;
   approved_at?: string;
   _pending?: boolean;
 }
@@ -57,8 +56,8 @@ interface InspectionContextValue {
   saveInspection: (payload: InspectionPayload) => Promise<Inspection>;
   getById: (id: string) => Inspection | undefined;
   syncQueue: () => Promise<void>;
-  approveInspection: (id: string, note: string) => Promise<void>;
-  rejectInspection: (id: string, note: string) => Promise<void>;
+  approveInspection: (id: string, note: string, name: string, signature: string) => Promise<void>;
+  rejectInspection: (id: string, note: string, name: string, signature: string) => Promise<void>;
   exportCsvUrl: (mode: 'summary' | 'detailed', scope: 'mine' | 'all') => string;
 }
 
@@ -210,15 +209,15 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     [inspections, allInspections]
   );
 
-  const approveInspection = useCallback(async (id: string, note: string) => {
+  const approveInspection = useCallback(async (id: string, note: string, name: string, signature: string) => {
     if (!token) return;
-    await apiCall(`/inspections/${id}/approve`, { method: 'POST', body: { note }, token });
+    await apiCall(`/inspections/${id}/approve`, { method: 'POST', body: { note, name, signature }, token });
     await Promise.all([refresh(), refreshAll()]);
   }, [token, refresh, refreshAll]);
 
-  const rejectInspection = useCallback(async (id: string, note: string) => {
+  const rejectInspection = useCallback(async (id: string, note: string, name: string, signature: string) => {
     if (!token) return;
-    await apiCall(`/inspections/${id}/reject`, { method: 'POST', body: { note }, token });
+    await apiCall(`/inspections/${id}/reject`, { method: 'POST', body: { note, name, signature }, token });
     await Promise.all([refresh(), refreshAll()]);
   }, [token, refresh, refreshAll]);
 

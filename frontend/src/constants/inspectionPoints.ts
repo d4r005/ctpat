@@ -23,7 +23,7 @@ export const INSPECTION_POINTS_19: InspectionPointDef[] = [
   { number: 16, name: 'Unidad de refrigeración' },
   { number: 17, name: 'Escape' },
   { number: 18, name: 'Inspección Sellos VVTT', description: 'Ver, Verificar, Tirar, Torcer' },
-  { number: 19, name: 'Inspección agrícola (Ejes)' },
+  { number: 19, name: 'Inspección agrícola' },
 ];
 
 export const INSPECTION_POINTS_9: InspectionPointDef[] = [

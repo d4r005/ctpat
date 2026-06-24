@@ -33,6 +33,7 @@ export default function Nueva() {
   const [placas, setPlacas] = useState(params.placas || '');
   const [trailer, setTrailer] = useState(params.trailer || '');
   const [precinto, setPrecinto] = useState('');
+  const [precintoNA, setPrecintoNA] = useState(false);
   const [selloAlta, setSelloAlta] = useState(params.sello || '');
   const [selloVerificado, setSelloVerificado] = useState(false);
 
@@ -64,11 +65,8 @@ export default function Nueva() {
   // Suspicious + signatures
   const [actSospechosa, setActSospechosa] = useState('');
   const [inspectorNombre, setInspectorNombre] = useState(user?.name || '');
-  const [verificadorNombre, setVerificadorNombre] = useState('');
   const [inspectorFirma, setInspectorFirma] = useState('');
-  const [verificadorFirma, setVerificadorFirma] = useState('');
   const [showSigInspector, setShowSigInspector] = useState(false);
-  const [showSigVerificador, setShowSigVerificador] = useState(false);
   const [scanning, setScanning] = useState<null | 'placas' | 'trailer' | 'precinto'>(null);
 
   const handleScan = (value: string) => {
@@ -87,7 +85,7 @@ export default function Nueva() {
   };
 
   const canNext = () => {
-    if (step === 0) return compania.trim() && placas.trim() && trailer.trim() && precinto.trim();
+    if (step === 0) return compania.trim() && placas.trim() && trailer.trim() && (precintoNA || precinto.trim());
     if (step === 1) return points.every((p) => p.estado !== '');
     if (step === 2) return true;
     if (step === 3) return inspectorNombre.trim() && inspectorFirma;
@@ -104,15 +102,13 @@ export default function Nueva() {
         compania_transportista: compania.trim(),
         placas_unidad: placas.trim().toUpperCase(),
         numero_trailer: trailer.trim(),
-        numero_precinto: precinto.trim(),
+        numero_precinto: precintoNA ? 'N/A' : precinto.trim(),
         sello_alta_seguridad: selloAlta.trim(),
         sello_verificado: selloVerificado,
         points,
         actividad_sospechosa: actSospechosa.trim(),
         inspector_nombre: inspectorNombre.trim(),
         inspector_firma: inspectorFirma,
-        verificador_nombre: verificadorNombre.trim(),
-        verificador_firma: verificadorFirma,
         fecha_hora: new Date().toISOString(),
         client_uuid: '',
         inspection_type: inspectionType,
@@ -165,7 +161,19 @@ export default function Nueva() {
               <Field label="COMPAÑÍA TRANSPORTISTA" value={compania} onChange={setCompania} testID="nueva-compania-input" />
               <Field label="PLACAS DE LA UNIDAD" value={placas} onChange={setPlacas} testID="nueva-placas-input" onScan={() => setScanning('placas')} scanTestID="nueva-placas-scan" />
               <Field label="NÚMERO DE TRÁILER/CONTENEDOR" value={trailer} onChange={setTrailer} testID="nueva-trailer-input" onScan={() => setScanning('trailer')} scanTestID="nueva-trailer-scan" />
-              <Field label="NÚMERO DE PRECINTO" value={precinto} onChange={setPrecinto} testID="nueva-precinto-input" onScan={() => setScanning('precinto')} scanTestID="nueva-precinto-scan" />
+
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
+                <View style={{ flex: 1 }}>
+                  <Field label="NÚMERO DE PRECINTO" value={precinto} onChange={setPrecinto} testID="nueva-precinto-input" onScan={precintoNA ? undefined : () => setScanning('precinto')} scanTestID="nueva-precinto-scan" disabled={precintoNA} />
+                </View>
+                <Pressable onPress={() => setPrecintoNA(!precintoNA)} style={styles.naBox}>
+                  <View style={[styles.naCheck, precintoNA && styles.naCheckOn]}>
+                    {precintoNA && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                  </View>
+                  <Text style={styles.naText}>N/A</Text>
+                </Pressable>
+              </View>
+
               <Field label="SELLO DE ALTA SEGURIDAD" value={selloAlta} onChange={setSelloAlta} testID="nueva-sello-input" />
               <Pressable
                 testID="nueva-sello-verificado"
@@ -187,25 +195,45 @@ export default function Nueva() {
               </Text>
               {points.map((p, idx) => (
                 <View key={p.number} style={styles.pointBlock} testID={`nueva-point-${p.number}`}>
-                  <Text style={styles.pointTitle}>{p.number}. {p.name}</Text>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={styles.pointTitle}>{p.number}. {p.name}</Text>
+                    {p.number === 16 && (
+                      <Pressable
+                        onPress={() => updatePoint(idx, { estado: p.estado === 'na' ? '' : 'na', comentarios: '', photo: '' })}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingBottom: 8 }}
+                      >
+                        <View style={[styles.naCheck, p.estado === 'na' && styles.naCheckOn]}>
+                          {p.estado === 'na' && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                        </View>
+                        <Text style={styles.naText}>N/A</Text>
+                      </Pressable>
+                    )}
+                  </View>
                   <View style={styles.toggleRow}>
                     <Pressable
                       testID={`nueva-point-${p.number}-bueno`}
-                      style={[styles.toggleBtn, p.estado === 'bueno' && styles.toggleBuenoOn]}
-                      onPress={() => updatePoint(idx, { estado: 'bueno' })}
+                      style={[styles.toggleBtn, p.estado === 'bueno' && styles.toggleBuenoOn, p.estado === 'na' && { opacity: 0.3 }]}
+                      onPress={() => p.estado !== 'na' && updatePoint(idx, { estado: 'bueno' })}
+                      disabled={p.estado === 'na'}
                     >
                       <Ionicons name="checkmark-circle" size={20} color={p.estado === 'bueno' ? colors.onSuccess : colors.muted} />
                       <Text style={[styles.toggleText, p.estado === 'bueno' && { color: colors.onSuccess }]}>BUENO</Text>
                     </Pressable>
                     <Pressable
                       testID={`nueva-point-${p.number}-malo`}
-                      style={[styles.toggleBtn, p.estado === 'malo' && styles.toggleMaloOn]}
-                      onPress={() => updatePoint(idx, { estado: 'malo' })}
+                      style={[styles.toggleBtn, p.estado === 'malo' && styles.toggleMaloOn, p.estado === 'na' && { opacity: 0.3 }]}
+                      onPress={() => p.estado !== 'na' && updatePoint(idx, { estado: 'malo' })}
+                      disabled={p.estado === 'na'}
                     >
                       <Ionicons name="close-circle" size={20} color={p.estado === 'malo' ? colors.onError : colors.muted} />
                       <Text style={[styles.toggleText, p.estado === 'malo' && { color: colors.onError }]}>MALO</Text>
                     </Pressable>
                   </View>
+                  {p.estado === 'na' && (
+                    <View style={{ marginTop: spacing.sm, padding: spacing.sm, backgroundColor: colors.surfaceTertiary, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 11, fontWeight: '900', color: colors.muted }}>ESTE PUNTO NO APLICA</Text>
+                    </View>
+                  )}
                   {p.estado === 'malo' && (
                     <>
                       <TextInput
@@ -263,7 +291,7 @@ export default function Nueva() {
 
           {step === 3 && (
             <View>
-              <Text style={styles.stepTitle}>Firmas</Text>
+              <Text style={styles.stepTitle}>Firma</Text>
 
               <Text style={styles.label}>NOMBRE DEL INSPECTOR</Text>
               <TextInput
@@ -279,23 +307,6 @@ export default function Nueva() {
                   <Text style={styles.signatureDone}>FIRMA CAPTURADA ✓ (Tocar para volver a firmar)</Text>
                 ) : (
                   <Text style={styles.signatureCta}>Toca para firmar</Text>
-                )}
-              </Pressable>
-
-              <Text style={[styles.label, { marginTop: spacing.lg }]}>NOMBRE DEL VERIFICADOR (Opcional)</Text>
-              <TextInput
-                testID="nueva-verificador-nombre"
-                style={styles.input}
-                value={verificadorNombre}
-                onChangeText={setVerificadorNombre}
-                placeholder="Nombre completo"
-                placeholderTextColor={colors.muted}
-              />
-              <Pressable testID="nueva-verificador-firma-btn" style={styles.signatureBox} onPress={() => setShowSigVerificador(true)}>
-                {verificadorFirma ? (
-                  <Text style={styles.signatureDone}>FIRMA CAPTURADA ✓</Text>
-                ) : (
-                  <Text style={styles.signatureCta}>Toca para firmar (opcional)</Text>
                 )}
               </Pressable>
             </View>
@@ -347,31 +358,29 @@ export default function Nueva() {
           title="Firma del Inspector"
         />
       )}
-      {showSigVerificador && (
-        <SignatureModal
-          onClose={() => setShowSigVerificador(false)}
-          onSave={(sig) => { setVerificadorFirma(sig); setShowSigVerificador(false); }}
-          title="Firma del Verificador"
-        />
-      )}
     </SafeAreaView>
   );
 }
 
-function Field({ label, value, onChange, testID, onScan, scanTestID }: { label: string; value: string; onChange: (v: string) => void; testID: string; onScan?: () => void; scanTestID?: string }) {
+function Field({ label, value, onChange, testID, onScan, scanTestID, disabled }: { label: string; value: string; onChange: (v: string) => void; testID: string; onScan?: () => void; scanTestID?: string; disabled?: boolean }) {
   return (
     <>
       <Text style={styles.label}>{label}</Text>
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <TextInput
           testID={testID}
-          style={[styles.input, { flex: 1 }]}
-          value={value}
+          style={[
+            styles.input,
+            { flex: 1 },
+            disabled && { backgroundColor: colors.border, opacity: 0.6 }
+          ]}
+          value={disabled ? 'N/A' : value}
           onChangeText={onChange}
           placeholderTextColor={colors.muted}
+          editable={!disabled}
         />
         {onScan && (
-          <Pressable testID={scanTestID} onPress={onScan} style={styles.scanBtn}>
+          <Pressable testID={scanTestID} onPress={onScan} style={[styles.scanBtn, disabled && { opacity: 0.5 }]} disabled={disabled}>
             <Ionicons name="barcode" size={24} color={colors.onBrandPrimary} />
           </Pressable>
         )}
@@ -433,6 +442,10 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary,
     padding: spacing.md, fontSize: typography.sizes.lg, color: colors.onSurface,
   },
+  naBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong, height: 56, paddingHorizontal: spacing.sm, gap: 4, marginTop: 25 },
+  naCheck: { width: 20, height: 20, borderWidth: 2, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF' },
+  naCheckOn: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  naText: { fontSize: 10, fontWeight: '900', color: colors.onSurface },
   scanBtn: {
     width: 56, backgroundColor: colors.brandPrimary, alignItems: 'center', justifyContent: 'center',
   },
