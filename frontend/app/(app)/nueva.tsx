@@ -424,8 +424,6 @@ export default function Nueva() {
     </SafeAreaView>
   );
 }
-  );
-}
 
 function Field({ label, value, onChange, testID, onScan, scanTestID, disabled }: { label: string; value: string; onChange: (v: string) => void; testID: string; onScan?: () => void; scanTestID?: string; disabled?: boolean }) {
   return (
