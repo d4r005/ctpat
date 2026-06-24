@@ -46,32 +46,35 @@ export default function Embarque() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const pendingTickets = useMemo(() => {
-    const today = new Date().toLocaleDateString('en-CA');
-    const source = user?.role === 'supervisor' ? allInspections : inspections;
-
-    // 1. Get recent inspections (e.g., last 3 days) that are "bueno" or "aprobada"
-    const candidates = source.filter(i => {
-      const isOk = i.status_general === 'bueno' || i.approval_status === 'aprobada';
-      return isOk;
+  const pendingTicketsFromRecords = useMemo(() => {
+    // Records that are 'inspeccionado' or have an inspection_id but NO ticket yet
+    return vehicleRecords.filter(r => {
+      if (r.status === 'salida') return false;
+      const hasInspection = !!r.inspection_id || r.status === 'inspeccionado';
+      const plates = r.entry.placas_unidad?.trim().toUpperCase();
+      // Only count tickets created AFTER the vehicle entry
+      const hasTicket = tickets.some(t => {
+        const samePlates = t.placas_unidad?.trim().toUpperCase() === plates;
+        const isRecent = new Date(t.created_at).getTime() >= new Date(r.created_at).getTime();
+        return samePlates && isRecent;
+      });
+      return hasInspection && !hasTicket;
     });
-
-    // 2. Filter out those that already have a ticket (matching by plates, case-insensitive)
-    return candidates.filter(i => {
-      const plates = i.placas_unidad?.trim().toUpperCase();
-      if (!plates) return false;
-      // Also filter by id if available to be more precise
-      return !tickets.some(t =>
-        (t.placas_unidad?.trim().toUpperCase() === plates) ||
-        (t as any).inspection_id === i.id
-      );
-    }).slice(0, 8); // Show more pending ones
-  }, [inspections, allInspections, tickets, user?.role]);
+  }, [vehicleRecords, tickets]);
 
   const pendingExits = useMemo(() => {
-    // Records that are 'inspeccionado' (have inspection and maybe ticket) but not yet 'salida'
-    return vehicleRecords.filter(r => r.status === 'inspeccionado');
-  }, [vehicleRecords]);
+    // Records that already have a ticket but are not yet 'salida'
+    return vehicleRecords.filter(r => {
+      if (r.status === 'salida') return false;
+      const plates = r.entry.placas_unidad?.trim().toUpperCase();
+      const hasTicket = tickets.some(t => {
+        const samePlates = t.placas_unidad?.trim().toUpperCase() === plates;
+        const isRecent = new Date(t.created_at).getTime() >= new Date(r.created_at).getTime();
+        return samePlates && isRecent;
+      });
+      return hasTicket;
+    });
+  }, [vehicleRecords, tickets]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']} testID="embarque-screen">
@@ -96,36 +99,32 @@ export default function Embarque() {
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brandPrimary} />}
         ListHeaderComponent={
           <>
-            {pendingTickets.length > 0 && (
+            {pendingTicketsFromRecords.length > 0 && (
               <View style={styles.pendingSection}>
                 <Text style={styles.sectionTitle}>{t('pendientes_ticket', 'INSPECCIONES PENDIENTES DE TICKET')}</Text>
-                {pendingTickets.map((i) => (
+                {pendingTicketsFromRecords.map((r) => (
                   <Pressable
-                    key={i.id}
+                    key={r.id}
                     style={styles.pendingCard}
                     onPress={() => {
-                      // Find caseta record for additional data
-                      const record = vehicleRecords.find(r => r.entry.placas_unidad === i.placas_unidad);
-
                       const params = new URLSearchParams({
-                        record_id: record?.id || '',
-                        inspection_id: i.id,
-                        compania: i.compania_transportista,
-                        placas: i.placas_unidad,
-                        trailer: i.numero_trailer,
-                        sello: i.numero_precinto !== 'N/A' ? i.numero_precinto : '',
-                        operador: i.inspector_nombre,
-                        // Additional data from caseta record
-                        destino: record?.entry?.destino || '',
-                        economico: record?.entry?.numero_tractor || '',
-                        hora_llegada: record?.entry?.fecha_entrada ? new Date(record.entry.fecha_entrada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+                        record_id: r.id,
+                        inspection_id: r.inspection_id || '',
+                        compania: r.entry.compania_transporte,
+                        placas: r.entry.placas_unidad,
+                        trailer: r.entry.numero_caja,
+                        sello: r.entry.sello_entrada !== 'N/A' ? r.entry.sello_entrada : '',
+                        operador: r.entry.chofer_nombre,
+                        destino: r.entry.destino || '',
+                        economico: r.entry.numero_tractor || '',
+                        hora_llegada: r.entry.fecha_entrada ? new Date(r.entry.fecha_entrada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
                       });
                       router.push(`/embarque/nuevo?${params.toString()}`);
                     }}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.pendingTitle}>{i.placas_unidad}</Text>
-                      <Text style={styles.pendingSub}>{i.compania_transportista} · {i.numero_trailer}</Text>
+                      <Text style={styles.pendingTitle}>{r.entry.placas_unidad}</Text>
+                      <Text style={styles.pendingSub}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
                     </View>
                     <View style={styles.pendingBtn}>
                       <Text style={styles.pendingBtnText}>{t('generar', 'GENERAR')}</Text>

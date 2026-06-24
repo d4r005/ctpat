@@ -989,6 +989,14 @@ async def get_vehicle_record(rec_id: str, current_user: Dict[str, Any] = Depends
     return VehicleRecord(**doc)
 
 
+@api_router.delete("/vehicle-records/{rec_id}")
+async def delete_vehicle_record(rec_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
+    res = await db.vehicle_records.delete_one({"id": rec_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    return {"ok": True}
+
+
 @api_router.patch("/vehicle-records/{rec_id}/exit", response_model=VehicleRecord)
 async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[str, Any] = Depends(get_current_user)):
     doc = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
@@ -1283,6 +1291,14 @@ async def get_ticket(ticket_id: str, current_user: Dict[str, Any] = Depends(get_
     if not doc:
         raise HTTPException(status_code=404, detail="Ticket no encontrado")
     return ShippingTicket(**doc)
+
+
+@api_router.delete("/shipping-tickets/{ticket_id}")
+async def delete_shipping_ticket(ticket_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
+    res = await db.shipping_tickets.delete_one({"id": ticket_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Ticket no encontrado")
+    return {"ok": True}
 
 
 # ========== Analytics (admin only) ==========

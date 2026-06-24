@@ -11,9 +11,10 @@ import { colors, spacing, typography } from '@/src/constants/theme';
 export default function CasetaDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [rec, setRec] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
 
   // Exit form
   const [showExit, setShowExit] = useState(false);
@@ -47,6 +48,33 @@ export default function CasetaDetail() {
       if (data.exit) setExitData(data.exit);
     } catch (e: any) { alert(e.message); }
     finally { setLoading(false); }
+  };
+
+  const handleDelete = async () => {
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm('¿Estás seguro de que deseas eliminar este registro de caseta? Esta acción no se puede deshacer.')
+      : await new Promise(resolve => {
+          Alert.alert(
+            "Eliminar Registro",
+            "¿Estás seguro de que deseas eliminar este registro de caseta?",
+            [
+              { text: "Cancelar", style: "cancel", onPress: () => resolve(false) },
+              { text: "Eliminar", style: "destructive", onPress: () => resolve(true) }
+            ]
+          );
+        });
+
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      await apiCall(`/vehicle-records/${id}`, { method: 'DELETE', token });
+      router.back();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   useEffect(() => { if (id) load(); }, [id, token]);
@@ -100,6 +128,7 @@ export default function CasetaDetail() {
 
   const e = rec.entry;
   const x = rec.exit;
+  const isAdmin = user?.role === 'admin';
   const STATUS_COLOR: any = { entrada: colors.warning, inspeccionado: colors.info, salida: colors.success };
 
   return (
@@ -197,6 +226,23 @@ export default function CasetaDetail() {
           <Pressable testID="caseta-open-exit" style={[styles.bigBtn, { backgroundColor: colors.success }]} onPress={() => setShowExit(true)}>
             <Ionicons name="exit" size={24} color={colors.onSuccess} />
             <Text style={styles.bigBtnText}>REGISTRAR SALIDA</Text>
+          </Pressable>
+        )}
+
+        {isAdmin && (
+          <Pressable
+            style={[styles.bigBtn, { backgroundColor: colors.error, marginTop: spacing.md }]}
+            onPress={handleDelete}
+            disabled={deleting}
+          >
+            {deleting ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <>
+                <Ionicons name="trash" size={24} color="#FFF" />
+                <Text style={styles.bigBtnText}>ELIMINAR REGISTRO (Solo Admin)</Text>
+              </>
+            )}
           </Pressable>
         )}
       </ScrollView>

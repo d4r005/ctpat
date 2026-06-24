@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,15 +10,45 @@ import { colors, spacing, typography } from '@/src/constants/theme';
 export default function EmbarqueDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [t, setT] = useState<any>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     apiCall<any>(`/shipping-tickets/${id}`, { token }).then(setT).catch((e) => alert(e.message));
   }, [id, token]);
 
+  const handleDelete = async () => {
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm('¿Estás seguro de que deseas eliminar este ticket de embarque? Esta acción no se puede deshacer.')
+      : await new Promise(resolve => {
+          Alert.alert(
+            "Eliminar Ticket",
+            "¿Estás seguro de que deseas eliminar este ticket de embarque?",
+            [
+              { text: "Cancelar", style: "cancel", onPress: () => resolve(false) },
+              { text: "Eliminar", style: "destructive", onPress: () => resolve(true) }
+            ]
+          );
+        });
+
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      await apiCall(`/shipping-tickets/${id}`, { method: 'DELETE', token });
+      router.back();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (!t) return <SafeAreaView style={styles.safe}><View style={styles.center}><ActivityIndicator color={colors.brandPrimary} /></View></SafeAreaView>;
+
+  const isAdmin = user?.role === 'admin';
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']} testID="embarque-detail">
@@ -60,6 +90,23 @@ export default function EmbarqueDetail() {
           {t.firma_almacenista ? <Text style={styles.firmaTxt}>✓ Firma almacenista capturada</Text> : null}
           {t.firma_guardia ? <Text style={styles.firmaTxt}>✓ Firma guardia capturada</Text> : null}
         </Section>
+
+        {isAdmin && (
+          <Pressable
+            style={[styles.deleteBtn, deleting && { opacity: 0.5 }]}
+            onPress={handleDelete}
+            disabled={deleting}
+          >
+            {deleting ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <>
+                <Ionicons name="trash" size={20} color="#FFF" />
+                <Text style={styles.deleteBtnText}>ELIMINAR TICKET (Solo Admin)</Text>
+              </>
+            )}
+          </Pressable>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -83,4 +130,9 @@ const styles = StyleSheet.create({
   rowK: { width: 140, fontWeight: '700', color: colors.onSurfaceTertiary, fontSize: typography.sizes.sm },
   rowV: { flex: 1, color: colors.onSurface, fontWeight: '700', fontSize: typography.sizes.sm },
   firmaTxt: { color: colors.success, fontWeight: '900', padding: spacing.sm, letterSpacing: 1 },
+  deleteBtn: {
+    backgroundColor: colors.error, padding: spacing.lg, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.xl, minHeight: 52,
+  },
+  deleteBtnText: { color: '#FFF', fontWeight: '900', letterSpacing: 1, fontSize: typography.sizes.sm },
 });
