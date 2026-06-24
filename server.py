@@ -946,37 +946,38 @@ async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[
 
 
 async def _trigger_automatic_report(rec_id: str):
-    logger.info(f"Iniciando generación de reporte consolidado para record: {rec_id}")
+    logger.info(f"Generando reporte consolidado para ID: {rec_id}")
     record = await db.vehicle_records.find_one({"id": rec_id})
     if not record:
-        logger.warning(f"No se encontró el registro {rec_id} para el reporte.")
+        logger.error(f"Reporte cancelado: No existe el registro {rec_id}")
         return
 
-    # Buscar inspección vinculada
+    placas = record["entry"].get("placas_unidad", "").strip()
+
+    # Buscar inspección vinculada o por placas (respaldo)
     inspection = None
     if record.get("inspection_id"):
         inspection = await db.inspections.find_one({"id": record["inspection_id"]})
 
-    # Buscar ticket de embarque vinculado (por placas y fecha cercana)
-    # Buscamos tickets creados entre la entrada y la salida de este registro
-    placas = record["entry"].get("placas_unidad", "").strip()
+    if not inspection and placas:
+        logger.info(f"Buscando inspección de respaldo para placas: {placas}")
+        inspection = await db.inspections.find_one(
+            {"placas_unidad": placas},
+            sort=[("created_at", -1)]
+        )
+
+    # Buscar ticket de embarque
     fecha_inicio = record["created_at"]
     fecha_fin = record.get("exit", {}).get("fecha_salida") or datetime.now(timezone.utc).isoformat()
+    ticket = await db.shipping_tickets.find_one({
+        "placas_unidad": placas,
+        "created_at": {"$gte": fecha_inicio, "$lte": fecha_fin}
+    })
 
-    ticket = None
-    if placas:
-        ticket = await db.shipping_tickets.find_one({
-            "placas_unidad": placas,
-            "created_at": {
-                "$gte": fecha_inicio,
-                "$lte": fecha_fin
-            }
-        })
+    logger.info(f"Datos encontrados - Inspección: {'SI' if inspection else 'NO'}, Ticket: {'SI' if ticket else 'NO'}")
 
     subject = f"REPORTE CONSOLIDADO SRIUC - UNIDAD: {placas}"
     recipient = os.environ.get("REPORT_RECIPIENT", "d4r005@gmail.com")
-
-    logger.info(f"Preparando HTML para reporte de {placas}. Recipiente: {recipient}")
 
     html = f"""
     <html>
