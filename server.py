@@ -140,7 +140,7 @@ class VehicleEntry(BaseModel):
     numero_guia: str = ""
     numero_requerimiento: str = ""
     orden_compra: bool = False
-    cliente: str = ""
+    numero_orden_compra: str = ""
     destino: str = ""
     firma_operador: str = ""  # base64 png
     declaraciones_aceptadas: bool = False
