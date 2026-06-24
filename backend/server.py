@@ -271,6 +271,11 @@ async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(securit
     # Ensure backward compatibility
     user.setdefault("role", "inspector")
     user.setdefault("active", True)
+
+    # Force admin role for the main email
+    if user.get("email") == "d.trujillo@brancoindustries.com":
+        user["role"] = "admin"
+
     return user
 
 async def require_supervisor(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
@@ -496,6 +501,8 @@ async def update_user(user_id: str, body: Dict[str, Any], current_user: Dict[str
     if "name" in body: update_data["name"] = body["name"]
     if "role" in body: update_data["role"] = body["role"]
     if "active" in body: update_data["active"] = body["active"]
+    if "password" in body and body["password"]:
+        update_data["password_hash"] = hash_password(body["password"])
 
     if not update_data:
         raise HTTPException(status_code=400, detail="No hay datos para actualizar")

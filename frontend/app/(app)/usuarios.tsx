@@ -22,6 +22,7 @@ export default function Usuarios() {
   const [newRole, setNewRole] = useState<'inspector' | 'supervisor'>('inspector');
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -32,7 +33,9 @@ export default function Usuarios() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { if (user?.role === 'supervisor') load(); }, [token]);
+  const isSupervisorOrAdmin = user?.role === 'supervisor' || user?.role === 'admin';
+
+  useEffect(() => { if (isSupervisorOrAdmin) load(); }, [token]);
 
   const handleToggle = async (u: User) => {
     if (u.id === user?.id) return;
@@ -51,6 +54,25 @@ export default function Usuarios() {
     } catch (e: any) { alert(e.message); }
   };
 
+  const handleEditClick = (u: User) => {
+    setEditingUser(u);
+    setNewName(u.name);
+    setNewEmail(u.email);
+    setNewRole(u.role as any);
+    setNewPassword(''); // Keep password empty if not changing
+    setShowCreate(true);
+  };
+
+  const handleCloseModal = () => {
+    setShowCreate(false);
+    setEditingUser(null);
+    setNewName('');
+    setNewEmail('');
+    setNewPassword('');
+    setNewRole('inspector');
+    setError(null);
+  };
+
   const confirm = (msg: string) => {
     if (Platform.OS === 'web') return window.confirm(msg);
     // Para simplificar en nativo usaremos alert, en producción se usaría Alert.alert
@@ -59,24 +81,39 @@ export default function Usuarios() {
 
   const handleCreate = async () => {
     setError(null);
-    if (!newName.trim() || !newEmail.trim() || newPassword.length < 6) {
-      setError('Completa nombre, correo y contraseña (mín. 6)');
+    if (!newName.trim() || !newEmail.trim()) {
+      setError('Completa nombre y correo');
+      return;
+    }
+    if (!editingUser && newPassword.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres');
       return;
     }
     setCreating(true);
     try {
-      await apiCall('/users/create-inspector', {
-        method: 'POST', token,
-        body: { name: newName.trim(), email: newEmail.trim().toLowerCase(), password: newPassword, role: newRole },
-      });
-      setNewName(''); setNewEmail(''); setNewPassword(''); setNewRole('inspector');
-      setShowCreate(false);
+      if (editingUser) {
+        await apiCall(`/users/${editingUser.id}`, {
+          method: 'PATCH', token,
+          body: {
+            name: newName.trim(),
+            email: newEmail.trim().toLowerCase(),
+            role: newRole,
+            ...(newPassword.length >= 6 ? { password: newPassword } : {})
+          },
+        });
+      } else {
+        await apiCall('/users/create-inspector', {
+          method: 'POST', token,
+          body: { name: newName.trim(), email: newEmail.trim().toLowerCase(), password: newPassword, role: newRole },
+        });
+      }
+      handleCloseModal();
       await load();
     } catch (e: any) { setError(e.message); }
     finally { setCreating(false); }
   };
 
-  if (user?.role !== 'supervisor') {
+  if (!isSupervisorOrAdmin) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}><Text style={{ color: colors.muted }}>Acceso restringido</Text></View>
@@ -104,8 +141,11 @@ export default function Usuarios() {
           renderItem={({ item }) => (
             <View style={styles.userRow} testID={`usuario-${item.id}`}>
               <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
                   <Text style={styles.userName}>{item.name}</Text>
+                  {item.role === 'admin' && (
+                    <View style={[styles.roleChip, { backgroundColor: colors.info }]}><Text style={styles.roleChipText}>ADMIN</Text></View>
+                  )}
                   {item.role === 'supervisor' && (
                     <View style={styles.roleChip}><Text style={styles.roleChipText}>SUPER</Text></View>
                   )}
@@ -117,24 +157,32 @@ export default function Usuarios() {
                 </View>
                 <Text style={styles.userEmail}>{item.email}</Text>
               </View>
-              {item.id !== user.id && (
-                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                  <Pressable
-                    testID={`usuario-toggle-${item.id}`}
-                    style={[styles.toggleBtn, { backgroundColor: item.active ? colors.warning : colors.success }]}
-                    onPress={() => handleToggle(item)}
-                  >
-                    <Text style={styles.toggleBtnText}>{item.active ? 'PAUSAR' : 'ACTIVAR'}</Text>
-                  </Pressable>
-                  <Pressable
-                    testID={`usuario-delete-${item.id}`}
-                    style={[styles.toggleBtn, { backgroundColor: colors.error }]}
-                    onPress={() => handleDelete(item)}
-                  >
-                    <Ionicons name="trash" size={16} color="#FFF" />
-                  </Pressable>
-                </View>
-              )}
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                <Pressable
+                  style={[styles.toggleBtn, { backgroundColor: colors.brandPrimary }]}
+                  onPress={() => handleEditClick(item)}
+                >
+                  <Ionicons name="pencil" size={16} color="#FFF" />
+                </Pressable>
+                {item.id !== user.id && (
+                  <>
+                    <Pressable
+                      testID={`usuario-toggle-${item.id}`}
+                      style={[styles.toggleBtn, { backgroundColor: item.active ? colors.warning : colors.success }]}
+                      onPress={() => handleToggle(item)}
+                    >
+                      <Text style={styles.toggleBtnText}>{item.active ? 'PAUSAR' : 'ACTIVAR'}</Text>
+                    </Pressable>
+                    <Pressable
+                      testID={`usuario-delete-${item.id}`}
+                      style={[styles.toggleBtn, { backgroundColor: colors.error }]}
+                      onPress={() => handleDelete(item)}
+                    >
+                      <Ionicons name="trash" size={16} color="#FFF" />
+                    </Pressable>
+                  </>
+                )}
+              </View>
             </View>
           )}
         />
@@ -144,7 +192,7 @@ export default function Usuarios() {
         <View style={styles.modalOverlay} testID="create-user-modal">
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', maxWidth: 480 }}>
             <ScrollView contentContainerStyle={styles.modalCard} keyboardShouldPersistTaps="handled">
-              <Text style={styles.modalTitle}>Nuevo Usuario</Text>
+              <Text style={styles.modalTitle}>{editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}</Text>
 
               <Text style={styles.label}>NOMBRE</Text>
               <TextInput testID="create-user-name" style={styles.input} value={newName} onChangeText={setNewName} />
@@ -152,16 +200,16 @@ export default function Usuarios() {
               <Text style={styles.label}>CORREO</Text>
               <TextInput testID="create-user-email" style={styles.input} value={newEmail} onChangeText={setNewEmail} autoCapitalize="none" keyboardType="email-address" />
 
-              <Text style={styles.label}>CONTRASEÑA</Text>
+              <Text style={styles.label}>CONTRASEÑA {editingUser && '(dejar en blanco para no cambiar)'}</Text>
               <TextInput testID="create-user-password" style={styles.input} value={newPassword} onChangeText={setNewPassword} secureTextEntry />
 
               <Text style={styles.label}>ROL</Text>
               <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                {(['inspector', 'supervisor'] as const).map((r) => (
+                {(['inspector', 'supervisor', 'admin'] as const).map((r) => (
                   <Pressable
                     key={r}
                     testID={`create-user-role-${r}`}
-                    onPress={() => setNewRole(r)}
+                    onPress={() => setNewRole(r as any)}
                     style={[styles.roleOpt, newRole === r && styles.roleOptActive]}
                   >
                     <Text style={[styles.roleOptText, newRole === r && { color: colors.onBrandPrimary }]}>{r.toUpperCase()}</Text>
@@ -172,11 +220,11 @@ export default function Usuarios() {
               {error && <Text style={{ color: colors.error, marginTop: spacing.md, fontWeight: '700' }}>{error}</Text>}
 
               <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg }}>
-                <Pressable testID="create-user-cancel" style={[styles.btn, styles.btnSecondary]} onPress={() => setShowCreate(false)}>
+                <Pressable testID="create-user-cancel" style={[styles.btn, styles.btnSecondary]} onPress={handleCloseModal}>
                   <Text style={styles.btnSecondaryText}>CANCELAR</Text>
                 </Pressable>
                 <Pressable testID="create-user-submit" style={[styles.btn, styles.btnPrimary]} onPress={handleCreate} disabled={creating}>
-                  {creating ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.btnPrimaryText}>CREAR</Text>}
+                  {creating ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.btnPrimaryText}>{editingUser ? 'GUARDAR' : 'CREAR'}</Text>}
                 </Pressable>
               </View>
             </ScrollView>
