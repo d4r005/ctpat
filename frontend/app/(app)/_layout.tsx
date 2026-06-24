@@ -10,8 +10,8 @@ export default function AppLayout() {
   const { token, loading, user } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const isSupervisor = user?.role === 'supervisor' || user?.email === 'd.trujillo@brancoindustries.com';
   const isAdmin = user?.email === 'd.trujillo@brancoindustries.com';
+  const isSupervisor = user?.role === 'supervisor' || isAdmin;
 
   useEffect(() => {
     if (!loading && !token) router.replace('/login');

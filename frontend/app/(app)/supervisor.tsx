@@ -24,106 +24,62 @@ type TabType = 'inspecciones' | 'caseta' | 'embarque' | 'usuarios' | 'kpis';
 
 export default function Supervisor() {
   const { user, token } = useAuth();
-  const isAdmin = user?.role === 'admin' || user?.email === 'd4r005@gmail.com';
-  const router = useRouter();
-  const { allInspections, refreshAll, loading, exportCsvUrl } = useInspections();
-  const { t } = useTranslation();
+  const isAdmin = user?.email === 'd.trujillo@brancoindustries.com';
 
-  const [activeTab, setActiveTab] = useState<TabType>('inspecciones');
-  const [query, setQuery] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-
-  const [casetaRecords, setCasetaRecords] = useState<any[]>([]);
-  const [shippingTickets, setShippingTickets] = useState<any[]>([]);
-  const [dataLoading, setDataLoading] = useState(false);
-
-  // Email Modal State
-  const [showEmailModal, setShowEmailModal] = useState(false);
-  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
-  const [emailList, setEmailList] = useState<string>('');
-  const [sendingEmail, setSendingEmail] = useState(false);
-
-  const loadData = async () => {
-    if (!token) return;
-    setDataLoading(true);
+  const downloadConsolidatedPdf = async (item: any) => {
     try {
-      const [caseta, tickets] = await Promise.all([
-        apiCall('/vehicle-records', { token }),
-        apiCall('/shipping-tickets', { token })
-      ]);
-      setCasetaRecords(caseta);
-      setShippingTickets(tickets);
-      await refreshAll();
-    } catch (e) {
-      console.error(e);
+      setDataLoading(true);
+      // Fetch full details if necessary or use item if it has enough data
+      // For consolidated report, we need Inspection, Caseta and Embarque data
+
+      const record = activeTab === 'caseta' ? item : null; // Assuming item is from filteredCaseta
+      if (!record) {
+        alert('Solo disponible desde la pestaña de CASETA por el momento');
+        return;
+      }
+
+      const insp = allInspections.find(i => i.id === record.inspection_id);
+      const ship = shippingTickets.find(s => s.inspection_id === record.inspection_id);
+
+      if (!insp) {
+        alert('No se encontró la inspección vinculada');
+        return;
+      }
+
+      const reportData = { inspection: insp, caseta: record, embarque: ship };
+
+      // Generate both Spanish and Chinese in the same PDF or separate?
+      // User asked for "en español y chino", usually means both versions.
+      const htmlEs = generateConsolidatedReportHtml(reportData, 'es');
+      const htmlZh = generateConsolidatedReportHtml(reportData, 'zh');
+
+      const combinedHtml = `
+        ${htmlEs}
+        <div style="page-break-before: always;"></div>
+        ${htmlZh}
+      `;
+
+      const { uri } = await Print.printToFileAsync({ html: combinedHtml, base64: false });
+
+      if (Platform.OS === 'web') {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Reporte_Consolidado_${insp.placas_unidad}.pdf`;
+        a.click();
+      } else {
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Descargar Reporte Consolidado' });
+      }
+    } catch (e: any) {
+      alert('Error al generar PDF: ' + e.message);
     } finally {
       setDataLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (user?.role === 'supervisor' || user?.role === 'admin') loadData();
-  }, [token]);
-
-  const filteredInspections = useMemo(() => {
-    return allInspections.filter(i => {
-      const q = query.toLowerCase();
-      const matchQuery = !query || i.placas_unidad?.toLowerCase().includes(q) || i.compania_transportista?.toLowerCase().includes(q);
-      const matchDate = (!dateFrom || i.created_at >= dateFrom) && (!dateTo || i.created_at <= dateTo + 'T23:59:59');
-      return matchQuery && matchDate;
-    });
-  }, [allInspections, query, dateFrom, dateTo]);
-
-  const filteredCaseta = useMemo(() => {
-    return casetaRecords.filter(r => {
-      const q = query.toLowerCase();
-      const matchQuery = !query || r.entry.placas_unidad?.toLowerCase().includes(q) || r.entry.chofer_nombre?.toLowerCase().includes(q);
-      const matchDate = (!dateFrom || r.created_at >= dateFrom) && (!dateTo || r.created_at <= dateTo + 'T23:59:59');
-      return matchQuery && matchDate;
-    });
-  }, [casetaRecords, query, dateFrom, dateTo]);
-
-  const filteredTickets = useMemo(() => {
-    return shippingTickets.filter(t => {
-      const q = query.toLowerCase();
-      const matchQuery = !query || t.placas_unidad?.toLowerCase().includes(q) || t.operador?.toLowerCase().includes(q);
-      const matchDate = (!dateFrom || t.created_at >= dateFrom) && (!dateTo || t.created_at <= dateTo + 'T23:59:59');
-      return matchQuery && matchDate;
-    });
-  }, [shippingTickets, query, dateFrom, dateTo]);
-
-  const handleSendEmail = async () => {
-    if (!selectedRecordId || !emailList.trim()) return;
-    const emails = emailList.split(',').map(e => e.trim()).filter(e => e.includes('@'));
-    if (emails.length === 0) {
-      alert('Ingresa al menos un correo válido');
-      return;
-    }
-
-    setSendingEmail(true);
-    try {
-      await apiCall('/reports/send-consolidated', {
-        method: 'POST',
-        token,
-        body: { record_id: selectedRecordId, emails }
-      });
-      alert('Reporte enviado con éxito');
-      setShowEmailModal(false);
-      setEmailList('');
-    } catch (e: any) {
-      alert(e.message || 'Error al enviar');
-    } finally {
-      setSendingEmail(false);
-    }
-  };
-
-  const openEmailModal = (recordId: string) => {
-    setSelectedRecordId(recordId);
-    setShowEmailModal(true);
-  };
-
-  if (user?.role !== 'supervisor' && user?.role !== 'admin') {
+  if (user?.role !== 'supervisor' && !isAdmin) {
     return (
       <SafeAreaView style={styles.safe}><View style={styles.center}><Text>Acceso restringido</Text></View></SafeAreaView>
     );
@@ -197,10 +153,15 @@ export default function Supervisor() {
 
               <View style={styles.cardActions}>
                 {activeTab === 'caseta' && (
-                  <Pressable style={styles.emailBtn} onPress={() => openEmailModal(item.id)}>
-                    <Ionicons name="mail" size={18} color="#FFF" />
-                    <Text style={styles.emailBtnText}>ENVIAR</Text>
-                  </Pressable>
+                  <>
+                    <Pressable style={styles.downloadBtn} onPress={() => downloadConsolidatedPdf(item)}>
+                      <Ionicons name="download" size={18} color="#FFF" />
+                    </Pressable>
+                    <Pressable style={styles.emailBtn} onPress={() => openEmailModal(item.id)}>
+                      <Ionicons name="mail" size={18} color="#FFF" />
+                      <Text style={styles.emailBtnText}>ENVIAR</Text>
+                    </Pressable>
+                  </>
                 )}
                 <Pressable
                   style={styles.viewBtn}
@@ -262,6 +223,7 @@ const styles = StyleSheet.create({
   cardDate: { color: colors.onSurfaceTertiary, fontSize: 10, marginTop: 4 },
   cardActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   viewBtn: { backgroundColor: colors.brandPrimary, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  downloadBtn: { backgroundColor: colors.brandSecondary, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   emailBtn: { backgroundColor: colors.success, paddingHorizontal: 10, height: 36, flexDirection: 'row', alignItems: 'center', gap: 4 },
   emailBtnText: { color: '#FFF', fontWeight: '900', fontSize: 10 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: spacing.xl },
