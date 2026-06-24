@@ -45,17 +45,18 @@ export default function Embarque() {
     const today = new Date().toLocaleDateString('en-CA');
     const source = user?.role === 'supervisor' ? allInspections : inspections;
 
-    // 1. Get inspections from today that are "bueno" or "aprobada"
+    // 1. Get recent inspections (e.g., last 3 days) that are "bueno" or "aprobada"
     const candidates = source.filter(i => {
-      const isToday = new Date(i.created_at).toLocaleDateString('en-CA') === today;
       const isOk = i.status_general === 'bueno' || i.approval_status === 'aprobada';
-      return isToday && isOk;
+      return isOk;
     });
 
-    // 2. Filter out those that already have a ticket (matching by placas_unidad)
+    // 2. Filter out those that already have a ticket (matching by plates, case-insensitive)
     return candidates.filter(i => {
-      return !tickets.some(t => t.placas_unidad === i.placas_unidad);
-    });
+      const plates = i.placas_unidad?.trim().toUpperCase();
+      if (!plates) return false;
+      return !tickets.some(t => t.placas_unidad?.trim().toUpperCase() === plates);
+    }).slice(0, 5); // Limit to top 5 most recent pending
   }, [inspections, allInspections, tickets, user?.role]);
 
   return (
