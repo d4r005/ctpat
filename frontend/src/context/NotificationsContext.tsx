@@ -52,6 +52,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         data: { inspection_id: notif.inspection_id },
         sound: true, // Uses default system sound
         priority: Notifications.AndroidNotificationPriority.MAX,
+        vibrationPattern: [0, 500, 200, 500],
       },
       trigger: null, // show immediately
     });

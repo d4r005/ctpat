@@ -131,6 +131,24 @@ export default function Nueva() {
         } catch {}
       }
 
+      if (Platform.OS === 'web') {
+        const proceed = window.confirm(`${t('inspeccion_guardada')}. ${t('desea_generar_ticket')}`);
+        if (proceed) {
+          const queryParams = new URLSearchParams({
+            inspection_id: created.id,
+            compania: compania,
+            placas: placas,
+            trailer: trailer,
+            sello: precinto !== 'N/A' ? precinto : '',
+            operador: inspectorNombre
+          });
+          router.replace(`/embarque/nuevo?${queryParams.toString()}`);
+        } else {
+          router.replace(`/inspection/${created.id}`);
+        }
+        return;
+      }
+
       Alert.alert(
         t('inspeccion_guardada'),
         t('desea_generar_ticket'),

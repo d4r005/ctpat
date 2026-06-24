@@ -142,6 +142,23 @@ export default function CasetaNuevo() {
       };
       const created = await apiCall<any>('/vehicle-records', { method: 'POST', body, token });
 
+      if (Platform.OS === 'web') {
+        const proceed = window.confirm("Entrada Registrada. ¿Desea proceder con la inspección de 19 puntos ahora?");
+        if (proceed) {
+          const params = new URLSearchParams({
+            record_id: created.id,
+            compania: body.compania_transporte,
+            placas: body.placas_unidad,
+            trailer: body.numero_caja,
+            sello: body.sello_entrada
+          });
+          router.replace(`/(app)/nueva?${params.toString()}`);
+        } else {
+          router.replace(`/caseta/${created.id}`);
+        }
+        return;
+      }
+
       Alert.alert(
         "Entrada Registrada",
         "¿Desea proceder con la inspección de 19 puntos ahora?",
@@ -165,7 +182,10 @@ export default function CasetaNuevo() {
           }
         ]
       );
-    } catch (e: any) { alert(e.message || 'Error al guardar'); }
+    } catch (e: any) {
+      console.error('Error saving vehicle record:', e);
+      alert(`Error al guardar: ${e.message}`);
+    }
     finally { setSaving(false); }
   };
 

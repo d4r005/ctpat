@@ -602,6 +602,15 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
     }
     await db.inspections.insert_one(doc)
 
+    # Notificar a inspectores, supervisores y admin
+    status_emoji = "✅" if doc["status_general"] == "bueno" else "❌"
+    await notify_roles(
+        ["inspector", "supervisor", "admin"],
+        f"Inspección Realizada {status_emoji}",
+        f"Nueva inspección de {body.inspection_type.replace('_', ' ')} para placas {body.placas_unidad}. Resultado: {doc['status_general'].upper()}.",
+        inspection_id=rec_id
+    )
+
     # Sync to AppSheet
     try:
         await sync_to_appsheet("Inspecciones", doc)
@@ -734,11 +743,13 @@ async def approve_inspection(
     }
     await db.inspections.update_one({"id": inspection_id}, {"$set": update})
     doc.update(update)
-    await _create_notification(
-        user_id=doc["user_id"],
-        title="Inspección aprobada",
-        message=f"Tu inspección {doc.get('placas_unidad','')} fue APROBADA por {current_user['name']}." + (f" Nota: {body.note}" if body.note else ""),
-        inspection_id=inspection_id,
+
+    # Notificar a todos los roles
+    await notify_roles(
+        ["inspector", "supervisor", "admin"],
+        "Inspección Aprobada ⭐",
+        f"La inspección de {doc.get('placas_unidad','')} fue APROBADA por {current_user['name']}.",
+        inspection_id=inspection_id
     )
 
     # Sync update to AppSheet
@@ -766,11 +777,13 @@ async def reject_inspection(
     }
     await db.inspections.update_one({"id": inspection_id}, {"$set": update})
     doc.update(update)
-    await _create_notification(
-        user_id=doc["user_id"],
-        title="Inspección rechazada",
-        message=f"Tu inspección {doc.get('placas_unidad','')} fue RECHAZADA por {current_user['name']}." + (f" Motivo: {body.note}" if body.note else ""),
-        inspection_id=inspection_id,
+
+    # Notificar a todos los roles
+    await notify_roles(
+        ["inspector", "supervisor", "admin"],
+        "Inspección Rechazada ❗",
+        f"La inspección de {doc.get('placas_unidad','')} fue RECHAZADA por {current_user['name']}." + (f" Motivo: {body.note}" if body.note else ""),
+        inspection_id=inspection_id
     )
 
     # Sync update to AppSheet
@@ -811,6 +824,12 @@ async def _create_notification(user_id: str, title: str, message: str, inspectio
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.notifications.insert_one(doc)
+
+async def notify_roles(roles: List[str], title: str, message: str, inspection_id: Optional[str] = None):
+    """Crea notificaciones para todos los usuarios con los roles especificados."""
+    users = await db.users.find({"role": {"$in": roles}}, {"id": 1}).to_list(1000)
+    for u in users:
+        await _create_notification(u["id"], title, message, inspection_id)
 
 
 # ========== Email Utility ==========
@@ -930,6 +949,13 @@ async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any]
     }
     await db.vehicle_records.insert_one(doc)
 
+    # Notificar a inspectores, supervisores y admin
+    await notify_roles(
+        ["inspector", "supervisor", "admin"],
+        "Nueva Entrada",
+        f"Se registró entrada de unidad con placas: {body.placas_unidad}. Chofer: {body.chofer_nombre}."
+    )
+
     # Sync to AppSheet
     try:
         await sync_to_appsheet("Caseta", doc)
@@ -986,6 +1012,13 @@ async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[
         await sync_to_appsheet("Caseta", doc)
     except Exception as e:
         print(f"Error al disparar reporte o sync: {e}")
+
+    # Notificar a todos los roles
+    await notify_roles(
+        ["inspector", "supervisor", "admin"],
+        "Salida de Unidad 🚛",
+        f"La unidad con placas {doc['entry'].get('placas_unidad')} ha salido de las instalaciones. Guardia: {body.guardia_salida_nombre}."
+    )
 
     return VehicleRecord(**doc)
 
@@ -1217,6 +1250,13 @@ async def create_ticket(body: ShippingTicketCreate, current_user: Dict[str, Any]
     doc["created_at"] = now
     await db.shipping_tickets.insert_one(doc)
 
+    # Notificar a todos los roles
+    await notify_roles(
+        ["inspector", "supervisor", "admin"],
+        "Nuevo Ticket Embarque 📦",
+        f"Se generó ticket para cliente {body.cliente}. Unidad: {body.placas_unidad}. Almacenista: {body.almacenista}."
+    )
+
     # Sync to AppSheet
     try:
         await sync_to_appsheet("Embarque", doc)
@@ -1307,6 +1347,72 @@ async def analytics(
         "by_inspector": by_inspector_list,
         "top_failed_points": point_failures_list,
     }
+
+
+@api_router.get("/activities")
+async def get_recent_activities(
+    limit: int = Query(20, le=50),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Retorna una lista unificada de las actividades más recientes (inspecciones, caseta, embarque)."""
+    # 1. Inspections
+    insp_filt = {}
+    if current_user["role"] not in ["supervisor", "admin"]:
+        insp_filt["user_id"] = current_user["id"]
+    inspections = await db.inspections.find(insp_filt, {"_id": 0}).sort("created_at", -1).to_list(limit)
+
+    # 2. Vehicle Records
+    vec_filt = {}
+    if current_user["role"] not in ["supervisor", "admin"]:
+        vec_filt["user_id"] = current_user["id"]
+    records = await db.vehicle_records.find(vec_filt, {"_id": 0}).sort("created_at", -1).to_list(limit)
+
+    # 3. Shipping Tickets
+    ship_filt = {}
+    if current_user["role"] not in ["supervisor", "admin"]:
+        ship_filt["user_id"] = current_user["id"]
+    tickets = await db.shipping_tickets.find(ship_filt, {"_id": 0}).sort("created_at", -1).to_list(limit)
+
+    # Unify
+    activities = []
+    for i in inspections:
+        activities.append({
+            "id": i["id"],
+            "type": "inspection",
+            "title": f"Inspección: {i.get('placas_unidad')}",
+            "subtitle": f"{i.get('compania_transportista')} · {i.get('numero_trailer')}",
+            "status": i.get("status_general"),
+            "created_at": i["created_at"],
+            "user_name": i.get("inspector_nombre", "Inspector"),
+            "inspection_type": i.get("inspection_type")
+        })
+
+    for r in records:
+        title = "Entrada Caseta" if r["status"] == "entrada" else "Salida de Unidad"
+        activities.append({
+            "id": r["id"],
+            "type": "caseta",
+            "title": f"{title}: {r['entry'].get('placas_unidad')}",
+            "subtitle": r['entry'].get('chofer_nombre'),
+            "status": r["status"],
+            "created_at": r["created_at"],
+            "user_name": r['entry'].get('guardia_caseta_nombre', "Guardia")
+        })
+
+    for t in tickets:
+        activities.append({
+            "id": t["id"],
+            "type": "embarque",
+            "title": f"Embarque: {t.get('cliente')}",
+            "subtitle": f"Placas: {t.get('placas_unidad')} · {t.get('almacenista')}",
+            "status": "ticket",
+            "created_at": t["created_at"],
+            "user_name": t.get("almacenista")
+        })
+
+    # Sort all by created_at descending
+    activities.sort(key=lambda x: x["created_at"], reverse=True)
+    return activities[:limit]
 
 
 app.include_router(api_router)
