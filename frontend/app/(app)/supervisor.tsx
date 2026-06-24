@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Pressable, TextInput, RefreshControl, Platform,
   Modal, ScrollView, ActivityIndicator,
@@ -12,13 +12,13 @@ import { useTranslation } from 'react-i18next';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { apiCall, API_BASE } from '@/src/api/client';
-import { colors, spacing } from '@/src/constants/theme';
+import { colors, spacing, typography } from '@/src/constants/theme';
 import { generateConsolidatedReportHtml } from '@/src/utils/reportGenerator';
 
 import Usuarios from './usuarios';
 import Analitica from './analitica';
 
-type TabType = 'inspecciones' | 'caseta' | 'embarque' | 'usuarios' | 'kpis';
+type TabType = 'inspecciones' | 'caseta' | 'embarque' | 'usuarios' | 'kpis' | 'admin_tools';
 
 export default function Supervisor() {
   const { user, token } = useAuth();
@@ -45,7 +45,7 @@ export default function Supervisor() {
     if (!token) return;
     setDataLoading(true);
     try {
-      if (isAdmin || user?.role === 'admin') {
+      if (isAdmin) {
         try {
           await apiCall('/admin/repair-links', { method: 'POST', token });
         } catch (e) {
@@ -133,7 +133,6 @@ export default function Supervisor() {
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
       }
 
-      // We need a dummy inspection object if none found to avoid crash in generator
       const finalInsp = insp || {
         points: [],
         inspector_nombre: 'N/A',
@@ -149,16 +148,12 @@ export default function Supervisor() {
       const htmlZh = generateConsolidatedReportHtml({ inspection: finalInsp, caseta: record, embarque: ship }, 'zh');
 
       const combinedHtml = `
-        <style>@media print { .page-break { page-break-before: always; } }</style>
-        ${htmlEs}
-        <div class="page-break"></div>
-        ${htmlZh}
+        <div style="page-break-after: always;">${htmlEs}</div>
+        <div>${htmlZh}</div>
       `;
 
       if (Platform.OS === 'web') {
-        // En Web, usamos base64 para forzar la descarga directa del archivo
         const result = await Print.printToFileAsync({ html: combinedHtml, base64: true });
-
         if (result && result.base64) {
           const a = document.createElement('a');
           const cleanBase64 = result.base64.includes('base64,') ? result.base64.split('base64,')[1] : result.base64;
@@ -168,7 +163,6 @@ export default function Supervisor() {
           a.click();
           document.body.removeChild(a);
         } else {
-          // Fallback: Si falla el PDF, abrimos el contenido en una ventana limpia
           const printWindow = window.open('', '_blank');
           if (printWindow) {
             printWindow.document.write(`<html><head><title>Reporte ${placas}</title></head><body>${combinedHtml}</body></html>`);
@@ -205,8 +199,7 @@ export default function Supervisor() {
       setShowEmailModal(false);
       setEmailList('');
     } catch (e: any) {
-      const msg = e.message || 'Error desconocido';
-      alert(`Error al enviar: ${msg}\nURL: ${API_BASE}/reports/send-consolidated`);
+      alert(`Error al enviar: ${e.message}`);
     } finally {
       setSendingEmail(false);
     }
@@ -225,6 +218,7 @@ export default function Supervisor() {
 
   const tabs: TabType[] = ['inspecciones', 'caseta', 'embarque', 'kpis'];
   if (isAdmin) tabs.push('usuarios');
+  if (isAdmin) tabs.push('admin_tools');
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -234,7 +228,7 @@ export default function Supervisor() {
           {isAdmin && <View style={[styles.roleChip, { backgroundColor: colors.info }]}><Text style={styles.roleChipText}>ADMINISTRADOR</Text></View>}
         </View>
 
-        {(activeTab === 'inspecciones' || activeTab === 'caseta' || activeTab === 'embarque') && (
+        {(activeTab !== 'usuarios' && activeTab !== 'kpis' && activeTab !== 'admin_tools') && (
           <>
             <View style={styles.searchRow}>
               <TextInput
@@ -262,7 +256,7 @@ export default function Supervisor() {
                 style={[styles.tab, activeTab === t && styles.tabActive]}
                 onPress={() => setActiveTab(t)}
               >
-                <Text style={[styles.tabText, activeTab === t && styles.tabTextActive]}>{t.toUpperCase()}</Text>
+                <Text style={[styles.tabText, activeTab === t && styles.tabTextActive]}>{t.toUpperCase().replace('_', ' ')}</Text>
               </Pressable>
             ))}
           </View>
@@ -270,8 +264,45 @@ export default function Supervisor() {
       </View>
 
       <View style={{ flex: 1 }}>
-        {activeTab === 'usuarios' && <Usuarios nested />}
-        {activeTab === 'kpis' && <Analitica nested />}
+        {activeTab === 'usuarios' && <Usuarios />}
+        {activeTab === 'kpis' && <Analitica />}
+
+        {activeTab === 'admin_tools' && (
+          <ScrollView style={{ flex: 1, padding: spacing.lg }}>
+            <Text style={styles.adminSectionTitle}>Herramientas de Limpieza</Text>
+            <Text style={{ color: colors.muted, marginBottom: spacing.lg }}>Use estas herramientas para corregir problemas de datos.</Text>
+
+            <Pressable
+              style={styles.bigAdminBtn}
+              onPress={async () => {
+                try {
+                  const res = await apiCall('/admin/repair-links', { method: 'POST', token });
+                  alert(res.message);
+                  loadData();
+                } catch (e: any) { alert(e.message); }
+              }}
+            >
+              <Ionicons name="build" size={24} color="#FFF" />
+              <Text style={styles.bigAdminBtnText}>VINCULAR REGISTROS HUÉRFANOS</Text>
+            </Pressable>
+
+            <Text style={styles.adminTip}>
+              * Esta acción busca inspecciones y tickets que no están vinculados a su entrada de caseta correspondiente y los une por número de placa.
+            </Text>
+
+            <Text style={styles.adminSectionTitle}>Gestión de Fotografías</Text>
+            <Text style={{ fontSize: 14, color: colors.onSurface, marginBottom: spacing.md }}>
+              Como Administrador, puede modificar o eliminar cualquier foto directamente desde la vista de detalle de cada registro.
+            </Text>
+
+            <View style={styles.routeBox}>
+              <Text style={styles.routeTitle}>RUTAS PARA EDITAR FOTOS:</Text>
+              <Text style={styles.routeItem}>• Caseta: Pestaña "CASETA" {'>'} Seleccionar Unidad {'>'} Botones Lápiz/Basura sobre fotos.</Text>
+              <Text style={styles.routeItem}>• Inspección: Pestaña "INSPECCIONES" {'>'} Seleccionar {'>'} Botones Lápiz/Basura sobre fotos.</Text>
+              <Text style={styles.routeItem}>• Embarque: Pestaña "EMBARQUE" {'>'} Seleccionar {'>'} Botones Lápiz/Basura sobre fotos.</Text>
+            </View>
+          </ScrollView>
+        )}
 
         {(activeTab === 'inspecciones' || activeTab === 'caseta' || activeTab === 'embarque') && (
           <FlatList
@@ -315,22 +346,20 @@ export default function Supervisor() {
         )}
       </View>
 
-      <Modal visible={showEmailModal} transparent animationType="fade">
+      <Modal visible={showEmailModal} transparent animationType="fade" onRequestClose={() => setShowEmailModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Enviar Reporte Consolidado</Text>
-            <Text style={styles.modalLabel}>Correos (separados por coma):</Text>
+            <Text style={styles.modalSub}>Ingrese los correos separados por coma:</Text>
             <TextInput
-              style={styles.emailInput}
-              placeholder="ejemplo@correo.com"
+              style={styles.modalInput}
+              placeholder="ejemplo@correo.com, otro@correo.com"
               value={emailList}
               onChangeText={setEmailList}
               multiline
             />
-            <View style={styles.modalButtons}>
-              <Pressable style={styles.cancelBtn} onPress={() => setShowEmailModal(false)}>
-                <Text style={styles.cancelBtnText}>CANCELAR</Text>
-              </Pressable>
+            <View style={styles.modalActions}>
+              <Pressable style={styles.cancelBtn} onPress={() => setShowEmailModal(false)}><Text style={styles.cancelBtnText}>CANCELAR</Text></Pressable>
               <Pressable style={styles.sendBtn} onPress={handleSendEmail} disabled={sendingEmail}>
                 {sendingEmail ? <ActivityIndicator color="#FFF" /> : <Text style={styles.sendBtnText}>ENVIAR AHORA</Text>}
               </Pressable>
@@ -345,37 +374,44 @@ export default function Supervisor() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { padding: spacing.lg, backgroundColor: colors.surfaceSecondary, borderBottomWidth: 2, borderBottomColor: colors.borderStrong },
-  title: { fontSize: 24, fontWeight: '900', color: colors.brandPrimary },
-  searchRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, backgroundColor: colors.surface, marginBottom: spacing.sm },
-  searchInput: { flex: 1, height: 44, color: colors.onSurface },
-  dateRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-  dateInput: { flex: 1, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.sm, height: 40, backgroundColor: colors.surface },
-  tabScroll: { marginTop: spacing.sm },
-  tabRow: { flexDirection: 'row', gap: spacing.sm },
-  tab: { paddingVertical: 10, paddingHorizontal: spacing.md, alignItems: 'center', borderBottomWidth: 4, borderBottomColor: 'transparent' },
-  tabActive: { borderBottomColor: colors.brandPrimary },
-  tabText: { fontWeight: '900', fontSize: 10, color: colors.muted },
-  tabTextActive: { color: colors.brandPrimary },
-  card: { backgroundColor: '#FFF', borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center' },
-  cardTitle: { fontWeight: '900', fontSize: 16 },
-  cardSub: { color: colors.muted, fontSize: 12, marginTop: 2 },
-  cardDate: { color: colors.onSurfaceTertiary, fontSize: 10, marginTop: 4 },
-  cardActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  viewBtn: { backgroundColor: colors.brandPrimary, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  downloadBtn: { backgroundColor: colors.brandSecondary, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  emailBtn: { backgroundColor: colors.success, paddingHorizontal: 10, height: 36, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  emailBtnText: { color: '#FFF', fontWeight: '900', fontSize: 10 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: spacing.xl },
-  modalCard: { backgroundColor: '#FFF', padding: spacing.xl, borderWidth: 2, borderColor: colors.borderStrong },
-  modalTitle: { fontWeight: '900', fontSize: 18, marginBottom: spacing.lg },
-  modalLabel: { fontSize: 12, fontWeight: '700', marginBottom: 8 },
-  emailInput: { borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, minHeight: 80, textAlignVertical: 'top', marginBottom: spacing.lg },
-  modalButtons: { flexDirection: 'row', gap: spacing.md },
-  cancelBtn: { flex: 1, padding: spacing.md, alignItems: 'center', borderWidth: 2, borderColor: colors.borderStrong },
-  cancelBtnText: { fontWeight: '900' },
-  sendBtn: { flex: 1, padding: spacing.md, alignItems: 'center', backgroundColor: colors.brandPrimary },
+  header: { padding: spacing.lg, backgroundColor: colors.brandPrimary },
+  title: { fontSize: 24, fontWeight: '900', color: '#FFF', letterSpacing: 1 },
+  roleChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 4 },
+  roleChipText: { color: '#FFF', fontWeight: '900', fontSize: 10 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 12, borderRadius: 8, marginTop: 15 },
+  searchInput: { flex: 1, height: 44, color: colors.onSurface, fontSize: 14 },
+  dateRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  dateInput: { flex: 1, backgroundColor: '#FFF', height: 40, borderRadius: 8, paddingHorizontal: 12, fontSize: 12 },
+  tabScroll: { marginTop: 15 },
+  tabRow: { flexDirection: 'row', gap: 10 },
+  tab: { paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)' },
+  tabActive: { backgroundColor: colors.brandSecondary },
+  tabText: { color: 'rgba(255,255,255,0.7)', fontWeight: 'bold', fontSize: 11 },
+  tabTextActive: { color: colors.onBrandSecondary },
+  card: { backgroundColor: '#FFF', marginVertical: 6, padding: 15, borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+  cardTitle: { fontWeight: '900', fontSize: 16, color: colors.onSurface },
+  cardSub: { color: colors.muted, fontSize: 13, marginTop: 2 },
+  cardDate: { color: colors.muted, fontSize: 10, marginTop: 5 },
+  cardActions: { flexDirection: 'row', gap: 8 },
+  downloadBtn: { backgroundColor: colors.success, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  emailBtn: { backgroundColor: colors.brandPrimary, height: 36, paddingHorizontal: 12, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  emailBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 10 },
+  viewBtn: { backgroundColor: colors.info, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
+  modalCard: { backgroundColor: '#FFF', padding: 20, borderRadius: 16 },
+  modalTitle: { fontWeight: '900', fontSize: 18, marginBottom: 5 },
+  modalSub: { color: colors.muted, marginBottom: 15, fontSize: 13 },
+  modalInput: { borderWidth: 2, borderColor: colors.border, borderRadius: 8, padding: 12, minHeight: 80, textAlignVertical: 'top', marginBottom: 20 },
+  modalActions: { flexDirection: 'row', gap: 10 },
+  cancelBtn: { flex: 1, height: 48, alignItems: 'center', justifyContent: 'center' },
+  cancelBtnText: { fontWeight: 'bold', color: colors.muted },
+  sendBtn: { flex: 2, backgroundColor: colors.brandPrimary, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   sendBtnText: { color: '#FFF', fontWeight: '900' },
-  roleChip: { backgroundColor: colors.brandPrimary, paddingHorizontal: 8, paddingVertical: 4 },
-  roleChipText: { color: '#FFF', fontWeight: '900', fontSize: 9, letterSpacing: 1 },
+  adminSectionTitle: { fontWeight: 'bold', fontSize: 18, marginBottom: spacing.md, color: colors.onSurface, marginTop: spacing.lg },
+  bigAdminBtn: { backgroundColor: colors.brandPrimary, padding: spacing.lg, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  bigAdminBtnText: { color: '#FFF', fontWeight: 'bold', marginLeft: 10 },
+  adminTip: { fontSize: 12, color: colors.muted, marginTop: 10, fontStyle: 'italic' },
+  routeBox: { padding: spacing.md, backgroundColor: colors.surfaceTertiary, borderRadius: 8, marginTop: spacing.md },
+  routeTitle: { fontWeight: 'bold', fontSize: 12, marginBottom: 8 },
+  routeItem: { fontSize: 11, marginBottom: 4, color: colors.onSurfaceTertiary },
 });
