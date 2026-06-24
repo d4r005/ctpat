@@ -45,7 +45,35 @@ export default function CasetaDetail() {
     try {
       const data = await apiCall<any>(`/vehicle-records/${id}`, { token });
       setRec(data);
-      if (data.exit) setExitData(data.exit);
+
+      // Auto-prefill exit data from associated shipping ticket if not already exited
+      if (!data.exit) {
+        try {
+          const tickets = await apiCall<any[]>(`/shipping-tickets`, { token });
+          const myTicket = tickets.find(t =>
+            t.placas_unidad?.trim().toUpperCase() === data.entry.placas_unidad?.trim().toUpperCase() &&
+            new Date(t.created_at).getTime() >= new Date(data.created_at).getTime()
+          );
+
+          if (myTicket) {
+            setExitData((prev: any) => ({
+              ...prev,
+              hora_apertura_cortina: myTicket.hora_apertura_cortina || '',
+              hora_cierre_cortina: myTicket.hora_cierre_cortina || '',
+              cortina_salida: myTicket.area || '',
+              sello_salida: myTicket.numero_sello || '',
+              pallets: myTicket.numero_pallets || '',
+              destino: myTicket.observaciones?.replace('Destino: ', '') || data.entry.destino || '',
+              numero_tractor_salida: myTicket.numero_economico || data.entry.numero_tractor || '',
+              numero_caja_salida: myTicket.numero_caja || data.entry.numero_caja || '',
+            }));
+          }
+        } catch (e) {
+          console.warn("Failed to fetch tickets for prefill", e);
+        }
+      } else {
+        setExitData(data.exit);
+      }
     } catch (e: any) { alert(e.message); }
     finally { setLoading(false); }
   };
