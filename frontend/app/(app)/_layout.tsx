@@ -31,6 +31,8 @@ export default function AppLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.brandPrimary,
         tabBarInactiveTintColor: colors.muted,
+        animation: 'none', // Desactiva animaciones pesadas en web
+        lazy: true,        // Solo carga el panel cuando lo tocas
         tabBarStyle: {
           backgroundColor: colors.surfaceSecondary,
           borderTopWidth: 2,
