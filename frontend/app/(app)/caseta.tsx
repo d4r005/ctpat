@@ -40,7 +40,7 @@ export default function Caseta() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']} testID="caseta-screen">
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="caseta-screen">
       <View style={styles.header}>
         <Text style={styles.title}>Caseta</Text>
         <Text style={styles.subtitle}>Registro de entrada y salida de vehículos</Text>

@@ -172,7 +172,7 @@ export default function InspectionDetail() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']} testID="inspection-detail">
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="inspection-detail">
       <View style={styles.topBar}>
         <Pressable onPress={() => router.back()} testID="detail-back">
           <Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} />

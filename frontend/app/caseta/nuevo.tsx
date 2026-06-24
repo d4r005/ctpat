@@ -161,7 +161,7 @@ export default function CasetaNuevo() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']} testID="caseta-nuevo-screen">
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="caseta-nuevo-screen">
       <View style={styles.topBar}>
         <Pressable onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} /></Pressable>
         <Text style={styles.topTitle}>Registro Entrada</Text>

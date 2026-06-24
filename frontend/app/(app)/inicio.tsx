@@ -11,18 +11,26 @@ import { colors, spacing, radius, typography } from '@/src/constants/theme';
 
 export default function Inicio() {
   const { user } = useAuth();
-  const { inspections, isOnline, pendingCount, refresh, loading } = useInspections();
+  const { inspections, allInspections, isOnline, pendingCount, refresh, loading } = useInspections();
   const { unreadCount } = useNotifications();
   const [showNotifs, setShowNotifs] = useState(false);
   const router = useRouter();
 
   const today = new Date().toISOString().slice(0, 10);
-  const todayInspections = inspections.filter((i) => i.created_at.slice(0, 10) === today);
-  const totalBuenas = inspections.filter((i) => i.status_general === 'bueno').length;
-  const totalMalas = inspections.filter((i) => i.status_general === 'malo').length;
+  // Filter all inspections for today (supervisor sees all, inspector sees all for summary purposes as requested)
+  const todayInspections = allInspections.length > 0
+    ? allInspections.filter((i) => i.created_at.slice(0, 10) === today)
+    : inspections.filter((i) => i.created_at.slice(0, 10) === today);
+
+  const sortedInspections = [...todayInspections].sort((a, b) =>
+    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+
+  const totalBuenas = sortedInspections.filter((i) => i.status_general === 'bueno').length;
+  const totalMalas = sortedInspections.filter((i) => i.status_general === 'malo').length;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']} testID="inicio-screen">
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="inicio-screen">
       {!isOnline && (
         <View style={styles.offlineBanner} testID="offline-banner">
           <Ionicons name="cloud-offline" size={16} color={colors.onWarning} />
@@ -96,15 +104,15 @@ export default function Inicio() {
           <Ionicons name="arrow-forward" size={24} color={colors.onInfo} />
         </Pressable>
 
-        <Text style={styles.sectionTitle}>INSPECCIONES DE HOY</Text>
-        {todayInspections.length === 0 ? (
+        <Text style={styles.sectionTitle}>INSPECCIONES DE HOY (TIEMPO REAL)</Text>
+        {sortedInspections.length === 0 ? (
           <View style={styles.emptyBox} testID="inicio-empty">
             <Ionicons name="clipboard-outline" size={48} color={colors.muted} />
             <Text style={styles.emptyText}>No hay inspecciones hoy</Text>
-            <Text style={styles.emptySub}>Toca NUEVA INSPECCIÓN para iniciar</Text>
+            <Text style={styles.emptySub}>Las nuevas inspecciones aparecerán aquí</Text>
           </View>
         ) : (
-          todayInspections.map((i) => (
+          sortedInspections.map((i) => (
             <Pressable
               key={i.id}
               testID={`inicio-inspection-${i.id}`}
@@ -115,6 +123,7 @@ export default function Inicio() {
                 <Text style={styles.listTitle}>{i.placas_unidad || 'Sin placas'}</Text>
                 <Text style={styles.listSub}>{i.compania_transportista} · {i.numero_trailer}</Text>
                 <Text style={styles.listTime}>{new Date(i.created_at).toLocaleTimeString('es-MX')}</Text>
+                <Text style={{ fontSize: 10, color: colors.muted, marginTop: 2 }}>Inspector: {i.inspector_nombre}</Text>
               </View>
               <View style={[styles.statusChip, { backgroundColor: i.status_general === 'bueno' ? colors.success : colors.error }]}>
                 <Text style={styles.statusChipText}>{i.status_general === 'bueno' ? 'BUENO' : 'CON FALLA'}</Text>

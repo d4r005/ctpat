@@ -20,7 +20,11 @@ const TOTAL_STEPS = 4;
 export default function Nueva() {
   const router = useRouter();
   const params = useLocalSearchParams<{ record_id?: string; compania?: string; placas?: string; trailer?: string; sello?: string; type?: string }>();
-  const inspectionType = (params.type === '9_puntos_contenedor' ? '9_puntos_contenedor' : '19_puntos') as '19_puntos' | '9_puntos_contenedor';
+
+  const [showTypeSelector, setShowTypeSelector] = useState(!params.type);
+  const [selectedType, setSelectedType] = useState<any>(params.type || null);
+
+  const inspectionType = (selectedType === '9_puntos_contenedor' ? '9_puntos_contenedor' : '19_puntos') as '19_puntos' | '9_puntos_contenedor';
   const pointsDef = getInspectionPoints(inspectionType);
   const totalPoints = pointsDef.length;
   const { user, token } = useAuth();
@@ -38,9 +42,14 @@ export default function Nueva() {
   const [selloVerificado, setSelloVerificado] = useState(false);
 
   // points (dynamic based on type)
-  const [points, setPoints] = useState<InspectionPoint[]>(
-    pointsDef.map((p) => ({ number: p.number, name: p.name, estado: '', comentarios: '', photo: '' }))
-  );
+  const [points, setPoints] = useState<InspectionPoint[]>([]);
+
+  React.useEffect(() => {
+    if (selectedType) {
+      const def = getInspectionPoints(selectedType);
+      setPoints(def.map((p) => ({ number: p.number, name: p.name, estado: '', comentarios: '', photo: '' })));
+    }
+  }, [selectedType]);
 
   const pickPhoto = async (idx: number, fromCamera: boolean) => {
     try {
@@ -141,8 +150,49 @@ export default function Nueva() {
     }
   };
 
+  if (showTypeSelector) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={styles.selectorHeader}>
+          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} />
+          </Pressable>
+          <Text style={styles.selectorTitle}>Nueva Inspección</Text>
+        </View>
+
+        <View style={styles.selectorContent}>
+          <Text style={styles.selectorLabel}>SELECCIONA EL TIPO DE UNIDAD:</Text>
+
+          <Pressable
+            style={[styles.typeCard, { backgroundColor: colors.brandPrimary }]}
+            onPress={() => { setSelectedType('19_puntos'); setShowTypeSelector(false); }}
+          >
+            <Ionicons name="car-sport" size={48} color="#FFF" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.typeTitle}>INSPECCIÓN 19 PUNTOS</Text>
+              <Text style={styles.typeSub}>Tractor, Camión o Remolque</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={24} color="#FFF" />
+          </Pressable>
+
+          <Pressable
+            style={[styles.typeCard, { backgroundColor: colors.info }]}
+            onPress={() => { setSelectedType('9_puntos_contenedor'); setShowTypeSelector(false); }}
+          >
+            <Ionicons name="cube" size={48} color="#FFF" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.typeTitle}>INSPECCIÓN 9 PUNTOS</Text>
+              <Text style={styles.typeSub}>Contenedor Marítimo</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={24} color="#FFF" />
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.safe} edges={['top']} testID="nueva-screen">
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="nueva-screen">
       {/* Progress header */}
       <View style={styles.progressHeader}>
         <View style={styles.progressBarBg}>
@@ -499,4 +549,13 @@ const styles = StyleSheet.create({
   modalCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong },
   modalTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface, marginBottom: spacing.md, letterSpacing: 1 },
   signatureCanvas: { height: 280 },
+
+  selectorHeader: { backgroundColor: colors.brandPrimary, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  selectorTitle: { color: '#FFF', fontWeight: '900', fontSize: 18, letterSpacing: 1 },
+  backBtn: { padding: 4 },
+  selectorContent: { flex: 1, padding: spacing.xl, justifyContent: 'center', gap: spacing.lg },
+  selectorLabel: { fontWeight: '900', color: colors.muted, fontSize: 12, letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.md },
+  typeCard: { flexDirection: 'row', alignItems: 'center', padding: spacing.xl, gap: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong },
+  typeTitle: { color: '#FFF', fontWeight: '900', fontSize: 18, letterSpacing: 1 },
+  typeSub: { color: '#FFF', opacity: 0.8, fontSize: 12, marginTop: 2 },
 });

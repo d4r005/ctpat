@@ -89,7 +89,7 @@ export default function CasetaDetail() {
   const STATUS_COLOR: any = { entrada: colors.warning, inspeccionado: colors.info, salida: colors.success };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']} testID="caseta-detail">
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="caseta-detail">
       <View style={styles.topBar}>
         <Pressable onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} /></Pressable>
         <Text style={styles.topTitle}>Registro {e.placas_unidad}</Text>
