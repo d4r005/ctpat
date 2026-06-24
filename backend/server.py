@@ -345,34 +345,12 @@ async def sync_to_appsheet(table_name: str, data: Dict[str, Any]):
             headers = { "ApplicationAccessKey": access_key, "Content-Type": "application/json" }
             response = requests.post(url, json=payload, headers=headers, timeout=10)
             if response.status_code == 200:
-                print(f"Successfully synced {table_name} to AppSheet API")
+                logger.info(f"Successfully synced {table_name} to AppSheet API")
                 return
             else:
-                print(f"AppSheet API Error: {response.text}")
+                logger.error(f"AppSheet API Error ({table_name}): {response.text}")
         except Exception as e:
-            print(f"Error syncing to AppSheet API: {e}")
-        try:
-            url = f"https://www.appsheet.com/api/v2/apps/{app_id}/tables/{table_name}/Action"
-            payload = {
-                "Action": "Add",
-                "Properties": {
-                    "Locale": "es-MX",
-                    "Timezone": "Central Standard Time"
-                },
-                "Rows": [flattened]
-            }
-            headers = {
-                "ApplicationAccessKey": access_key,
-                "Content-Type": "application/json"
-            }
-            response = requests.post(url, json=payload, headers=headers, timeout=10)
-            if response.status_code == 200:
-                print(f"Successfully synced {table_name} to AppSheet API")
-                return
-            else:
-                print(f"AppSheet API Error: {response.text}")
-        except Exception as e:
-            print(f"Error syncing to AppSheet API: {e}")
+            logger.error(f"Error syncing to AppSheet API ({table_name}): {e}")
 
     # Option 2: Fallback to Google Sheets Webhook
     if webhook_url:
@@ -841,10 +819,11 @@ async def send_automatic_report(subject: str, recipient: str, body_html: str):
             password=smtp_pass,
             use_tls=(smtp_port == 465),
             start_tls=(smtp_port == 587),
+            timeout=15,
         )
-        print(f"Reporte enviado exitosamente a {recipient}")
+        logger.info(f"Reporte enviado exitosamente a {recipient}")
     except Exception as e:
-        print(f"Error al enviar correo: {e}")
+        logger.error(f"Error al enviar correo a {recipient}: {e}")
 
 
 @api_router.get("/notifications", response_model=List[Notification])
@@ -967,8 +946,11 @@ async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[
 
 
 async def _trigger_automatic_report(rec_id: str):
+    logger.info(f"Iniciando generación de reporte consolidado para record: {rec_id}")
     record = await db.vehicle_records.find_one({"id": rec_id})
-    if not record: return
+    if not record:
+        logger.warning(f"No se encontró el registro {rec_id} para el reporte.")
+        return
 
     # Buscar inspección vinculada
     inspection = None
@@ -977,17 +959,24 @@ async def _trigger_automatic_report(rec_id: str):
 
     # Buscar ticket de embarque vinculado (por placas y fecha cercana)
     # Buscamos tickets creados entre la entrada y la salida de este registro
-    ticket = await db.shipping_tickets.find_one({
-        "placas_unidad": record["entry"]["placas_unidad"],
-        "created_at": {
-            "$gte": record["created_at"],
-            "$lte": record.get("exit", {}).get("fecha_salida", datetime.now(timezone.utc).isoformat())
-        }
-    })
+    placas = record["entry"].get("placas_unidad", "").strip()
+    fecha_inicio = record["created_at"]
+    fecha_fin = record.get("exit", {}).get("fecha_salida") or datetime.now(timezone.utc).isoformat()
 
-    subject = f"REPORTE CONSOLIDADO SRIUC - UNIDAD: {record['entry']['placas_unidad']}"
-    # Default recipient
-    recipient = os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com")
+    ticket = None
+    if placas:
+        ticket = await db.shipping_tickets.find_one({
+            "placas_unidad": placas,
+            "created_at": {
+                "$gte": fecha_inicio,
+                "$lte": fecha_fin
+            }
+        })
+
+    subject = f"REPORTE CONSOLIDADO SRIUC - UNIDAD: {placas}"
+    recipient = os.environ.get("REPORT_RECIPIENT", "d4r005@gmail.com")
+
+    logger.info(f"Preparando HTML para reporte de {placas}. Recipiente: {recipient}")
 
     html = f"""
     <html>
