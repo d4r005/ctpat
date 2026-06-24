@@ -47,12 +47,12 @@ export default function Supervisor() {
     setDataLoading(true);
     try {
       const [caseta, tickets] = await Promise.all([
-        apiCall('/vehicle-records', { token }),
-        apiCall('/shipping-tickets', { token })
+        apiCall('/vehicle-records', { token }).catch(() => []),
+        apiCall('/shipping-tickets', { token }).catch(() => [])
       ]);
       setCasetaRecords(caseta || []);
       setShippingTickets(tickets || []);
-      await refreshAll();
+      if (refreshAll) await refreshAll();
     } catch (e) {
       console.error('Error loading data:', e);
     } finally {
@@ -67,16 +67,18 @@ export default function Supervisor() {
   }, [token, user?.role, isAdmin]);
 
   const filteredInspections = useMemo(() => {
-    return (allInspections || []).filter(i => {
+    const data = allInspections || [];
+    return data.filter(i => {
       const q = query.toLowerCase();
-      const matchQuery = !query || i.placas_unidad?.toLowerCase().includes(q) || i.compania_transportista?.toLowerCase().includes(q);
+      const matchQuery = !query || i?.placas_unidad?.toLowerCase().includes(q) || i?.compania_transportista?.toLowerCase().includes(q);
       const matchDate = (!dateFrom || i.created_at >= dateFrom) && (!dateTo || i.created_at <= dateTo + 'T23:59:59');
       return matchQuery && matchDate;
     });
   }, [allInspections, query, dateFrom, dateTo]);
 
   const filteredCaseta = useMemo(() => {
-    return (casetaRecords || []).filter(r => {
+    const data = casetaRecords || [];
+    return data.filter(r => {
       const q = query.toLowerCase();
       const matchQuery = !query || r.entry?.placas_unidad?.toLowerCase().includes(q) || r.entry?.chofer_nombre?.toLowerCase().includes(q);
       const matchDate = (!dateFrom || r.created_at >= dateFrom) && (!dateTo || r.created_at <= dateTo + 'T23:59:59');
@@ -85,9 +87,10 @@ export default function Supervisor() {
   }, [casetaRecords, query, dateFrom, dateTo]);
 
   const filteredTickets = useMemo(() => {
-    return (shippingTickets || []).filter(t => {
+    const data = shippingTickets || [];
+    return data.filter(t => {
       const q = query.toLowerCase();
-      const matchQuery = !query || t.placas_unidad?.toLowerCase().includes(q) || t.operador?.toLowerCase().includes(q);
+      const matchQuery = !query || t?.placas_unidad?.toLowerCase().includes(q) || t?.operador?.toLowerCase().includes(q);
       const matchDate = (!dateFrom || t.created_at >= dateFrom) && (!dateTo || t.created_at <= dateTo + 'T23:59:59');
       return matchQuery && matchDate;
     });
@@ -98,12 +101,12 @@ export default function Supervisor() {
       setDataLoading(true);
       const record = activeTab === 'caseta' ? item : null;
       if (!record) {
-        alert('Solo disponible desde la pestaña de CASETA por el momento');
+        alert('Solo disponible desde la pestaña de CASETA');
         return;
       }
 
-      const insp = allInspections.find(i => i.id === record.inspection_id);
-      const ship = shippingTickets.find(s => s.inspection_id === record.inspection_id);
+      const insp = (allInspections || []).find(i => i.id === record.inspection_id);
+      const ship = (shippingTickets || []).find(s => s.inspection_id === record.inspection_id);
 
       if (!insp) {
         alert('No se encontró la inspección vinculada');
@@ -128,7 +131,7 @@ export default function Supervisor() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Reporte_Consolidado_${insp.placas_unidad}.pdf`;
+        a.download = `Reporte_Consolidado_${insp.placas_unidad || 'NA'}.pdf`;
         a.click();
       } else {
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Descargar Reporte Consolidado' });
@@ -144,7 +147,7 @@ export default function Supervisor() {
     if (!selectedRecordId || !emailList.trim()) return;
     const emails = emailList.split(',').map(e => e.trim()).filter(e => e.includes('@'));
     if (emails.length === 0) {
-      alert('Ingresa al menos un correo válido');
+      alert('Ingresa correos válidos');
       return;
     }
 
@@ -155,7 +158,7 @@ export default function Supervisor() {
         token,
         body: { record_id: selectedRecordId, emails }
       });
-      alert('Reporte enviado con éxito');
+      alert('Reporte enviado');
       setShowEmailModal(false);
       setEmailList('');
     } catch (e: any) {
@@ -170,7 +173,7 @@ export default function Supervisor() {
     setShowEmailModal(true);
   };
 
-  if (user?.role !== 'supervisor' && user?.role !== 'admin' && !isAdmin) {
+  if (!user || (user.role !== 'supervisor' && user.role !== 'admin' && !isAdmin)) {
     return (
       <SafeAreaView style={styles.safe}><View style={styles.center}><Text>Acceso restringido</Text></View></SafeAreaView>
     );
@@ -192,7 +195,7 @@ export default function Supervisor() {
             <View style={styles.searchRow}>
               <TextInput
                 style={styles.searchInput}
-                placeholder="Buscar por placa, chofer o compañía..."
+                placeholder="Buscar por placa o chofer..."
                 value={query}
                 onChangeText={setQuery}
                 placeholderTextColor={colors.muted}
@@ -222,58 +225,60 @@ export default function Supervisor() {
         </ScrollView>
       </View>
 
-      {activeTab === 'usuarios' && <Usuarios nested />}
-      {activeTab === 'kpis' && <Analitica nested />}
+      <View style={{ flex: 1 }}>
+        {activeTab === 'usuarios' && <Usuarios nested />}
+        {activeTab === 'kpis' && <Analitica nested />}
 
-      {(activeTab === 'inspecciones' || activeTab === 'caseta' || activeTab === 'embarque') && (
-        <FlatList
-          data={activeTab === 'inspecciones' ? filteredInspections : activeTab === 'caseta' ? filteredCaseta : filteredTickets}
-          keyExtractor={item => item.id}
-          refreshControl={<RefreshControl refreshing={loading || dataLoading} onRefresh={loadData} />}
-          contentContainerStyle={{ padding: spacing.md }}
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{item.placas_unidad || (activeTab === 'caseta' ? item.entry?.placas_unidad : '')}</Text>
-                <Text style={styles.cardSub}>
-                  {activeTab === 'inspecciones' ? item.compania_transportista :
-                  activeTab === 'caseta' ? item.entry?.chofer_nombre : item.operador}
-                </Text>
-                <Text style={styles.cardDate}>{new Date(item.created_at).toLocaleString()}</Text>
-              </View>
+        {(activeTab === 'inspecciones' || activeTab === 'caseta' || activeTab === 'embarque') && (
+          <FlatList
+            data={activeTab === 'inspecciones' ? filteredInspections : activeTab === 'caseta' ? filteredCaseta : filteredTickets}
+            keyExtractor={item => item?.id || Math.random().toString()}
+            refreshControl={<RefreshControl refreshing={loading || dataLoading} onRefresh={loadData} />}
+            contentContainerStyle={{ padding: spacing.md }}
+            renderItem={({ item }) => (
+              <View style={styles.card}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle}>{item?.placas_unidad || item?.entry?.placas_unidad || 'S/P'}</Text>
+                  <Text style={styles.cardSub}>
+                    {activeTab === 'inspecciones' ? item?.compania_transportista :
+                    activeTab === 'caseta' ? item?.entry?.chofer_nombre : item?.operador}
+                  </Text>
+                  <Text style={styles.cardDate}>{item?.created_at ? new Date(item.created_at).toLocaleString() : ''}</Text>
+                </View>
 
-              <View style={styles.cardActions}>
-                {activeTab === 'caseta' && (
-                  <>
-                    <Pressable style={styles.downloadBtn} onPress={() => downloadConsolidatedPdf(item)}>
-                      <Ionicons name="download" size={18} color="#FFF" />
-                    </Pressable>
-                    <Pressable style={styles.emailBtn} onPress={() => openEmailModal(item.id)}>
-                      <Ionicons name="mail" size={18} color="#FFF" />
-                      <Text style={styles.emailBtnText}>ENVIAR</Text>
-                    </Pressable>
-                  </>
-                )}
-                <Pressable
-                  style={styles.viewBtn}
-                  onPress={() => router.push(activeTab === 'inspecciones' ? `/inspection/${item.id}` : activeTab === 'caseta' ? `/caseta/${item.id}` : `/embarque/${item.id}`)}
-                >
-                  <Ionicons name="eye" size={18} color={colors.onBrandPrimary} />
-                </Pressable>
+                <View style={styles.cardActions}>
+                  {activeTab === 'caseta' && (
+                    <>
+                      <Pressable style={styles.downloadBtn} onPress={() => downloadConsolidatedPdf(item)}>
+                        <Ionicons name="download" size={18} color="#FFF" />
+                      </Pressable>
+                      <Pressable style={styles.emailBtn} onPress={() => openEmailModal(item.id)}>
+                        <Ionicons name="mail" size={18} color="#FFF" />
+                        <Text style={styles.emailBtnText}>ENVIAR</Text>
+                      </Pressable>
+                    </>
+                  )}
+                  <Pressable
+                    style={styles.viewBtn}
+                    onPress={() => router.push(activeTab === 'inspecciones' ? `/inspection/${item.id}` : activeTab === 'caseta' ? `/caseta/${item.id}` : `/embarque/${item.id}`)}
+                  >
+                    <Ionicons name="eye" size={18} color="#FFF" />
+                  </Pressable>
+                </View>
               </View>
-            </View>
-          )}
-        />
-      )}
+            )}
+          />
+        )}
+      </View>
 
       <Modal visible={showEmailModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Enviar Reporte Consolidado</Text>
-            <Text style={styles.modalLabel}>Correos adicionales (separados por coma):</Text>
+            <Text style={styles.modalLabel}>Correos (separados por coma):</Text>
             <TextInput
               style={styles.emailInput}
-              placeholder="ejemplo@correo.com, otro@correo.com"
+              placeholder="ejemplo@correo.com"
               value={emailList}
               onChangeText={setEmailList}
               multiline
