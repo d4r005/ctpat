@@ -137,18 +137,31 @@ export default function Supervisor() {
         ${htmlZh}
       `;
 
-      // Forzar base64 para evitar ventana de impresión en web
-      const result = await Print.printToFileAsync({ html: combinedHtml, base64: true });
-      const base64Data = result.base64;
+      // Intentar generar el PDF
+      const result = await Print.printToFileAsync({
+        html: combinedHtml,
+        base64: Platform.OS === 'web'
+      });
 
-      if (Platform.OS === 'web' && base64Data) {
-        const byteCharacters = atob(base64Data);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
+      if (!result || (!result.uri && !result.base64)) {
+        throw new Error('No se pudo generar el archivo PDF. Intente de nuevo.');
+      }
+
+      if (Platform.OS === 'web') {
+        let blob;
+        if (result.base64) {
+          const byteCharacters = atob(result.base64.includes('base64,') ? result.base64.split('base64,')[1] : result.base64);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          blob = new Blob([byteArray], { type: 'application/pdf' });
+        } else {
+          // Fallback si base64 falló pero tenemos uri
+          const response = await fetch(result.uri);
+          blob = await response.blob();
         }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'application/pdf' });
 
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -156,8 +169,10 @@ export default function Supervisor() {
         a.download = `Reporte_Consolidado_${insp.placas_unidad || 'NA'}.pdf`;
         document.body.appendChild(a);
         a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+        setTimeout(() => {
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        }, 100);
       } else {
         await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: 'Descargar Reporte Consolidado' });
       }
