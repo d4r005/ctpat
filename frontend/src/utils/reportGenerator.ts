@@ -9,13 +9,17 @@ export interface ReportData {
 export const generateConsolidatedReportHtml = (data: ReportData, lang: 'es' | 'zh') => {
   const { inspection: i, caseta, embarque } = data;
   const isZh = lang === 'zh';
+  const is9Points = i.inspection_type?.includes('9');
+
+  // Determinamos si es carga o descarga basado en la condición de entrada
+  const isDescarga = caseta?.entry?.condicion_carga?.toLowerCase() === 'descarga';
 
   const t = {
     title: isZh ? '综合报告' : 'REPORTE CONSOLIDADO',
     subtitle: isZh ? '注册、检查和运输' : 'Registro, Inspección y Embarque',
     generated: isZh ? '生成日期' : 'Generado',
     sectionCaseta: isZh ? '1. 门卫室记录 (进出)' : '1. REGISTRO DE CASETA (ENTRADA/SALIDA)',
-    sectionInspection: isZh ? '2. C-TPAT 检查 (19/9 点)' : '2. INSPECCIÓN C-TPAT (19/9 PUNTOS)',
+    sectionInspection: isZh ? `2. C-TPAT ${is9Points ? '9' : '19'} 点检查` : `2. INSPECCIÓN C-TPAT (${is9Points ? '9' : '19'} PUNTOS)`,
     sectionShipping: isZh ? '3. 运输单 (出库)' : '3. TICKET DE EMBARQUE (DESPACHO)',
     generalData: isZh ? '基本信息' : 'Datos Generales',
     plates: isZh ? '车牌号' : 'Placas',
@@ -39,19 +43,23 @@ export const generateConsolidatedReportHtml = (data: ReportData, lang: 'es' | 'z
     customer: isZh ? '客户' : 'Cliente',
     pallets: isZh ? '托盘数量' : 'Pallets',
     noData: isZh ? '无相关记录' : 'No se encontró registro vinculado.',
+    movType: isZh ? '作业类型' : 'Tipo de Movimiento',
+    carga: isZh ? '装货 (Carga)' : 'CARGA',
+    descarga: isZh ? '卸货 (Descarga)' : 'DESCARGA',
   };
 
   const inspectionRows = i.points.map(p => `
     <tr>
       <td style="padding:5px;border:1px solid #ddd;width:30px;">${p.number}</td>
       <td style="padding:5px;border:1px solid #ddd;">${p.name}</td>
-      <td style="padding:5px;border:1px solid #ddd;font-weight:bold;color:${p.estado === 'bueno' ? '#16a34a' : '#dc2626'}">${p.estado === 'bueno' ? t.good : (p.estado === 'malo' ? t.bad : 'N/A')}</td>
+      <td style="padding:5px;border:1px solid #ddd;font-weight:bold;color:${p.estado === 'bueno' ? '#16a34a' : (p.estado === 'malo' ? '#dc2626' : '#999')}">${p.estado === 'bueno' ? t.good : (p.estado === 'malo' ? t.bad : 'N/A')}</td>
       <td style="padding:5px;border:1px solid #ddd;">${p.comentarios || '-'}</td>
     </tr>
   `).join('');
 
   const casetaHtml = caseta ? `
     <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+      <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;width:30%;"><b>${t.movType}</b></td><td style="padding:8px;border:1px solid #ddd;font-weight:bold;color:#0A2540;">${isDescarga ? t.descarga : t.carga}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;width:30%;"><b>${t.plates}</b></td><td style="padding:8px;border:1px solid #ddd;">${caseta.entry.placas_unidad}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${t.driver}</b></td><td style="padding:8px;border:1px solid #ddd;">${caseta.entry.chofer_nombre}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${t.company}</b></td><td style="padding:8px;border:1px solid #ddd;">${caseta.entry.compania_transporte}</td></tr>
@@ -63,14 +71,16 @@ export const generateConsolidatedReportHtml = (data: ReportData, lang: 'es' | 'z
     </table>
   ` : `<p style="color:#666;font-style:italic;">${t.noData}</p>`;
 
-  const embarqueHtml = embarque ? `
+  // Si es descarga, usualmente no hay ticket de embarque de salida.
+  const shippingSection = (!isDescarga && embarque) ? `
+    <div class="section-title">${t.sectionShipping}</div>
     <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;width:30%;"><b>${t.customer}</b></td><td style="padding:8px;border:1px solid #ddd;">${embarque.cliente}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${t.pallets}</b></td><td style="padding:8px;border:1px solid #ddd;">${embarque.numero_pallets}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${t.seal}</b></td><td style="padding:8px;border:1px solid #ddd;">${embarque.numero_sello}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${isZh ? '仓管员' : 'Almacenista'}</b></td><td style="padding:8px;border:1px solid #ddd;">${embarque.almacenista}</td></tr>
     </table>
-  ` : `<p style="color:#666;font-style:italic;">${t.noData}</p>`;
+  ` : isDescarga ? `<div class="section-title">${t.sectionShipping}</div><p style="color:#666;font-style:italic;padding:10px;">${isZh ? '卸货作业无运输单' : 'Operación de DESCARGA: No requiere ticket de embarque de salida.'}</p>` : '';
 
   const approvalStatusLabel = i.approval_status === 'aprobada' ? t.approved : (i.approval_status === 'rechazada' ? t.rejected : t.pending);
 
@@ -80,17 +90,17 @@ export const generateConsolidatedReportHtml = (data: ReportData, lang: 'es' | 'z
 <head>
   <meta charset="utf-8">
   <style>
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; padding: 20px; font-size: 12px; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; padding: 20px; font-size: 11px; }
     .header { border-bottom: 4px solid #0A2540; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }
-    .section-title { background: #0A2540; color: #fff; padding: 8px 12px; margin-top: 25px; margin-bottom: 10px; font-size: 14px; font-weight: bold; }
+    .section-title { background: #0A2540; color: #fff; padding: 6px 10px; margin-top: 20px; margin-bottom: 10px; font-size: 12px; font-weight: bold; }
     table { width: 100%; border-collapse: collapse; }
     b { color: #0A2540; }
     .status-badge { display: inline-block; padding: 4px 8px; font-weight: bold; color: white; border-radius: 3px; }
     .bg-success { background-color: #16a34a; }
     .bg-error { background-color: #dc2626; }
     .bg-warning { background-color: #f59e0b; }
-    .signature-box { border: 1px solid #ddd; height: 80px; margin-top: 5px; background: #fafafa; }
-    .img-sig { height: 70px; display: block; margin: 5px auto; }
+    .signature-box { border: 1px solid #ddd; height: 70px; margin-top: 5px; background: #fafafa; }
+    .img-sig { height: 60px; display: block; margin: 5px auto; }
   </style>
 </head>
 <body>
@@ -135,8 +145,7 @@ export const generateConsolidatedReportHtml = (data: ReportData, lang: 'es' | 'z
     ${inspectionRows}
   </table>
 
-  <div class="section-title">${t.sectionShipping}</div>
-  ${embarqueHtml}
+  ${shippingSection}
 
   <div style="margin-top:30px;">
     <table style="width:100%; border-collapse:collapse;">

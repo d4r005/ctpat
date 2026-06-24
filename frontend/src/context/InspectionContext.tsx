@@ -17,6 +17,7 @@ export interface InspectionPoint {
 }
 
 export interface InspectionPayload {
+  inspection_type?: string;
   compania_transportista: string;
   placas_unidad: string;
   numero_trailer: string;
