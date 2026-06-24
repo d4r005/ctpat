@@ -847,6 +847,31 @@ async def test_appsheet(current_user: Dict[str, Any] = Depends(require_admin)):
     return {"message": "Petición de prueba enviada a AppSheet. Revisa los logs del servidor."}
 
 
+@api_router.post("/test-email")
+async def test_email(current_user: Dict[str, Any] = Depends(require_admin)):
+    """Ruta para probar la configuración SMTP"""
+    recipient = os.environ.get("REPORT_RECIPIENT", "d4r005@gmail.com")
+    subject = "🧪 Prueba de Conexión SMTP - SRIUC"
+    html = f"""
+    <html>
+        <body style="font-family: Arial, sans-serif; padding: 20px;">
+            <h2 style="color: #0A2540;">Prueba de Sistema SRIUC</h2>
+            <p>Este es un correo de prueba para verificar que la configuración SMTP es correcta.</p>
+            <p><b>Servidor:</b> {os.environ.get('SMTP_HOST')}</p>
+            <p><b>Usuario:</b> {os.environ.get('SMTP_USER')}</p>
+            <p><b>Fecha/Hora:</b> {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}</p>
+            <hr>
+            <p style="font-size: 12px; color: #666;">Si recibiste este correo, el envío de reportes automáticos debería funcionar correctamente.</p>
+        </body>
+    </html>
+    """
+    try:
+        await send_automatic_report(subject, recipient, html)
+        return {"message": f"Correo de prueba enviado exitosamente a {recipient}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al enviar correo: {str(e)}")
+
+
 @api_router.post("/notifications/{notif_id}/read")
 async def mark_notification_read(notif_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     res = await db.notifications.update_one(
