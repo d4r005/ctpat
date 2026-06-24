@@ -1093,25 +1093,43 @@ async def _trigger_automatic_report(rec_id: str):
         </div>
         """
 
+    # Búsqueda de información adicional
     entry_photos = ""
-    if record.get("entry"):
-        entry_photos += get_photo_html("Frente Unidad", record["entry"].get("foto_frente_unidad"))
-        entry_photos += get_photo_html("Atrás Caja", record["entry"].get("foto_atras_caja"))
-        entry_photos += get_photo_html("ID Chofer", record["entry"].get("foto_id_chofer"))
-
     inspection_photos = ""
-    if inspection and inspection.get("points"):
-        for p in inspection["points"]:
-            if p.get("photo"):
-                inspection_photos += get_photo_html(f"Punto {p.get('number')}: {p.get('name')[:20]}...", p["photo"])
-
+    inspection_rows = ""
     ticket_photos = ""
+    exit_photos = ""
+    num_points = "19"
+
+    if record.get("entry"):
+        e = record["entry"]
+        entry_photos += get_photo_html("Frente Unidad", e.get("foto_frente_unidad"))
+        entry_photos += get_photo_html("Atrás Caja", e.get("foto_atras_caja"))
+        entry_photos += get_photo_html("ID Chofer", e.get("foto_id_chofer"))
+
+    if inspection:
+        is_9 = inspection.get("inspection_type") == "9_puntos_contenedor" or len(inspection.get("points", [])) <= 10
+        num_points = "9" if is_9 else "19"
+
+        for p in inspection.get("points", []):
+            st = p.get("estado", "NA").upper()
+            color = "#16a34a" if st == "BUENO" else ("#dc2626" if st == "MALO" else "#999")
+            inspection_rows += f"""
+            <tr>
+                <td style="padding:5px; border:1px solid #ddd; width:30px;">{p.get('number')}</td>
+                <td style="padding:5px; border:1px solid #ddd;">{p.get('name')}</td>
+                <td style="padding:5px; border:1px solid #ddd; font-weight:bold; color:{color};">{st}</td>
+                <td style="padding:5px; border:1px solid #ddd;">{p.get('comentarios', '')}</td>
+            </tr>
+            """
+            if p.get("photo"):
+                inspection_photos += get_photo_html(f"Punto {p.get('number')}", p["photo"])
+
     if ticket:
         ticket_photos += get_photo_html("Inicio Carga", ticket.get("foto_inicio_carga"))
         ticket_photos += get_photo_html("Media Carga", ticket.get("foto_media_carga"))
         ticket_photos += get_photo_html("Final Carga", ticket.get("foto_final_carga"))
 
-    exit_photos = ""
     if record.get("exit"):
         exit_photos += get_photo_html("Sello VVTT (Salida)", record["exit"].get("sello_vvtt_foto"))
 
@@ -1126,36 +1144,41 @@ async def _trigger_automatic_report(rec_id: str):
             <div style="padding: 20px;">
                 <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px;">1. Movimiento de Caseta</h2>
                 <table style="width: 100%; border-collapse: collapse;">
-                    <tr><td style="padding: 8px; font-weight: bold; width: 30%;">Placas Unidad:</td><td style="padding: 8px;">{record['entry']['placas_unidad']}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Conductor:</td><td style="padding: 8px;">{record['entry']['chofer_nombre']}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Compañía:</td><td style="padding: 8px;">{record['entry'].get('compania_transporte', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Fecha Entrada:</td><td style="padding: 8px;">{record['entry'].get('fecha_entrada', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold; color: #16A34A;">Fecha Salida:</td><td style="padding: 8px; color: #16A34A; font-weight: bold;">{record['exit'].get('fecha_salida', 'N/A') if record.get('exit') else 'No registrada'}</td></tr>
-                    {f'''
-                    <tr><td style="padding: 8px; font-weight: bold;">Sello VVTT (Salida):</td><td style="padding: 8px; text-transform: uppercase;">{record['exit'].get('sello_vvtt_estado', 'N/A')}</td></tr>
-                    ''' if record.get('exit') else ''}
+                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb; width: 30%;"><b>Placas:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{record['entry']['placas_unidad']}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb;"><b>Conductor:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{record['entry']['chofer_nombre']}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb;"><b>Compañía:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{record['entry'].get('compania_transporte', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb;"><b>Licencia:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{record['entry'].get('licencia_conductor', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb;"><b>Fecha Entrada:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{record['entry'].get('fecha_entrada', 'N/A')}</td></tr>
+                    {f'''<tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb; color: #16A34A;"><b>Fecha Salida:</b></td><td style="padding: 8px; border: 1px solid #ddd; color: #16A34A; font-weight: bold;">{record['exit'].get('fecha_salida', 'N/A')}</td></tr>''' if record.get('exit') else ''}
                 </table>
-                <div style="margin-top: 15px;">{entry_photos}{exit_photos}</div>
+                <div style="margin-top: 10px;">{entry_photos}{exit_photos}</div>
 
-                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">2. Inspección C-TPAT (19 Puntos)</h2>
+                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">2. Inspección C-TPAT ({num_points} Puntos)</h2>
                 {f'''
-                <div style="background-color: {"#f0fdf4" if inspection.get("status_general") == "bueno" else "#fef2f2"}; padding: 15px; border-radius: 5px;">
-                    <p style="margin: 0;">Estado General: <b style="color: {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">{inspection.get('status_general', 'N/A').upper()}</b></p>
+                <div style="background-color: {"#f0fdf4" if inspection.get("status_general") == "bueno" else "#fef2f2"}; padding: 15px; border-radius: 5px; margin-bottom: 10px;">
+                    <p style="margin: 0;">Resultado: <b style="color: {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">{inspection.get('status_general', 'N/A').upper()}</b></p>
                     <p style="margin: 5px 0 0 0;">Inspector: {inspection.get('inspector_nombre', 'N/A')}</p>
-                    <p style="margin: 5px 0 0 0;">Aprobación: <b>{inspection.get('approval_status', 'pendiente').upper()}</b></p>
+                    <p style="margin: 5px 0 0 0;">Estado: <b>{inspection.get('approval_status', 'pendiente').upper()}</b></p>
                 </div>
-                <div style="margin-top: 15px;">{inspection_photos}</div>
-                ''' if inspection else "<p style='color: #666; font-style: italic;'>No se realizó inspección digital para esta unidad.</p>"}
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr style="background: #f1f5f9; font-weight: bold;">
+                        <td style="padding: 5px; border: 1px solid #ddd;">#</td><td style="padding: 5px; border: 1px solid #ddd;">Punto</td><td style="padding: 5px; border: 1px solid #ddd;">Estatus</td><td style="padding: 5px; border: 1px solid #ddd;">Comentarios</td>
+                    </tr>
+                    {inspection_rows}
+                </table>
+                <div style="margin-top: 10px;">{inspection_photos}</div>
+                ''' if inspection else "<p style='color: #666; font-style: italic;'>No se realizó inspección digital.</p>"}
 
                 <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">3. Ticket de Embarque</h2>
                 {f'''
                 <table style="width: 100%; border-collapse: collapse;">
-                    <tr><td style="padding: 8px; font-weight: bold; width: 30%;">Cliente:</td><td style="padding: 8px;">{ticket.get('cliente', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Almacenista:</td><td style="padding: 8px;">{ticket.get('almacenista', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Pallets:</td><td style="padding: 8px;">{ticket.get('numero_pallets', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb; width: 30%;"><b>Cliente:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{ticket.get('cliente', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb;"><b>Almacenista:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{ticket.get('almacenista', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb;"><b>Pallets:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{ticket.get('numero_pallets', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb;"><b>Destino:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{ticket.get('observaciones', '').replace('Destino: ', '')}</td></tr>
                 </table>
-                <div style="margin-top: 15px;">{ticket_photos}</div>
-                ''' if ticket else "<p style='color: #666; font-style: italic;'>No se generó ticket de embarque para este movimiento.</p>"}
+                <div style="margin-top: 10px;">{ticket_photos}</div>
+                ''' if ticket else "<p style='color: #666; font-style: italic;'>No se generó ticket de embarque.</p>"}
             </div>
 
             <div style="margin-top: 40px; padding: 20px; background-color: #f9fafb; text-align: center; font-size: 12px; color: #666;">
