@@ -1,4 +1,4 @@
-# C-TPAT Inspection System (SRIUC)
+# C-TPAT Inspection System (SRIUC) - Updated
 
 Este proyecto ha sido configurado para conectarse con **AppSheet** y utilizar las credenciales de correo proporcionadas.
 
