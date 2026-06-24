@@ -11,7 +11,7 @@ import * as Print from 'expo-print';
 import { useTranslation } from 'react-i18next';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
-import { apiCall } from '@/src/api/client';
+import { apiCall, API_BASE } from '@/src/api/client';
 import { colors, spacing } from '@/src/constants/theme';
 import { generateConsolidatedReportHtml } from '@/src/utils/reportGenerator';
 
@@ -46,8 +46,8 @@ export default function Supervisor() {
     setDataLoading(true);
     try {
       const [caseta, tickets] = await Promise.all([
-        apiCall('/vehicle-records', { token }).catch(() => []),
-        apiCall('/shipping-tickets', { token }).catch(() => [])
+        apiCall('/vehicle-records', { token }).catch(e => { console.error(e); return []; }),
+        apiCall('/shipping-tickets', { token }).catch(e => { console.error(e); return []; })
       ]);
       setCasetaRecords(caseta || []);
       setShippingTickets(tickets || []);
@@ -104,9 +104,8 @@ export default function Supervisor() {
         return;
       }
 
-      // Busqueda inteligente: Primero por ID, luego por Placas (más reciente)
-      let insp = (allInspections || []).find(i => i.id === record.inspection_id);
       const placas = record.entry?.placas_unidad?.trim();
+      let insp = (allInspections || []).find(i => i.id === record.inspection_id);
 
       if (!insp && placas) {
         insp = (allInspections || [])
@@ -119,7 +118,6 @@ export default function Supervisor() {
         return;
       }
 
-      // Buscar ticket de embarque vinculado
       let ship = (shippingTickets || []).find(s => s.inspection_id === record.inspection_id);
       if (!ship && placas) {
         ship = (shippingTickets || [])
@@ -127,54 +125,57 @@ export default function Supervisor() {
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
       }
 
-      const reportData = { inspection: insp, caseta: record, embarque: ship };
-      const htmlEs = generateConsolidatedReportHtml(reportData, 'es');
-      const htmlZh = generateConsolidatedReportHtml(reportData, 'zh');
+      const htmlEs = generateConsolidatedReportHtml({ inspection: insp, caseta: record, embarque: ship }, 'es');
+      const htmlZh = generateConsolidatedReportHtml({ inspection: insp, caseta: record, embarque: ship }, 'zh');
 
       const combinedHtml = `
+        <style>@media print { .page-break { page-break-before: always; } }</style>
         ${htmlEs}
-        <div style="page-break-before: always;"></div>
+        <div class="page-break"></div>
         ${htmlZh}
       `;
 
-      // Intentar generar el PDF
-      const result = await Print.printToFileAsync({
-        html: combinedHtml,
-        base64: Platform.OS === 'web'
-      });
-
-      if (!result || (!result.uri && !result.base64)) {
-        throw new Error('No se pudo generar el archivo PDF. Intente de nuevo.');
-      }
-
       if (Platform.OS === 'web') {
-        let blob;
-        if (result.base64) {
-          const byteCharacters = atob(result.base64.includes('base64,') ? result.base64.split('base64,')[1] : result.base64);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-              byteNumbers[i] = byteCharacters.charCodeAt(i);
+        // En Web, Print.printToFileAsync puede ser inestable.
+        // Intentamos generar el PDF y descargarlo.
+        try {
+          const result = await Print.printToFileAsync({ html: combinedHtml });
+          if (result && result.uri) {
+            const response = await fetch(result.uri);
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Reporte_Consolidado_${placas}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+              document.body.removeChild(a);
+              window.URL.revokeObjectURL(url);
+            }, 100);
+          } else {
+            // Si falla printToFileAsync, abrimos ventana de impresión enfocada al contenido
+            const printWindow = window.open('', '_blank');
+            if (printWindow) {
+              printWindow.document.write(combinedHtml);
+              printWindow.document.close();
+              printWindow.focus();
+              printWindow.print();
+            }
           }
-          const byteArray = new Uint8Array(byteNumbers);
-          blob = new Blob([byteArray], { type: 'application/pdf' });
-        } else {
-          // Fallback si base64 falló pero tenemos uri
-          const response = await fetch(result.uri);
-          blob = await response.blob();
+        } catch (webErr) {
+          console.error('Web PDF error:', webErr);
+          // Último recurso: imprimir ventana actual con el contenido
+          const printWindow = window.open('', '_blank');
+          if (printWindow) {
+            printWindow.document.write(combinedHtml);
+            printWindow.document.close();
+            printWindow.print();
+          }
         }
-
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Reporte_Consolidado_${insp.placas_unidad || 'NA'}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => {
-          document.body.removeChild(a);
-          window.URL.revokeObjectURL(url);
-        }, 100);
       } else {
-        await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: 'Descargar Reporte Consolidado' });
+        const result = await Print.printToFileAsync({ html: combinedHtml, base64: false });
+        await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: 'Descargar Reporte' });
       }
     } catch (e: any) {
       alert('Error al generar PDF: ' + e.message);
@@ -198,11 +199,12 @@ export default function Supervisor() {
         token,
         body: { record_id: selectedRecordId, emails }
       });
-      alert('Reporte enviado');
+      alert('Reporte enviado con éxito');
       setShowEmailModal(false);
       setEmailList('');
     } catch (e: any) {
-      alert(e.message || 'Error al enviar');
+      const msg = e.message || 'Error desconocido';
+      alert(`Error al enviar: ${msg}\nURL: ${API_BASE}/reports/send-consolidated`);
     } finally {
       setSendingEmail(false);
     }
