@@ -395,9 +395,8 @@ export default function InspectionDetail() {
           <Text style={styles.value}>{insp.inspector_nombre}</Text>
           {insp.inspector_firma ? (
             <View style={styles.firmaWrap}>
-              <View style={styles.firmaImagePlaceholder}>
-                <Text style={styles.firmaLabel}>FIRMA CAPTURADA</Text>
-              </View>
+              <Image source={{ uri: insp.inspector_firma }} style={{ width: '100%', height: 100, resizeMode: 'contain', backgroundColor: '#fff' }} />
+              <Text style={[styles.firmaLabel, { marginTop: 4 }]}>FIRMA INSPECTOR</Text>
             </View>
           ) : null}
           {insp.approved_by_signature ? (
@@ -405,9 +404,8 @@ export default function InspectionDetail() {
               <Text style={[styles.label, { marginTop: spacing.md }]}>APROBACIÓN / RECHAZO POR</Text>
               <Text style={styles.value}>{insp.approved_by_name}</Text>
               <View style={styles.firmaWrap}>
-                <View style={[styles.firmaImagePlaceholder, { borderColor: insp.approval_status === 'aprobada' ? colors.success : colors.error }]}>
-                  <Text style={[styles.firmaLabel, { color: insp.approval_status === 'aprobada' ? colors.success : colors.error }]}>FIRMA SUPERVISOR</Text>
-                </View>
+                <Image source={{ uri: insp.approved_by_signature }} style={{ width: '100%', height: 100, resizeMode: 'contain', backgroundColor: '#fff', borderColor: insp.approval_status === 'aprobada' ? colors.success : colors.error, borderWidth: 1 }} />
+                <Text style={[styles.firmaLabel, { color: insp.approval_status === 'aprobada' ? colors.success : colors.error, marginTop: 4 }]}>FIRMA AUTORIZACIÓN</Text>
               </View>
             </>
           ) : null}

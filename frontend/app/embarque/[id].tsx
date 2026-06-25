@@ -148,8 +148,18 @@ export default function EmbarqueDetail() {
         </Section>
         <Section title="FIRMAS">
           <Row k="Guardia" v={t.nombre_guardia} />
-          {t.firma_almacenista ? <Text style={styles.firmaTxt}>✓ Firma almacenista capturada</Text> : null}
-          {t.firma_guardia ? <Text style={styles.firmaTxt}>✓ Firma guardia capturada</Text> : null}
+          {t.firma_almacenista ? (
+            <View style={{ padding: spacing.sm, alignItems: 'center' }}>
+              <Image source={{ uri: t.firma_almacenista }} style={{ width: '80%', height: 80, resizeMode: 'contain', backgroundColor: '#fff' }} />
+              <Text style={[styles.firmaTxt, { fontSize: 10, paddingTop: 2 }]}>FIRMA ALMACENISTA: {t.almacenista}</Text>
+            </View>
+          ) : null}
+          {t.firma_guardia ? (
+            <View style={{ padding: spacing.sm, alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.divider }}>
+              <Image source={{ uri: t.firma_guardia }} style={{ width: '80%', height: 80, resizeMode: 'contain', backgroundColor: '#fff' }} />
+              <Text style={[styles.firmaTxt, { fontSize: 10, paddingTop: 2 }]}>FIRMA GUARDIA: {t.nombre_guardia}</Text>
+            </View>
+          ) : null}
         </Section>
       </ScrollView>
     </SafeAreaView>
