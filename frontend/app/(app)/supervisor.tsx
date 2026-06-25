@@ -147,7 +147,11 @@ export default function Supervisor() {
   const [linkingMode, setLinkingMode] = useState(false);
 
   const orphanInspections = useMemo(() => {
-    return allInspections.filter(i => !allRecords.some(r => r.inspection_id === i.id));
+    return allInspections.filter(i => {
+      // Una inspección es huérfana si no tiene un record de caseta que la referencie por ID
+      // O si no hay un record con las mismas placas
+      return !allRecords.some(r => r.inspection_id === i.id || r.entry.placas_unidad === i.placas_unidad);
+    });
   }, [allInspections, allRecords]);
 
   const orphanRecords = useMemo(() => {
@@ -170,10 +174,18 @@ export default function Supervisor() {
       // Unimos inspecciones reales + registros de caseta pendientes de inspección
       const pendingRecords = orphanRecords.map(r => ({ ...r, _is_pending_insp: true }));
       const combined = [...pendingRecords, ...allInspections];
-      return combined.filter(i => {
+
+      const filtered = combined.filter(i => {
         const plates = i._is_pending_insp ? i.entry.placas_unidad : i.placas_unidad;
         const name = i._is_pending_insp ? i.entry.chofer_nombre : i.inspector_nombre;
-        return plates.toLowerCase().includes(q) || name.toLowerCase().includes(q);
+        return (plates?.toLowerCase() || "").includes(q) || (name?.toLowerCase() || "").includes(q);
+      });
+
+      // Ordenar por fecha: primero los más recientes
+      return filtered.sort((a, b) => {
+        const dateA = new Date(a.created_at || a.entry?.fecha_entrada || 0).getTime();
+        const dateB = new Date(b.created_at || b.entry?.fecha_entrada || 0).getTime();
+        return dateB - dateA;
       });
     } else {
       return allTickets.filter(t => t.placas_unidad.toLowerCase().includes(q) || t.cliente.toLowerCase().includes(q));
@@ -375,11 +387,16 @@ function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail }: a
 function InspectionRow({ item, onEdit, t, records = [], tickets = [] }: any) {
   const statusColor = item.approval_status === 'aprobada' ? colors.success : item.approval_status === 'rechazada' ? colors.error : colors.warning;
 
-  const relatedRecord = records.find((r: any) => r.inspection_id === item.id || r.entry.placas_unidad === item.placas_unidad);
+  // Corregir búsqueda de record relacionado para mostrar el rastreador
+  const relatedRecord = records.find((r: any) =>
+    r.inspection_id === item.id ||
+    r.entry?.placas_unidad?.trim().toUpperCase() === item.placas_unidad?.trim().toUpperCase()
+  );
+
   const steps = {
     entry: !!relatedRecord,
     inspection: true,
-    shipping: !!tickets.some((tick: any) => tick.placas_unidad === item.placas_unidad),
+    shipping: !!tickets.some((tick: any) => tick.placas_unidad?.trim().toUpperCase() === item.placas_unidad?.trim().toUpperCase()),
     exit: relatedRecord?.status === 'salida'
   };
 
