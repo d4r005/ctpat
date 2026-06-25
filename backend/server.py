@@ -615,6 +615,7 @@ async def list_inspections(
     inspector_id: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    summary: bool = Query(False)
 ):
     filt: Dict[str, Any] = {}
     if scope == "all":
@@ -633,7 +634,14 @@ async def list_inspections(
             date_filt["$lte"] = date_to + "T23:59:59.999999"
         filt["created_at"] = date_filt
 
-    docs = await db.inspections.find(filt, {"_id": 0, "client_uuid": 0}).sort("created_at", -1).to_list(2000)
+    projection = {"_id": 0, "client_uuid": 0}
+    if summary:
+        projection["points"] = 0
+        projection["inspector_firma"] = 0
+        projection["verificador_firma"] = 0
+        projection["approved_by_signature"] = 0
+
+    docs = await db.inspections.find(filt, projection).sort("created_at", -1).to_list(1000 if summary else 500)
     return [_serialize_inspection(d) for d in docs]
 
 
@@ -980,15 +988,69 @@ async def list_notifications(current_user: Dict[str, Any] = Depends(get_current_
     return [Notification(**d) for d in docs]
 
 @api_router.get("/activities")
-async def list_activities(current_user: Dict[str, Any] = Depends(get_current_user)):
-    """Lista actividad reciente global (para supervisores) o propia"""
-    filt = {}
-    # Supervisores ven todo el movimiento de la planta
-    if current_user.get("role") not in ["supervisor", "admin"] and not is_admin(current_user):
-        filt["user_name"] = current_user["name"]
+async def get_recent_activities(
+    limit: int = Query(20, le=50),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Retorna una lista unificada de las actividades más recientes (inspecciones, caseta, embarque)."""
+    # 1. Inspections (Excluding large fields like photos)
+    insp_filt = {}
+    if current_user["role"] not in ["supervisor", "admin"]:
+        insp_filt["user_id"] = current_user["id"]
+    inspections = await db.inspections.find(insp_filt, {"_id": 0, "points": 0, "inspector_firma": 0, "verificador_firma": 0}).sort("created_at", -1).to_list(limit)
 
-    docs = await db.activities.find(filt, {"_id": 0}).sort("created_at", -1).to_list(50)
-    return docs
+    # 2. Vehicle Records
+    vec_filt = {}
+    if current_user["role"] not in ["supervisor", "admin"]:
+        vec_filt["user_id"] = current_user["id"]
+    records = await db.vehicle_records.find(vec_filt, {"_id": 0, "entry.foto_frente_unidad": 0, "entry.foto_atras_caja": 0, "entry.foto_id_chofer": 0, "exit.sello_vvtt_foto": 0, "entry.firma_operador": 0}).sort("created_at", -1).to_list(limit)
+
+    # 3. Shipping Tickets
+    ship_filt = {}
+    if current_user["role"] not in ["supervisor", "admin"]:
+        ship_filt["user_id"] = current_user["id"]
+    tickets = await db.shipping_tickets.find(ship_filt, {"_id": 0, "foto_inicio_carga": 0, "foto_media_carga": 0, "foto_final_carga": 0, "firma_almacenista": 0, "firma_guardia": 0}).sort("created_at", -1).to_list(limit)
+
+    # Unify
+    activities = []
+    for i in inspections:
+        activities.append({
+            "id": i["id"],
+            "type": "inspection",
+            "title": f"Inspección: {i.get('placas_unidad')}",
+            "subtitle": f"{i.get('compania_transportista')} · {i.get('numero_trailer')}",
+            "status": i.get("status_general"),
+            "created_at": i["created_at"],
+            "user_name": i.get("inspector_nombre", "Inspector"),
+            "inspection_type": i.get("inspection_type")
+        })
+
+    for r in records:
+        title = "Entrada Vehículo" if r["status"] == "entrada" else "Salida Vehículo"
+        activities.append({
+            "id": r["id"],
+            "type": "caseta",
+            "title": f"{title}: {r['entry'].get('placas_unidad')}",
+            "subtitle": f"{r['entry'].get('chofer_nombre')} · {r['entry'].get('compania_transporte', '')}",
+            "status": r["status"],
+            "created_at": r["created_at"],
+            "user_name": r['entry'].get('guardia_caseta_nombre', "Guardia")
+        })
+
+    for t in tickets:
+        activities.append({
+            "id": t["id"],
+            "type": "embarque",
+            "title": f"Ticket Embarque: {t.get('placas_unidad')}",
+            "subtitle": f"Cliente: {t.get('cliente')} · {t.get('operador')}",
+            "status": "ticket",
+            "created_at": t["created_at"],
+            "user_name": t.get("almacenista")
+        })
+
+    # Sort all by created_at descending
+    activities.sort(key=lambda x: x["created_at"], reverse=True)
+    return activities[:limit]
 
 
 @api_router.post("/test-appsheet")
@@ -1186,8 +1248,6 @@ async def list_vehicle_records(
     status: Optional[str] = None,
 ):
     filt: Dict[str, Any] = {}
-    # Administradores y supervisores ven todo.
-    # Inspectores ven lo suyo y lo que está actualmente en patio (para poder inspeccionar)
     if current_user.get("role") not in ["supervisor", "admin"] and not is_admin(current_user):
         filt["$or"] = [
             {"user_id": current_user["id"]},
@@ -1196,18 +1256,44 @@ async def list_vehicle_records(
 
     if status:
         filt["status"] = status
-    docs = await db.vehicle_records.find(filt, {"_id": 0}).sort("created_at", -1).to_list(1000)
 
-    # Check for shipping tickets to sync status
+    # Excluir campos pesados en el listado general
+    projection = {
+        "_id": 0,
+        "entry.foto_frente_unidad": 0, "entry.foto_atras_caja": 0,
+        "entry.foto_id_chofer": 0, "entry.firma_operador": 0,
+        "exit.sello_vvtt_foto": 0, "exit.firma_guardia": 0
+    }
+
+    docs = await db.vehicle_records.find(filt, projection).sort("created_at", -1).to_list(500)
+
+    if not docs:
+        return []
+
+    # Optimización: Carga masiva de tickets de embarque para evitar N+1 queries
+    plates = list(set(d["entry"].get("placas_unidad") for d in docs if d["entry"].get("placas_unidad")))
+    min_date = docs[-1]["created_at"]
+
+    tickets = await db.shipping_tickets.find(
+        {"placas_unidad": {"$in": plates}, "created_at": {"$gte": min_date}},
+        {"placas_unidad": 1, "created_at": 1}
+    ).to_list(len(docs) * 2)
+
+    tickets_map = {}
+    for t in tickets:
+        p = t["placas_unidad"]
+        tickets_map.setdefault(p, []).append(t["created_at"])
+
     res = []
     for d in docs:
-        plates = d["entry"].get("placas_unidad", "")
-        # Find if there is a shipping ticket after this entry
-        ticket = await db.shipping_tickets.find_one({
-            "placas_unidad": plates,
-            "created_at": {"$gte": d["created_at"]}
-        })
-        d["has_shipping_ticket"] = bool(ticket)
+        p = d["entry"].get("placas_unidad")
+        has_ticket = False
+        if p in tickets_map:
+            for t_date in tickets_map[p]:
+                if t_date >= d["created_at"]:
+                    has_ticket = True
+                    break
+        d["has_shipping_ticket"] = has_ticket
         res.append(VehicleRecord(**d))
 
     return res
@@ -1653,7 +1739,15 @@ async def list_tickets(current_user: Dict[str, Any] = Depends(get_current_user))
     filt: Dict[str, Any] = {}
     if current_user.get("role") != "supervisor":
         filt["user_id"] = current_user["id"]
-    docs = await db.shipping_tickets.find(filt, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+    # Excluir campos pesados
+    projection = {
+        "_id": 0, "foto_inicio_carga": 0, "foto_media_carga": 0,
+        "foto_final_carga": 0, "firma_almacenista": 0,
+        "firma_guardia": 0, "plano_carga": 0
+    }
+
+    docs = await db.shipping_tickets.find(filt, projection).sort("created_at", -1).to_list(500)
     return [ShippingTicket(**d) for d in docs]
 
 

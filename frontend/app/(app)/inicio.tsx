@@ -12,33 +12,27 @@ import * as Haptics from 'expo-haptics';
 import { colors, spacing, radius, typography } from '@/src/constants/theme';
 import { apiCall } from '@/src/api/client';
 
+import MainHeader from '@/src/components/MainHeader';
+
 // UI Update: Professional Brand Header
 export default function Inicio() {
   const { user, token } = useAuth();
   const { t } = useTranslation();
-  const { inspections, allInspections, isOnline, pendingCount, refresh: refreshInspections, loading: inspectionsLoading } = useInspections();
-  const { unreadCount, refresh: refreshNotifications } = useNotifications();
+  const { inspections, allInspections, refresh: refreshInspections, loading: inspectionsLoading } = useInspections();
+  const { refresh: refreshNotifications } = useNotifications();
   const [showNotifs, setShowNotifs] = useState(false);
   const router = useRouter();
 
   const [activities, setActivities] = useState<any[]>([]);
   const [lastActivityId, setLastActivityId] = useState<string | null>(null);
   const [loadingActivities, setLoadingActivities] = useState(false);
-  const [pendingYardCount, setPendingYardCount] = useState(0);
-  const [pendingApprovCount, setPendingApprovCount] = useState(0);
 
   const loadActivities = useCallback(async (isInitial = false) => {
     if (!token) return;
     if (isInitial) setLoadingActivities(true);
     try {
-      const [actData, yardData] = await Promise.all([
-        apiCall<any[]>('/activities', { token }),
-        apiCall<any[]>('/vehicle-records', { token })
-      ]);
-
+      const actData = await apiCall<any[]>('/activities', { token });
       const newActivities = Array.isArray(actData) ? actData : [];
-      setPendingYardCount(yardData.filter((r: any) => !r.inspection_id && r.status === 'entrada').length);
-      setPendingApprovCount(allInspections.filter(i => i.approval_status === 'pendiente').length);
 
       if (!isInitial && newActivities.length > 0) {
         const latest = newActivities[0];
@@ -55,7 +49,7 @@ export default function Inicio() {
     } finally {
       if (isInitial) setLoadingActivities(false);
     }
-  }, [token, lastActivityId, allInspections]);
+  }, [token, lastActivityId]);
 
   const refreshAll = async () => {
     await Promise.all([refreshInspections(), refreshNotifications(), loadActivities(true)]);
@@ -63,7 +57,7 @@ export default function Inicio() {
 
   useEffect(() => {
     loadActivities(true);
-    const interval = setInterval(() => loadActivities(false), 10000);
+    const interval = setInterval(() => loadActivities(false), 15000);
     return () => clearInterval(interval);
   }, [loadActivities]);
 
@@ -95,81 +89,89 @@ export default function Inicio() {
     if (routes[activity.type]) router.push(routes[activity.type]);
   };
 
-  return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.brandHeader}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.brandLogo}>NAF</Text>
-          <Text style={styles.brandSubtitle}>Sistema de Registro e Inspección de Unidades de Carga</Text>
+  const renderActivity = ({ item: a }: { item: any }) => (
+    <Pressable style={styles.activityCard} onPress={() => navigateToActivity(a)}>
+      <View style={[styles.iconCircle, { backgroundColor: a.status === 'malo' || a.type === 'rechazada' ? colors.error : (a.type === 'caseta' ? colors.success : colors.info) }]}>
+        <Ionicons name={getActivityIcon(a.type)} size={20} color="#FFF" />
+      </View>
+      <View style={{ flex: 1, marginLeft: spacing.md }}>
+        <Text style={styles.cardTitleText}>{a.title}</Text>
+        <Text style={styles.cardSubText}>{a.subtitle}</Text>
+        <Text style={styles.cardMetaText}>{formatTime(a.created_at)} • {a.user_name}</Text>
+      </View>
+      {a.status === 'malo' && <View style={styles.miniStatusBadgeError}><Text style={styles.miniStatusText}>CON FALLA</Text></View>}
+      {a.status === 'bueno' && a.type === 'inspection' && <View style={styles.miniStatusBadgeSuccess}><Text style={styles.miniStatusText}>BUENO</Text></View>}
+    </Pressable>
+  );
+
+  const ListHeader = () => (
+    <>
+      <View style={styles.statsRow}>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>{todayInspections.length}</Text>
+          <Text style={styles.statLabel}>HOY</Text>
         </View>
-        <View style={styles.userContainer}>
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>{user?.name?.charAt(0).toUpperCase() || 'D'}</Text>
-            <View style={styles.onlineIndicator} />
-          </View>
-          <Text style={styles.onlineStatusText}>● ON LINE</Text>
+        <View style={[styles.statCard, { borderLeftWidth: 1, borderLeftColor: colors.border }]}>
+          <Text style={[styles.statValue, { color: colors.success }]}>{totalBuenas}</Text>
+          <Text style={styles.statLabel}>APROBADA</Text>
+        </View>
+        <View style={[styles.statCard, { borderLeftWidth: 1, borderLeftColor: colors.border }]}>
+          <Text style={[styles.statValue, { color: colors.error }]}>{totalMalas}</Text>
+          <Text style={styles.statLabel}>CON FALLAS</Text>
         </View>
       </View>
+      <Text style={styles.sectionTitle}>ACTIVIDAD RECIENTE (TIEMPO REAL)</Text>
+    </>
+  );
 
-      <ScrollView
-        contentContainerStyle={styles.container}
-        refreshControl={<RefreshControl refreshing={inspectionsLoading || loadingActivities} onRefresh={refreshAll} tintColor={colors.brandPrimary} />}
-      >
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{todayInspections.length}</Text>
-            <Text style={styles.statLabel}>HOY</Text>
-          </View>
-          <View style={[styles.statCard, { borderLeftWidth: 1, borderLeftColor: colors.border }]}>
-            <Text style={[styles.statValue, { color: colors.success }]}>{totalBuenas}</Text>
-            <Text style={styles.statLabel}>APROBADA</Text>
-          </View>
-          <View style={[styles.statCard, { borderLeftWidth: 1, borderLeftColor: colors.border }]}>
-            <Text style={[styles.statValue, { color: colors.error }]}>{totalMalas}</Text>
-            <Text style={styles.statLabel}>CON FALLAS</Text>
-          </View>
-        </View>
+  const ListFooter = () => (
+    <>
+      <View style={styles.processHeader}>
+        <Text style={styles.processTitle}>Flujo de Proceso</Text>
+        <Ionicons name="chevron-up" size={20} color={colors.onSurface} />
+      </View>
 
-        <Text style={styles.sectionTitle}>ACTIVIDAD RECIENTE (TIEMPO REAL)</Text>
-
-        {activities.slice(0, 8).map((a) => (
-          <Pressable key={`${a.type}-${a.id}`} style={styles.activityCard} onPress={() => navigateToActivity(a)}>
-            <View style={[styles.iconCircle, { backgroundColor: a.status === 'malo' || a.type === 'rechazada' ? colors.error : (a.type === 'caseta' ? colors.success : colors.info) }]}>
-              <Ionicons name={getActivityIcon(a.type)} size={20} color="#FFF" />
+      <View style={styles.timelineContainer}>
+        <View style={styles.timelineLine} />
+        {activities.slice(0, 6).map((a) => (
+          <View key={`timeline-${a.id}`} style={styles.timelineItem}>
+            <View style={[styles.timelineDot, { backgroundColor: a.status === 'malo' ? colors.error : colors.success }]} />
+            <View style={{ flex: 1, marginLeft: spacing.lg, paddingBottom: spacing.lg }}>
+              <Text style={styles.timelineTitle}>{a.title}</Text>
+              <Text style={styles.timelineMeta}>{formatTime(a.created_at)} • {a.user_name}</Text>
             </View>
-            <View style={{ flex: 1, marginLeft: spacing.md }}>
-              <Text style={styles.cardTitleText}>{a.title}</Text>
-              <Text style={styles.cardSubText}>{a.subtitle}</Text>
-              <Text style={styles.cardMetaText}>{formatTime(a.created_at)} • {a.user_name}</Text>
-            </View>
-            {a.status === 'malo' && <View style={styles.miniStatusBadgeError}><Text style={styles.miniStatusText}>CON FALLA</Text></View>}
-            {a.status === 'bueno' && a.type === 'inspection' && <View style={styles.miniStatusBadgeSuccess}><Text style={styles.miniStatusText}>BUENO</Text></View>}
-          </Pressable>
+          </View>
         ))}
+      </View>
+    </>
+  );
 
-        <View style={styles.processHeader}>
-          <Text style={styles.processTitle}>Flujo de Proceso</Text>
-          <Ionicons name="chevron-up" size={20} color={colors.onSurface} />
-        </View>
-
-        <View style={styles.timelineContainer}>
-          <View style={styles.timelineLine} />
-          {activities.slice(0, 6).map((a) => (
-            <View key={`timeline-${a.id}`} style={styles.timelineItem}>
-              <View style={[styles.timelineDot, { backgroundColor: a.status === 'malo' ? colors.error : colors.success }]} />
-              <View style={{ flex: 1, marginLeft: spacing.lg, paddingBottom: spacing.lg }}>
-                <Text style={styles.timelineTitle}>{a.title}</Text>
-                <Text style={styles.timelineMeta}>{formatTime(a.created_at)} • {a.user_name}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      </ScrollView>
-
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <MainHeader />
+      <FlatList
+        data={activities.slice(0, 10)}
+        renderItem={renderActivity}
+        keyExtractor={(item) => `${item.type}-${item.id}`}
+        contentContainerStyle={styles.container}
+        ListHeaderComponent={ListHeader}
+        ListFooterComponent={ListFooter}
+        refreshControl={
+          <RefreshControl
+            refreshing={inspectionsLoading || loadingActivities}
+            onRefresh={refreshAll}
+            tintColor={colors.brandPrimary}
+          />
+        }
+        initialNumToRender={5}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+      />
       <NotificationsPanel visible={showNotifs} onClose={() => setShowNotifs(false)} />
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F8F9FA' },

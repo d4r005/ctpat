@@ -8,6 +8,8 @@ import { useAuth } from '@/src/context/AuthContext';
 import { useInspections } from '@/src/context/InspectionContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
+import MainHeader from '@/src/components/MainHeader';
+
 export default function Perfil() {
   const { user, signOut } = useAuth();
   const { inspections, pendingCount, isOnline, syncQueue } = useInspections();
@@ -25,9 +27,8 @@ export default function Perfil() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']} testID="perfil-screen">
+      <MainHeader title="NAF" subtitle={t('perfil').toUpperCase()} />
       <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
-        <Text style={styles.title}>{t('perfil')}</Text>
-
         <View style={styles.card}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{user?.name?.[0]?.toUpperCase() || 'I'}</Text>

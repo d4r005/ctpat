@@ -99,7 +99,8 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     if (!token) return;
     setLoading(true);
     try {
-      const data = await apiCall<Inspection[]>('/inspections', { token });
+      // Use summary=true to avoid loading heavy base64 photos in lists
+      const data = await apiCall<Inspection[]>('/inspections?summary=true', { token });
       setInspections((prev) => {
         const pending = prev.filter((p) => p._pending);
         const merged = [...pending, ...data];
@@ -112,7 +113,8 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   const refreshAll = useCallback(async () => {
     if (!token || (user?.role !== 'supervisor' && user?.role !== 'admin')) return;
     try {
-      const data = await apiCall<Inspection[]>('/inspections?scope=all', { token });
+      // For the supervisor view, we also use summary=true for better performance
+      const data = await apiCall<Inspection[]>('/inspections?scope=all&summary=true', { token });
       setAllInspections(data);
     } catch {}
   }, [token, user?.role]);

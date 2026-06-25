@@ -9,6 +9,8 @@ import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import ProcessTracker from '@/src/components/ProcessTracker';
 
+import MainHeader from '@/src/components/MainHeader';
+
 interface VehicleRecord {
   id: string;
   status: 'entrada' | 'inspeccionado' | 'salida';
@@ -16,19 +18,20 @@ interface VehicleRecord {
   exit: any;
   inspection_id?: string;
   created_at: string;
+  has_shipping_ticket?: boolean;
 }
 
 export default function Caseta() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { t } = useTranslation();
   const router = useRouter();
   const [records, setRecords] = useState<VehicleRecord[]>([]);
   const [loading, setLoading] = useState(false);
 
   const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-    entrada: { label: t('en_patio'), color: '#F59E0B' },
-    inspeccionado: { label: t('inspeccionado'), color: '#0284C7' },
-    salida: { label: t('salio'), color: '#16A34A' },
+    entrada: { label: t('en_patio'), color: colors.warning },
+    inspeccionado: { label: t('inspeccionado'), color: colors.info },
+    salida: { label: t('salio'), color: colors.success },
   };
 
   const load = useCallback(async () => {
@@ -36,8 +39,11 @@ export default function Caseta() {
     setLoading(true);
     try {
       const data = await apiCall<VehicleRecord[]>('/vehicle-records', { token });
-      setRecords(data);
-    } catch {} finally { setLoading(false); }
+      setRecords(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error(e);
+      setRecords([]);
+    } finally { setLoading(false); }
   }, [token]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -46,144 +52,140 @@ export default function Caseta() {
     return records.filter(r => r.status === 'entrada' && !r.inspection_id);
   }, [records]);
 
-  return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="caseta-screen">
-      <View style={styles.header}>
-        <Text style={styles.title}>{t('caseta')}</Text>
-        <Text style={styles.subtitle}>{t('caseta_subtitle')}</Text>
-      </View>
+  const renderItem = ({ item }: { item: VehicleRecord | 'header' | 'pending' | 'title' }) => {
+    if (item === 'header') {
+      return (
+        <Pressable
+          testID="caseta-new-btn"
+          style={styles.actionCard}
+          onPress={() => router.push('/caseta/nuevo')}
+        >
+          <View style={[styles.iconCircle, { backgroundColor: colors.brandSecondary }]}>
+            <Ionicons name="add" size={28} color="#FFF" />
+          </View>
+          <View style={{ flex: 1, marginLeft: spacing.md }}>
+            <Text style={styles.cardTitleText}>{t('nuevo_registro_entrada')}</Text>
+            <Text style={styles.cardSubText}>{t('vehiculo_llegando')}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color={colors.muted} />
+        </Pressable>
+      );
+    }
 
-      <Pressable
-        testID="caseta-new-btn"
-        style={styles.fab}
-        onPress={() => router.push('/caseta/nuevo')}
-      >
-        <Ionicons name="add-circle" size={32} color={colors.onBrandSecondary} />
-        <View style={{ flex: 1, marginLeft: spacing.md }}>
-          <Text style={styles.fabTitle}>{t('nuevo_registro_entrada')}</Text>
-          <Text style={styles.fabSub}>{t('vehiculo_llegando')}</Text>
-        </View>
-        <Ionicons name="arrow-forward" size={24} color={colors.onBrandSecondary} />
-      </Pressable>
-
-      <FlatList
-        data={records}
-        keyExtractor={(r) => r.id}
-        contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brandPrimary} />}
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        windowSize={5}
-        removeClippedSubviews={Platform.OS === 'android'}
-        ListHeaderComponent={
-          <>
-            {pendingInspections.length > 0 && (
-              <View style={styles.pendingSection}>
-                <Text style={styles.sectionTitle}>UNIDADES PENDIENTES DE INSPECCIÓN</Text>
-                {pendingInspections.map((r: VehicleRecord) => (
-                  <Pressable
-                    key={r.id}
-                    style={styles.pendingCard}
-                    onPress={() => {
-                      const params = new URLSearchParams({
-                        record_id: r.id,
-                        compania: r.entry.compania_transporte || '',
-                        placas: r.entry.placas_unidad || '',
-                        trailer: r.entry.numero_caja || '',
-                        sello: r.entry.sello_entrada !== 'N/A' ? r.entry.sello_entrada : ''
-                      });
-                      router.push(`/(app)/nueva?${params.toString()}`);
-                    }}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.pendingTitle}>{r.entry.placas_unidad}</Text>
-                      <Text style={styles.pendingSub}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
-                    </View>
-                    <View style={styles.pendingBtn}>
-                      <Text style={styles.pendingBtnText}>INSPECCIONAR</Text>
-                    </View>
-                  </Pressable>
-                ))}
-                <View style={{ height: spacing.xl }} />
-              </View>
-            )}
-            {records.length > 0 ? <Text style={styles.sectionTitle}>{t('vehiculos_registrados')}</Text> : null}
-          </>
-        }
-        ListEmptyComponent={
-          loading ? (
-            <ActivityIndicator color={colors.brandPrimary} style={{ marginTop: spacing.xl }} />
-          ) : (
-            <View style={styles.empty}>
-              <Ionicons name="car-outline" size={48} color={colors.muted} />
-              <Text style={styles.emptyText}>{t('sin_vehiculos')}</Text>
-            </View>
-          )
-        }
-        renderItem={({ item }) => {
-          const st = STATUS_LABEL[item.status] || STATUS_LABEL.entrada;
-          const steps = {
-            entry: true,
-            inspection: !!item.inspection_id,
-            shipping: !!item.has_shipping_ticket,
-            exit: item.status === 'salida'
-          };
-
-          return (
+    if (item === 'pending') {
+      if (pendingInspections.length === 0) return null;
+      return (
+        <View style={styles.pendingSection}>
+          <Text style={styles.sectionTitle}>UNIDADES PENDIENTES DE INSPECCIÓN</Text>
+          {pendingInspections.map((r: VehicleRecord) => (
             <Pressable
-              testID={`caseta-record-${item.id}`}
-              style={styles.row}
-              onPress={() => router.push(`/caseta/${item.id}`)}
+              key={r.id}
+              style={[styles.activityCard, { borderLeftWidth: 4, borderLeftColor: colors.warning }]}
+              onPress={() => {
+                const params = new URLSearchParams({
+                  record_id: r.id,
+                  compania: r.entry.compania_transporte || '',
+                  placas: r.entry.placas_unidad || '',
+                  trailer: r.entry.numero_caja || '',
+                  sello: r.entry.sello_entrada !== 'N/A' ? r.entry.sello_entrada : ''
+                });
+                router.push(`/(app)/nueva?${params.toString()}`);
+              }}
             >
               <View style={{ flex: 1 }}>
-                <Text style={styles.rowTitle}>{item.entry.placas_unidad}</Text>
-                <Text style={styles.rowSub}>{item.entry.chofer_nombre} · {item.entry.compania_transporte || '-'}</Text>
-                <View style={{ marginVertical: 4 }}>
-                  <ProcessTracker steps={steps} compact />
-                </View>
-                <Text style={styles.rowDate}>{new Date(item.entry.fecha_entrada || item.created_at).toLocaleString()}</Text>
+                <Text style={styles.cardTitleText}>{r.entry.placas_unidad}</Text>
+                <Text style={styles.cardSubText}>{r.entry.chofer_nombre}</Text>
               </View>
-              <View style={[styles.statusChip, { backgroundColor: st.color }]}>
-                <Text style={styles.statusChipText}>{st.label}</Text>
+              <View style={[styles.miniStatusBadge, { backgroundColor: colors.warning }]}>
+                <Text style={styles.miniStatusText}>INSPECCIONAR</Text>
               </View>
             </Pressable>
-          );
-        }}
+          ))}
+        </View>
+      );
+    }
+
+    if (item === 'title') {
+      return <Text style={styles.sectionTitle}>{t('vehiculos_registrados')}</Text>;
+    }
+
+    const st = STATUS_LABEL[item.status] || STATUS_LABEL.entrada;
+    const steps = {
+      entry: true,
+      inspection: !!item.inspection_id,
+      shipping: !!item.has_shipping_ticket,
+      exit: item.status === 'salida'
+    };
+
+    return (
+      <Pressable
+        testID={`caseta-record-${item.id}`}
+        style={styles.activityCard}
+        onPress={() => router.push(`/caseta/${item.id}`)}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={styles.cardTitleText}>{item.entry.placas_unidad}</Text>
+          <Text style={styles.cardSubText}>{item.entry.chofer_nombre} · {item.entry.compania_transporte || '-'}</Text>
+          <View style={{ marginVertical: 6 }}>
+            <ProcessTracker steps={steps} compact />
+          </View>
+          <Text style={styles.cardMetaText}>{new Date(item.entry.fecha_entrada || item.created_at).toLocaleString()}</Text>
+        </View>
+        <View style={[styles.statusChip, { backgroundColor: st.color }]}>
+          <Text style={styles.statusChipText}>{st.label}</Text>
+        </View>
+      </Pressable>
+    );
+  };
+
+  const listData: any[] = ['header', 'pending', 'title', ...records];
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <MainHeader title="NAF" subtitle={`${t('caseta').toUpperCase()}: REGISTRO DE MOVIMIENTOS`} />
+
+      <FlatList
+        data={listData}
+        renderItem={renderItem}
+        keyExtractor={(item, index) => typeof item === 'string' ? item : item.id}
+        contentContainerStyle={styles.container}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brandPrimary} />}
+        ListEmptyComponent={!loading ? (
+          <View style={styles.emptyBox}>
+            <Ionicons name="car-outline" size={48} color={colors.muted} />
+            <Text style={styles.emptyText}>{t('sin_vehiculos')}</Text>
+          </View>
+        ) : null}
+        initialNumToRender={10}
       />
     </SafeAreaView>
   );
 }
 
+
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.surface },
-  header: { padding: spacing.lg, backgroundColor: colors.surfaceSecondary, borderBottomWidth: 2, borderBottomColor: colors.borderStrong },
-  title: { fontSize: typography.sizes.xxl, fontWeight: '900', color: colors.onSurface },
-  subtitle: { color: colors.muted, marginTop: 2 },
-  fab: { backgroundColor: colors.brandSecondary, padding: spacing.lg, margin: spacing.lg, flexDirection: 'row', alignItems: 'center', minHeight: 80 },
-  fabTitle: { color: colors.onBrandSecondary, fontWeight: '900', fontSize: typography.sizes.base, letterSpacing: 1 },
-  fabSub: { color: colors.onBrandSecondary, fontSize: typography.sizes.sm, opacity: 0.8, marginTop: 2 },
-  sectionTitle: { fontSize: 11, fontWeight: '900', color: colors.onSurfaceTertiary, letterSpacing: 1.5, marginBottom: spacing.md },
-  empty: { alignItems: 'center', padding: spacing.xxxl, marginTop: spacing.xl },
-  emptyText: { fontWeight: '700', color: colors.onSurfaceTertiary, marginTop: spacing.md },
-  row: { backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center' },
-  rowTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface },
-  rowSub: { color: colors.muted, fontSize: typography.sizes.sm, marginTop: 2 },
-  rowMeta: { color: colors.onSurfaceTertiary, fontSize: typography.sizes.sm, marginTop: 2 },
-  rowDate: { color: colors.muted, fontSize: 11, marginTop: 4 },
-  statusChip: { paddingHorizontal: spacing.sm, paddingVertical: 4 },
+  safe: { flex: 1, backgroundColor: '#F8F9FA' },
+  brandHeader: { backgroundColor: colors.brandPrimary, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', paddingBottom: spacing.xl },
+  brandLogo: { color: '#FFF', fontSize: 28, fontWeight: '900', letterSpacing: 2 },
+  brandSubtitle: { color: '#FFF', fontSize: 10, opacity: 0.8, marginTop: 2 },
+  userContainer: { alignItems: 'center' },
+  avatarCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FFF' },
+  avatarText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
+  onlineIndicator: { position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: colors.success, borderWidth: 2, borderColor: colors.brandPrimary },
+  onlineStatusText: { color: colors.success, fontSize: 8, fontWeight: '900', marginTop: 4 },
+  container: { padding: spacing.md },
+  actionCard: { backgroundColor: '#FFF', borderRadius: 12, padding: spacing.md, marginBottom: spacing.lg, flexDirection: 'row', alignItems: 'center', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+  activityCard: { backgroundColor: '#FFF', borderRadius: 12, padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', elevation: 1 },
+  iconCircle: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  cardTitleText: { fontSize: 16, fontWeight: '900', color: colors.onSurface },
+  cardSubText: { fontSize: 13, color: colors.muted, marginTop: 2 },
+  cardMetaText: { fontSize: 10, color: colors.muted, marginTop: 4 },
+  sectionTitle: { fontSize: 11, fontWeight: '900', color: colors.onSurface, letterSpacing: 1, marginBottom: spacing.md, marginLeft: 4, marginTop: spacing.md },
+  statusChip: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: 4 },
   statusChipText: { color: '#FFF', fontWeight: '900', fontSize: 10, letterSpacing: 1 },
+  miniStatusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
+  miniStatusText: { color: '#FFF', fontSize: 9, fontWeight: '900' },
   pendingSection: { marginBottom: spacing.sm },
-  pendingCard: {
-    backgroundColor: colors.brandPrimary,
-    borderWidth: 2,
-    borderColor: colors.borderStrong,
-    padding: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  pendingTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onBrandPrimary },
-  pendingSub: { color: colors.onBrandPrimary, opacity: 0.8, fontSize: typography.sizes.sm },
-  pendingBtn: { backgroundColor: colors.brandSecondary, paddingHorizontal: spacing.md, paddingVertical: 6 },
-  pendingBtnText: { color: colors.onBrandSecondary, fontWeight: '900', fontSize: 10 },
+  emptyBox: { alignItems: 'center', padding: spacing.xxxl, marginTop: spacing.xl },
+  emptyText: { fontWeight: '700', color: colors.muted, marginTop: spacing.md },
 });

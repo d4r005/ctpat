@@ -87,24 +87,37 @@ export default function Supervisor() {
   const handleDownloadPdf = async (recordId: string, plates: string) => {
     setReportLoading(recordId);
     try {
-      const record = allRecords.find(r => r.id === recordId);
+      let record = allRecords.find(r => r.id === recordId);
       const cleanPlates = plates.trim().toUpperCase();
       const normalize = (s: string) => s?.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() || '';
       const normPlates = normalize(cleanPlates);
 
       // Búsqueda mucho más flexible y robusta (incluye normalización de caracteres)
-      const insp = allInspections.find(i =>
+      let insp = allInspections.find(i =>
         (record?.inspection_id && i.id === record.inspection_id) ||
         (normalize(i.placas_unidad) === normPlates) ||
         (normalize(i.numero_trailer) === normPlates)
       );
 
-      const ticket = allTickets.find(t => normalize(t.placas_unidad) === normPlates);
+      let ticket = allTickets.find(t => normalize(t.placas_unidad) === normPlates);
 
       if (!insp) {
           console.log("Debug - Placas buscadas (norm):", normPlates);
           throw new Error('No se encontró inspección digital vinculada. Verifique que las placas coincidan.');
       }
+
+      // Optimización: Cargar datos completos (con fotos) solo cuando se solicita el reporte
+      const [fullInsp, fullRecord, fullTicket] = await Promise.all([
+        apiCall<Inspection>(`/inspections/${insp.id}`, { token }),
+        apiCall<any>(`/vehicle-records/${recordId}`, { token }),
+        ticket ? apiCall<any>(`/shipping-tickets/${ticket.id}`, { token }) : Promise.resolve(null)
+      ]);
+
+      const html = generateConsolidatedReportHtml({
+        inspection: fullInsp || insp,
+        caseta: fullRecord || record,
+        embarque: fullTicket || ticket
+      }, 'es');
 
       const html = generateConsolidatedReportHtml({ inspection: insp, caseta: record, embarque: ticket }, 'es');
 
