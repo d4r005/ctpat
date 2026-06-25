@@ -18,6 +18,17 @@ jobs:
         run: |
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
-          # Extrae la carpeta backend y la sube a la raíz del Space de Hugging Face
+          
+          # Método ultra-rápido: Crear un repo temporal limpio con solo el contenido de backend
+          mkdir hf_sync_dir
+          cp -r backend/* hf_sync_dir/
+          cd hf_sync_dir
+          
+          git init
+          git checkout -b main
+          git add .
+          git commit -m "Sync version: ${{ github.sha }}"
+          
+          # Subida forzada al Space
           git remote add hf https://d4r005:$HF_TOKEN@huggingface.co/spaces/d4r005/SRIUC
-          git push hf `git subtree split --prefix backend main`:main --force
+          git push hf main --force
