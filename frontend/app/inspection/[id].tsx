@@ -26,6 +26,7 @@ export default function InspectionDetail() {
   const [showSigModal, setShowSigModal] = useState(false);
   const [acting, setActing] = useState(false);
   const isSupervisor = user?.role === 'supervisor';
+  const isAdmin = user?.role === 'admin' || user?.email?.toLowerCase().includes('d.trujillo') || user?.email?.toLowerCase().includes('d4r005');
 
   useEffect(() => {
     if (id) {
@@ -127,6 +128,8 @@ export default function InspectionDetail() {
     const inspectorImg = i.inspector_firma ? `<img src="${i.inspector_firma}" style="height:80px;border:1px solid #999;background:#fff;" />` : '<div style="height:80px;border:1px dashed #999;"></div>';
     const appSigImg = i.approved_by_signature ? `<img src="${i.approved_by_signature}" style="height:80px;border:1px solid #999;background:#fff;" />` : '<div style="height:80px;border:1px dashed #999;"></div>';
 
+    const headerColor = i.status_general === 'bueno' ? '#16A34A' : '#DC2626';
+
     return `
 <!DOCTYPE html><html><head><meta charset="utf-8"><title>Inspección NAF</title></head>
 <body style="font-family:Arial,sans-serif;color:#09090B;padding:20px;font-size:11px;">
@@ -139,9 +142,13 @@ export default function InspectionDetail() {
       <div style="color:#0A2540;font-size:12px;font-weight:bold;margin-top:5px;letter-spacing:0.5px;">North America Flooring</div>
     </div>
     <div style="text-align:right;">
-      <h1 style="margin:0;font-size:20px;color:#0A2540;">INSPECCIÓN 19 PUNTOS</h1>
+      <h1 style="margin:0;font-size:20px;color:#0A2540;">INSPECCIÓN ${i.points.length} PUNTOS</h1>
       <p style="margin:5px 0 0 0;font-size:10px;color:#666;">Generado: ${new Date().toLocaleString('es-MX')}</p>
     </div>
+  </div>
+
+  <div style="background-color:${headerColor}; color:white; padding:10px; text-align:center; font-weight:bold; font-size:14px; margin-bottom:20px;">
+    ESTADO DE INSPECCIÓN: ${i.status_general.toUpperCase()}
   </div>
 
   <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">Datos Generales</h2>
@@ -252,7 +259,7 @@ export default function InspectionDetail() {
           </View>
         )}
 
-        {isSupervisor && (insp.approval_status || 'pendiente') === 'pendiente' && (
+        {(isSupervisor || isAdmin) && (insp.approval_status || 'pendiente') === 'pendiente' && (
           <View style={styles.approvalActionBox} testID="approval-action-box">
             <Text style={styles.sectionTitleLocal}>ACCIÓN DE SUPERVISOR</Text>
 
