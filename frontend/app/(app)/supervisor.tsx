@@ -21,8 +21,8 @@ type FilterApprov = 'todos' | 'pendiente' | 'aprobada' | 'rechazada';
 
 export default function Supervisor() {
   const { user, token } = useAuth();
-  const isAdmin = ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
-  const isSupervisor = user?.role === 'supervisor';
+  const isAdmin = user?.role === 'admin' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+  const isSupervisor = user?.role === 'supervisor' || isAdmin;
   const router = useRouter();
   const { allInspections, refreshAll, loading, exportCsvUrl, sendManualReport } = useInspections();
   const { t } = useTranslation();
@@ -198,7 +198,7 @@ export default function Supervisor() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']} testID="supervisor-screen">
       <View style={styles.header}>
-        <Text style={styles.title}>{t('panel_supervisor')}</Text>
+        <Text style={styles.title}>{isAdmin ? 'PANEL MAESTRO (ADMIN)' : t('panel_supervisor')}</Text>
 
         <View style={styles.statsRow}>
           <StatBlock label={t('total')} value={stats.total} />
