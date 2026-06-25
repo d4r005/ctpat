@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Image, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -38,6 +39,17 @@ export default function EmbarqueDetail() {
       await load();
     } catch (e: any) { alert(e.message); }
     finally { setSaving(false); }
+  };
+
+  const pickPhoto = async (field: string) => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
+      const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+      if (!r.canceled && r.assets[0]?.base64) {
+        setForm({ ...form, [field]: `data:image/jpeg;base64,${r.assets[0].base64}` });
+      }
+    } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
   };
 
   if (!t) return <SafeAreaView style={styles.safe}><View style={styles.center}><ActivityIndicator color={colors.brandPrimary} /></View></SafeAreaView>;
@@ -99,6 +111,39 @@ export default function EmbarqueDetail() {
           <Row k="# Pallets" v={t.numero_pallets} />
           <Row k="# Sello" v={t.numero_sello} />
         </Section>
+
+        <Section title="FOTOGRAFÍAS DE CARGA">
+          <View style={styles.photoGrid}>
+            <PhotoBox
+              label="PLANO CARGA"
+              uri={editMode ? form.plano_carga : t.plano_carga}
+              onPress={() => pickPhoto('plano_carga')}
+              onRemove={() => setForm({...form, plano_carga: ''})}
+              isEdit={editMode}
+            />
+            <PhotoBox
+              label="INICIO CARGA"
+              uri={editMode ? form.foto_inicio_carga : t.foto_inicio_carga}
+              onPress={() => pickPhoto('foto_inicio_carga')}
+              onRemove={() => setForm({...form, foto_inicio_carga: ''})}
+              isEdit={editMode}
+            />
+            <PhotoBox
+              label="MEDIA CARGA"
+              uri={editMode ? form.foto_media_carga : t.foto_media_carga}
+              onPress={() => pickPhoto('foto_media_carga')}
+              onRemove={() => setForm({...form, foto_media_carga: ''})}
+              isEdit={editMode}
+            />
+            <PhotoBox
+              label="FINAL CARGA"
+              uri={editMode ? form.foto_final_carga : t.foto_final_carga}
+              onPress={() => pickPhoto('foto_final_carga')}
+              onRemove={() => setForm({...form, foto_final_carga: ''})}
+              isEdit={editMode}
+            />
+          </View>
+        </Section>
         <Section title="OBSERVACIONES Y DAÑOS">
           <Row k="Observaciones" v={t.observaciones || '-'} />
           <Row k="Daño en caja" v={t.daño_caja || '-'} />
@@ -119,6 +164,36 @@ function Section({ title, children }: any) {
 function Row({ k, v }: any) {
   return <View style={styles.row}><Text style={styles.rowK}>{k}</Text><Text style={styles.rowV}>{v || '-'}</Text></View>;
 }
+
+function PhotoBox({ label, uri, onPress, onRemove, isEdit }: any) {
+  return (
+    <View style={styles.photoItem}>
+      <Text style={styles.photoLabel}>{label}</Text>
+      {uri ? (
+        <View>
+          <Image source={{ uri }} style={styles.photoImg} />
+          {isEdit && (
+            <Pressable onPress={onRemove} style={{ position: 'absolute', top: 5, right: 5, backgroundColor: '#FFF', borderRadius: 12 }}>
+              <Ionicons name="close-circle" size={24} color={colors.error} />
+            </Pressable>
+          )}
+        </View>
+      ) : (
+        <Pressable
+          onPress={onPress}
+          style={[styles.photoImg, { borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface }]}
+          disabled={!isEdit}
+        >
+          <Ionicons name="camera" size={32} color={isEdit ? colors.brandPrimary : colors.border} />
+          <Text style={{ fontSize: 9, color: isEdit ? colors.brandPrimary : colors.border, fontWeight: '900', marginTop: 4 }}>
+            {isEdit ? 'AGREGAR FOTO' : 'SIN FOTO'}
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 function EditField({ label, v, on }: any) {
   return (
     <View style={{ marginBottom: spacing.sm }}>
@@ -142,4 +217,8 @@ const styles = StyleSheet.create({
   rowV: { flex: 1, color: colors.onSurface, fontWeight: '700', fontSize: typography.sizes.sm },
   firmaTxt: { color: colors.success, fontWeight: '900', padding: spacing.sm, letterSpacing: 1 },
   editInput: { borderWidth: 1, borderColor: colors.borderStrong, padding: 8, backgroundColor: '#FFF', color: colors.onSurface, fontSize: 14 },
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: spacing.sm, gap: spacing.sm, justifyContent: 'space-between' },
+  photoItem: { width: '48%', marginBottom: spacing.sm },
+  photoLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, marginBottom: 4, letterSpacing: 0.5 },
+  photoImg: { width: '100%', height: 120, resizeMode: 'cover', borderWidth: 2, borderColor: colors.borderStrong },
 });

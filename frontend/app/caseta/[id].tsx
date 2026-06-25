@@ -28,13 +28,15 @@ export default function CasetaDetail() {
   });
   const [saving, setSaving] = useState(false);
 
-  const pickExitPhoto = async () => {
+  const pickPhoto = async (type: 'entry' | 'exit', field: string) => {
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
       const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
       if (!r.canceled && r.assets[0]?.base64) {
-        setExitData({ ...exitData, sello_vvtt_foto: `data:image/jpeg;base64,${r.assets[0].base64}` });
+        const dataUrl = `data:image/jpeg;base64,${r.assets[0].base64}`;
+        if (type === 'entry') setEntryForm({ ...entryForm, [field]: dataUrl });
+        else setExitData({ ...exitData, [field]: dataUrl });
       }
     } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
   };
@@ -53,6 +55,22 @@ export default function CasetaDetail() {
       if (data.exit) setExitData(data.exit);
     } catch (e: any) { alert(e.message); }
     finally { setLoading(false); }
+  };
+
+  const handleRemoveExitPhoto = async (field: string) => {
+    if (!confirm('¿Quitar esta foto del registro de salida?')) return;
+    setSaving(true);
+    try {
+      const updatedExit = { ...exitData, [field]: '' };
+      await apiCall(`/vehicle-records/${id}`, { method: 'PUT', body: { exit: updatedExit }, token });
+      await load();
+    } catch (e: any) { alert(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const confirm = (msg: string) => {
+    if (Platform.OS === 'web') return window.confirm(msg);
+    return true;
   };
 
   const handleUpdateEntry = async () => {
@@ -172,18 +190,27 @@ export default function CasetaDetail() {
 
         <Section title="FOTOGRAFÍAS DE ENTRADA">
           <View style={styles.photoGrid}>
-            <View style={styles.photoItem}>
-              <Text style={styles.photoLabel}>FRENTE UNIDAD</Text>
-              {e.foto_frente_unidad ? <Image source={{ uri: e.foto_frente_unidad }} style={styles.photoImg} /> : <Text style={styles.noPhoto}>Sin foto</Text>}
-            </View>
-            <View style={styles.photoItem}>
-              <Text style={styles.photoLabel}>ATRÁS CAJA</Text>
-              {e.foto_atras_caja ? <Image source={{ uri: e.foto_atras_caja }} style={styles.photoImg} /> : <Text style={styles.noPhoto}>Sin foto</Text>}
-            </View>
-            <View style={styles.photoItem}>
-              <Text style={styles.photoLabel}>ID CHOFER</Text>
-              {e.foto_id_chofer ? <Image source={{ uri: e.foto_id_chofer }} style={styles.photoImg} /> : <Text style={styles.noPhoto}>Sin foto</Text>}
-            </View>
+            <PhotoBox
+              label="FRENTE UNIDAD"
+              uri={entryForm?.foto_frente_unidad}
+              onPress={() => editEntry && pickPhoto('entry', 'foto_frente_unidad')}
+              onRemove={() => editEntry && setEntryForm({...entryForm, foto_frente_unidad: ''})}
+              isEdit={editEntry}
+            />
+            <PhotoBox
+              label="ATRÁS CAJA"
+              uri={entryForm?.foto_atras_caja}
+              onPress={() => editEntry && pickPhoto('entry', 'foto_atras_caja')}
+              onRemove={() => editEntry && setEntryForm({...entryForm, foto_atras_caja: ''})}
+              isEdit={editEntry}
+            />
+            <PhotoBox
+              label="ID CHOFER"
+              uri={entryForm?.foto_id_chofer}
+              onPress={() => editEntry && pickPhoto('entry', 'foto_id_chofer')}
+              onRemove={() => editEntry && setEntryForm({...entryForm, foto_id_chofer: ''})}
+              isEdit={editEntry}
+            />
           </View>
         </Section>
 
@@ -213,11 +240,15 @@ export default function CasetaDetail() {
             <Row label="# Caja salida" value={x.numero_caja_salida || '-'} />
             <Row label="Pallets / Cajas / Bultos" value={`${x.pallets || 0} / ${x.cajas || 0} / ${x.bultos || 0}`} />
             <Row label="Sello VVTT" value={(x.sello_vvtt_estado || '-').toUpperCase()} />
-            {x.sello_vvtt_foto ? (
-              <View style={{ padding: spacing.sm, alignItems: 'center' }}>
-                <Image source={{ uri: x.sello_vvtt_foto }} style={{ width: '100%', height: 200, resizeMode: 'contain', borderWidth: 1, borderColor: colors.border }} />
-              </View>
-            ) : null}
+            <View style={styles.photoGrid}>
+              <PhotoBox
+                label="SELLO VVTT"
+                uri={x.sello_vvtt_foto}
+                onPress={() => isAdmin && pickPhoto('exit', 'sello_vvtt_foto')}
+                onRemove={() => isAdmin && handleRemoveExitPhoto('sello_vvtt_foto')}
+                isEdit={isAdmin}
+              />
+            </View>
             <Row label="Guardia salida" value={x.guardia_salida_nombre} />
           </Section>
         ) : (
@@ -307,6 +338,35 @@ function Row({ label, value }: { label: string; value: any }) {
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
       <Text style={styles.rowValue}>{value || '-'}</Text>
+    </View>
+  );
+}
+
+function PhotoBox({ label, uri, onPress, onRemove, isEdit }: any) {
+  return (
+    <View style={styles.photoItem}>
+      <Text style={styles.photoLabel}>{label}</Text>
+      {uri ? (
+        <View>
+          <Image source={{ uri }} style={styles.photoImg} />
+          {isEdit && (
+            <Pressable onPress={onRemove} style={{ position: 'absolute', top: 5, right: 5, backgroundColor: '#FFF', borderRadius: 12 }}>
+              <Ionicons name="close-circle" size={24} color={colors.error} />
+            </Pressable>
+          )}
+        </View>
+      ) : (
+        <Pressable
+          onPress={onPress}
+          style={[styles.photoImg, { borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface }]}
+          disabled={!isEdit}
+        >
+          <Ionicons name="camera" size={32} color={isEdit ? colors.brandPrimary : colors.border} />
+          <Text style={{ fontSize: 9, color: isEdit ? colors.brandPrimary : colors.border, fontWeight: '900', marginTop: 4 }}>
+            {isEdit ? 'AGREGAR FOTO' : 'SIN FOTO'}
+          </Text>
+        </Pressable>
+      )}
     </View>
   );
 }

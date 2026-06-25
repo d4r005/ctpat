@@ -122,16 +122,41 @@ export default function Supervisor() {
     }
   };
 
+  const [linkingMode, setLinkingMode] = useState(false);
+
+  const orphanInspections = useMemo(() => {
+    return allInspections.filter(i => !allRecords.some(r => r.inspection_id === i.id));
+  }, [allInspections, allRecords]);
+
+  const orphanRecords = useMemo(() => {
+    return allRecords.filter(r => !r.inspection_id);
+  }, [allRecords]);
+
+  const handleLink = async (recordId: string, inspectionId: string) => {
+    try {
+      await apiCall(`/vehicle-records/${recordId}/link-inspection?inspection_id=${inspectionId}`, { method: 'PATCH', token });
+      alert('Vínculo creado exitosamente');
+      fetchAllData();
+    } catch (e: any) { alert(e.message); }
+  };
+
   const filteredData = useMemo(() => {
     const q = query.toLowerCase().trim();
     if (activeTab === 'caseta') {
       return allRecords.filter(r => r.entry.placas_unidad.toLowerCase().includes(q) || r.entry.chofer_nombre.toLowerCase().includes(q));
     } else if (activeTab === 'inspeccion') {
-      return allInspections.filter(i => i.placas_unidad.toLowerCase().includes(q) || i.compania_transportista.toLowerCase().includes(q));
+      // Unimos inspecciones reales + registros de caseta pendientes de inspección
+      const pendingRecords = orphanRecords.map(r => ({ ...r, _is_pending_insp: true }));
+      const combined = [...pendingRecords, ...allInspections];
+      return combined.filter(i => {
+        const plates = i._is_pending_insp ? i.entry.placas_unidad : i.placas_unidad;
+        const name = i._is_pending_insp ? i.entry.chofer_nombre : i.inspector_nombre;
+        return plates.toLowerCase().includes(q) || name.toLowerCase().includes(q);
+      });
     } else {
       return allTickets.filter(t => t.placas_unidad.toLowerCase().includes(q) || t.cliente.toLowerCase().includes(q));
     }
-  }, [activeTab, query, allRecords, allInspections, allTickets]);
+  }, [activeTab, query, allRecords, allInspections, allTickets, orphanRecords]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']} testID="supervisor-screen">
@@ -157,8 +182,37 @@ export default function Supervisor() {
               <Ionicons name="exit" size={14} color={colors.success} />
               <Text style={[styles.masterBtnText, { color: colors.success }]}>{t('registrador_salida')}</Text>
             </Pressable>
+            <Pressable style={[styles.masterBtn, { backgroundColor: colors.info + '22' }]} onPress={() => setLinkingMode(!linkingMode)}>
+              <Ionicons name="link" size={14} color={colors.info} />
+              <Text style={[styles.masterBtnText, { color: colors.info }]}>{t('vincular_registros')}</Text>
+            </Pressable>
           </View>
         </View>
+
+        {linkingMode && (
+          <View style={[styles.masterPanel, { backgroundColor: colors.surfaceTertiary, borderTopWidth: 0, marginTop: -spacing.md }]}>
+            <Text style={[styles.masterTitle, { color: colors.onSurface }]}>HERRAMIENTA DE VINCULACIÓN (HUÉRFANOS)</Text>
+            {orphanRecords.length === 0 ? (
+              <Text style={{ fontSize: 10, color: colors.muted }}>No hay registros de caseta sin inspección vinculada.</Text>
+            ) : (
+              orphanRecords.map(r => {
+                const match = orphanInspections.find(i => i.placas_unidad === r.entry.placas_unidad);
+                return (
+                  <View key={r.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                    <Text style={{ fontSize: 10, fontWeight: '700' }}>{r.entry.placas_unidad} ({r.entry.chofer_nombre})</Text>
+                    {match ? (
+                      <Pressable style={{ backgroundColor: colors.success, paddingHorizontal: 8, paddingVertical: 2 }} onPress={() => handleLink(r.id, match.id)}>
+                        <Text style={{ fontSize: 9, color: '#FFF', fontWeight: '900' }}>VINCULAR CON INSP: {match.id.slice(0,5)}</Text>
+                      </Pressable>
+                    ) : (
+                      <Text style={{ fontSize: 9, color: colors.error }}>SIN INSP. ENCONTRADA</Text>
+                    )}
+                  </View>
+                );
+              })
+            )}
+          </View>
+        )}
 
         <View style={styles.tabRow}>
           <TabItem label="CASETA" active={activeTab === 'caseta'} onPress={() => setActiveTab('caseta')} icon="business" />
@@ -189,17 +243,55 @@ export default function Supervisor() {
               onEdit={() => router.push(`/caseta/${item.id}`)}
               onPdf={() => handleDownloadPdf(item.id, item.entry.placas_unidad)}
               onEmail={() => handleSendEmail(item.id)}
+              onInspect={() => {
+                const params = new URLSearchParams({
+                  record_id: item.id,
+                  compania: item.entry.compania_transporte || '',
+                  placas: item.entry.placas_unidad || '',
+                  trailer: item.entry.numero_caja || '',
+                  sello: item.entry.sello_entrada || '',
+                });
+                router.push(`/(app)/nueva?${params.toString()}`);
+              }}
               loadingPdf={reportLoading === item.id}
               loadingEmail={emailLoading === item.id}
             />
           );
-          if (activeTab === 'inspeccion') return (
-            <InspectionRow
-              item={item}
-              onEdit={() => router.push(`/inspection/${item.id}?edit=true`)}
-              t={t}
-            />
-          );
+          if (activeTab === 'inspeccion') {
+            if (item._is_pending_insp) {
+              return (
+                <View style={[styles.row, { borderLeftWidth: 4, borderLeftColor: colors.warning }]}>
+                   <View style={{ flex: 1 }}>
+                    <Text style={styles.rowTitle}>{item.entry.placas_unidad} · {item.entry.chofer_nombre}</Text>
+                    <Text style={[styles.rowSub, { color: colors.warning, fontWeight: '700' }]}>⚠️ INSPECCIÓN PENDIENTE</Text>
+                    <Pressable
+                      onPress={() => {
+                        const params = new URLSearchParams({
+                          record_id: item.id,
+                          compania: item.entry.compania_transporte || '',
+                          placas: item.entry.placas_unidad || '',
+                          trailer: item.entry.numero_caja || '',
+                          sello: item.entry.sello_entrada || '',
+                        });
+                        router.push(`/(app)/nueva?${params.toString()}`);
+                      }}
+                      style={[styles.actionBtn, { marginTop: 8, backgroundColor: colors.warning + '22', padding: 4 }]}
+                    >
+                      <Ionicons name="clipboard-outline" size={16} color={colors.warning} />
+                      <Text style={[styles.actionText, { color: colors.warning }]}>REALIZAR INSPECCIÓN AHORA</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            }
+            return (
+              <InspectionRow
+                item={item}
+                onEdit={() => router.push(`/inspection/${item.id}?edit=true`)}
+                t={t}
+              />
+            );
+          }
           return (
             <TicketRow
               item={item}
@@ -222,9 +314,10 @@ function TabItem({ label, active, onPress, icon }: any) {
   );
 }
 
-function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail }: any) {
+function RecordRow({ item, onEdit, onPdf, onEmail, onInspect, loadingPdf, loadingEmail }: any) {
   const e = item.entry;
   const statusColor = item.status === 'salida' ? colors.success : item.status === 'inspeccionado' ? colors.info : colors.warning;
+  const needsInsp = !item.inspection_id;
 
   return (
     <View style={styles.row}>
@@ -236,6 +329,12 @@ function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail }: a
             <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
             <Text style={styles.actionText}>EDITAR</Text>
           </Pressable>
+          {needsInsp && (
+            <Pressable onPress={onInspect} style={[styles.actionBtn, { backgroundColor: colors.warning + '22', borderRadius: 4, paddingHorizontal: 4 }]}>
+              <Ionicons name="clipboard-outline" size={16} color={colors.warning} />
+              <Text style={[styles.actionText, { color: colors.warning }]}>INSPECCIONAR</Text>
+            </Pressable>
+          )}
           <Pressable onPress={onPdf} style={styles.actionBtn} disabled={loadingPdf}>
             {loadingPdf ? <ActivityIndicator size={14} color={colors.brandPrimary} /> : <Ionicons name="document-outline" size={16} color={colors.brandPrimary} />}
             <Text style={styles.actionText}>PDF</Text>

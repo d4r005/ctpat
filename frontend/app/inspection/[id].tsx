@@ -5,8 +5,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as ImagePicker from 'expo-image-picker';
 import Signature from 'react-native-signature-canvas';
-import { useInspections, Inspection } from '@/src/context/InspectionContext';
+import { useInspections, Inspection, InspectionPoint } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
@@ -44,6 +45,25 @@ export default function InspectionDetail() {
       alert('Cambios guardados correctamente');
     } catch (e: any) { alert(e.message); }
     finally { setActing(false); }
+  };
+
+  const pickPointPhoto = async (idx: number) => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
+      const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+      if (!r.canceled && r.assets[0]?.base64) {
+        const newPoints = [...(editData.points || insp?.points || [])];
+        newPoints[idx] = { ...newPoints[idx], photo: `data:image/jpeg;base64,${r.assets[0].base64}` };
+        setEditData({ ...editData, points: newPoints });
+      }
+    } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
+  };
+
+  const removePointPhoto = (idx: number) => {
+    const newPoints = [...(editData.points || insp?.points || [])];
+    newPoints[idx] = { ...newPoints[idx], photo: '' };
+    setEditData({ ...editData, points: newPoints });
   };
 
   const handleApprove = async () => {
@@ -284,16 +304,34 @@ export default function InspectionDetail() {
           <Row label="Fecha y Hora" value={new Date(insp.fecha_hora).toLocaleString('es-MX')} />
         </Section>
 
-        <Section title="19 PUNTOS DE INSPECCIÓN">
-          {insp.points.map((p) => (
+        <Section title="PUNTOS DE INSPECCIÓN">
+          {(isEditing ? editData.points : insp.points)?.map((p, idx) => (
             <View key={p.number} style={styles.pointRow} testID={`detail-point-${p.number}`}>
               <Text style={styles.pointNum}>{p.number}.</Text>
               <View style={{ flex: 1 }}>
                 <Text style={styles.pointName}>{p.name}</Text>
                 {p.comentarios ? <Text style={styles.pointComment}>{p.comentarios}</Text> : null}
-                {p.photo ? (
-                  <Image source={{ uri: p.photo }} style={styles.pointPhoto} testID={`detail-point-${p.number}-photo`} />
-                ) : null}
+
+                <View style={{ marginTop: 8 }}>
+                  {p.photo ? (
+                    <View>
+                      <Image source={{ uri: p.photo }} style={styles.pointPhoto} testID={`detail-point-${p.number}-photo`} />
+                      {isEditing && (
+                        <Pressable onPress={() => removePointPhoto(idx)} style={{ position: 'absolute', top: 5, right: 5, backgroundColor: '#FFF', borderRadius: 12 }}>
+                          <Ionicons name="close-circle" size={24} color={colors.error} />
+                        </Pressable>
+                      )}
+                    </View>
+                  ) : isEditing ? (
+                    <Pressable
+                      onPress={() => pickPointPhoto(idx)}
+                      style={[styles.pointPhoto, { borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface }]}
+                    >
+                      <Ionicons name="camera" size={32} color={colors.brandPrimary} />
+                      <Text style={{ fontSize: 10, color: colors.brandPrimary, fontWeight: '900', marginTop: 4 }}>AGREGAR FOTO</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
               </View>
               <View style={[styles.pointChip, { backgroundColor: p.estado === 'bueno' ? colors.success : p.estado === 'malo' ? colors.error : colors.muted }]}>
                 <Text style={styles.pointChipText}>{(p.estado || 'NA').toUpperCase()}</Text>
