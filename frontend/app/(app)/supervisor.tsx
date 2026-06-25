@@ -22,6 +22,7 @@ type FilterApprov = 'todos' | 'pendiente' | 'aprobada' | 'rechazada';
 export default function Supervisor() {
   const { user, token } = useAuth();
   const isAdmin = ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+  const isSupervisor = user?.role === 'supervisor';
   const router = useRouter();
   const { allInspections, refreshAll, loading, exportCsvUrl, sendManualReport } = useInspections();
   const { t } = useTranslation();
@@ -35,7 +36,7 @@ export default function Supervisor() {
   const [allTickets, setAllTickets] = useState<any[]>([]);
 
   const fetchExtraData = async () => {
-    if (!token || !isAdmin) return;
+    if (!token || !isSupervisor) return;
     try {
       const [r, t] = await Promise.all([
         apiCall<any[]>('/vehicle-records', { token }),
@@ -47,8 +48,8 @@ export default function Supervisor() {
   };
 
   useEffect(() => {
-    if (isAdmin) fetchExtraData();
-  }, [token, isAdmin]);
+    if (isSupervisor) fetchExtraData();
+  }, [token, isSupervisor]);
 
   useEffect(() => {
     (async () => {
@@ -216,13 +217,13 @@ export default function Supervisor() {
             <Text style={styles.exportText}>{t('csv_detallado')}</Text>
           </Pressable>
 
-          {isAdmin && (
+          {isSupervisor && (
             <>
-              <Pressable testID="supervisor-analitica-btn" style={[styles.exportBtn, { backgroundColor: colors.success }]} onPress={() => router.push('/(app)/analitica')}>
+              <Pressable testID="supervisor-analitica-btn" style={[styles.exportBtn, { backgroundColor: colors.success }]} onPress={() => router.push('/analitica')}>
                 <Ionicons name="stats-chart" size={16} color={colors.onSuccess} />
                 <Text style={[styles.exportText, { color: colors.onSuccess }]}>{t('kpis')}</Text>
               </Pressable>
-              <Pressable testID="supervisor-users-btn" style={[styles.exportBtn, { backgroundColor: colors.brandSecondary }]} onPress={() => router.push('/(app)/usuarios')}>
+              <Pressable testID="supervisor-users-btn" style={[styles.exportBtn, { backgroundColor: colors.brandSecondary }]} onPress={() => router.push('/usuarios')}>
                 <Ionicons name="people" size={16} color={colors.onBrandSecondary} />
                 <Text style={[styles.exportText, { color: colors.onBrandSecondary }]}>{t('usuarios_caps')}</Text>
               </Pressable>
@@ -230,19 +231,19 @@ export default function Supervisor() {
           )}
         </View>
 
-        {isAdmin && (
+        {isSupervisor && (
           <View style={styles.masterPanel}>
-            <Text style={styles.masterTitle}>PANEL MAESTRO (ADMIN) — GENERAR NUEVOS</Text>
+            <Text style={styles.masterTitle}>PANEL MAESTRO (ADMIN)</Text>
             <View style={styles.masterActions}>
               <Pressable style={styles.masterBtn} onPress={() => router.push('/caseta/nuevo')}>
                 <Ionicons name="car" size={14} color={colors.onSurface} />
                 <Text style={styles.masterBtnText}>NUEVA ENTRADA</Text>
               </Pressable>
-              <Pressable style={styles.masterBtn} onPress={() => router.push('/(app)/nueva')}>
+              <Pressable style={styles.masterBtn} onPress={() => router.push('/nueva')}>
                 <Ionicons name="clipboard" size={14} color={colors.onSurface} />
                 <Text style={styles.masterBtnText}>INSPECCIÓN 19P</Text>
               </Pressable>
-              <Pressable style={styles.masterBtn} onPress={() => router.push('/(app)/nueva?type=9_puntos_contenedor')}>
+              <Pressable style={styles.masterBtn} onPress={() => router.push('/nueva?type=9_puntos_contenedor')}>
                 <Ionicons name="cube" size={14} color={colors.onSurface} />
                 <Text style={styles.masterBtnText}>INSPECCIÓN 9P</Text>
               </Pressable>
@@ -250,7 +251,7 @@ export default function Supervisor() {
                 <Ionicons name="document-text" size={14} color={colors.onSurface} />
                 <Text style={styles.masterBtnText}>TICKET EMBARQUE</Text>
               </Pressable>
-              <Pressable style={[styles.masterBtn, { backgroundColor: colors.success + '22' }]} onPress={() => router.push('/(app)/caseta')}>
+              <Pressable style={[styles.masterBtn, { backgroundColor: colors.success + '22' }]} onPress={() => router.push('/caseta')}>
                 <Ionicons name="exit" size={14} color={colors.success} />
                 <Text style={[styles.masterBtnText, { color: colors.success }]}>REGISTRAR SALIDA</Text>
               </Pressable>
@@ -363,7 +364,7 @@ export default function Supervisor() {
                 </View>
               </View>
               <View style={{ alignItems: 'flex-end', gap: 8 }}>
-                {isAdmin && (
+                {isSupervisor && (
                   <View style={{ flexDirection: 'row', gap: 10 }}>
                     {/* Botón para editar Entrada/Salida relacionada */}
                     {allRecords.find(r => r.inspection_id === item.id || r.entry.placas_unidad === item.placas_unidad) && (
@@ -373,7 +374,6 @@ export default function Supervisor() {
                           if (r) router.push(`/caseta/${r.id}`);
                         }}
                         style={{ padding: 4 }}
-                        title="Editar Caseta"
                       >
                         <Ionicons name="car-sport-outline" size={20} color={colors.info} />
                       </Pressable>
@@ -384,11 +384,9 @@ export default function Supervisor() {
                       <Pressable
                         onPress={() => {
                           const t = allTickets.find(tick => tick.placas_unidad === item.placas_unidad);
-                          // Asumiendo que hay una ruta para editar ticket, si no existe la creamos o mandamos al detalle
                           if (t) router.push(`/embarque/${t.id}`);
                         }}
                         style={{ padding: 4 }}
-                        title="Editar Embarque"
                       >
                         <Ionicons name="cube-outline" size={20} color={colors.brandSecondary} />
                       </Pressable>
@@ -397,7 +395,6 @@ export default function Supervisor() {
                     <Pressable
                       onPress={() => router.push(`/inspection/${item.id}?edit=true`)}
                       style={{ padding: 4 }}
-                      title="Editar Inspección"
                     >
                       <Ionicons name="create-outline" size={20} color={colors.brandPrimary} />
                     </Pressable>
