@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Pressable, TextInput, RefreshControl, Platform,
-  useWindowDimensions,
+  useWindowDimensions, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -49,6 +49,8 @@ export default function Supervisor() {
   useEffect(() => {
     if (isAdmin) fetchExtraData();
   }, [token, isAdmin]);
+
+  useEffect(() => {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem('naf_supervisor_filter');
@@ -62,6 +64,9 @@ export default function Supervisor() {
       } catch {}
     })();
   }, []);
+
+  const { width } = useWindowDimensions();
+  const isWide = width >= 900;
 
   useEffect(() => {
     AsyncStorage.setItem('naf_supervisor_filter', JSON.stringify({ query, filter, dateFrom, dateTo }));
