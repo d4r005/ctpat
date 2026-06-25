@@ -1,0 +1,23 @@
+name: Sync Backend to Hugging Face
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Push to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          # Extrae la carpeta backend y la sube a la raíz del Space de Hugging Face
+          git remote add hf https://d4r005:$HF_TOKEN@huggingface.co/spaces/d4r005/SRIUC
+          git push hf `git subtree split --prefix backend main`:main --force
