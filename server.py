@@ -729,7 +729,7 @@ async def update_inspection(
         "compania_transportista", "placas_unidad", "numero_trailer",
         "numero_precinto", "sello_alta_seguridad", "sello_verificado",
         "actividad_sospechosa", "inspector_nombre", "verificador_nombre",
-        "points", "status_general"
+        "points", "status_general", "inspection_type"
     ]}
 
     if "points" in update_data:
