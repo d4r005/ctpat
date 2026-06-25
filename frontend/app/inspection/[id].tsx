@@ -10,6 +10,7 @@ import Signature from '@/src/components/SignaturePad';
 import { useInspections, Inspection, InspectionPoint } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
+import { getInspectionPoints } from '@/src/constants/inspectionPoints';
 
 export default function InspectionDetail() {
   const { id, edit } = useLocalSearchParams<{ id: string, edit?: string }>();
@@ -172,7 +173,7 @@ export default function InspectionDetail() {
     <tr><td style="padding:6px;border:1px solid #999;"><b>Estado General</b></td><td style="padding:6px;border:1px solid #999;background:${i.status_general === 'bueno' ? '#dcfce7' : '#fee2e2'};font-weight:bold;">${i.status_general.toUpperCase()}</td></tr>
   </table>
 
-  <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">Examen de Inspección — 19 Puntos</h2>
+  <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">Examen de Inspección — ${i.points.length} Puntos</h2>
   <table style="width:100%;border-collapse:collapse;">
     <tr style="background:#E4E4E7;font-weight:bold;">
       <td style="padding:6px;border:1px solid #999;width:5%;">#</td>
@@ -315,6 +316,25 @@ export default function InspectionDetail() {
         )}
 
         <Section title="DATOS GENERALES">
+          {isAdmin && isEditing && (
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Tipo Inspección</Text>
+              <Pressable
+                style={{ flex: 1, backgroundColor: colors.brandTertiary, padding: 8, borderRadius: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.brandPrimary }}
+                onPress={() => {
+                  const currentType = editData.inspection_type || insp.inspection_type;
+                  const nextType = currentType === '9_puntos_contenedor' ? '19_puntos' : '9_puntos_contenedor';
+                  const nextPoints = getInspectionPoints(nextType).map(p => ({ ...p, estado: 'bueno', comentarios: '', photo: '' }));
+                  setEditData({ ...editData, inspection_type: nextType, points: nextPoints });
+                }}
+              >
+                <Text style={{ color: colors.brandPrimary, fontWeight: '900', fontSize: 13 }}>
+                  {(editData.inspection_type || insp.inspection_type).replace('_', ' ').toUpperCase()}
+                </Text>
+                <Ionicons name="swap-horizontal" size={18} color={colors.brandPrimary} />
+              </Pressable>
+            </View>
+          )}
           <Row label="Compañía" value={insp.compania_transportista} isEdit={isEditing} onEdit={(v) => setEditData({...editData, compania_transportista: v})} />
           <Row label="Placas" value={insp.placas_unidad} isEdit={isEditing} onEdit={(v) => setEditData({...editData, placas_unidad: v})} />
           <Row label="Tráiler" value={insp.numero_trailer} isEdit={isEditing} onEdit={(v) => setEditData({...editData, numero_trailer: v})} />
