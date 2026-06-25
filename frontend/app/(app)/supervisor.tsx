@@ -184,7 +184,7 @@ export default function Supervisor() {
     }
   };
 
-  if (user?.role !== 'supervisor') {
+  if (!isSupervisor) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
@@ -198,7 +198,7 @@ export default function Supervisor() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']} testID="supervisor-screen">
       <View style={styles.header}>
-        <Text style={styles.title}>{isAdmin ? 'PANEL MAESTRO (ADMIN)' : t('panel_supervisor')}</Text>
+        <Text style={styles.title}>{isAdmin ? t('panel_maestro') : t('panel_supervisor')}</Text>
 
         <View style={styles.statsRow}>
           <StatBlock label={t('total')} value={stats.total} />
