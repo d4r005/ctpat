@@ -1509,15 +1509,6 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
         </body>
     </html>
     """
-            </div>
-
-            <div style="margin-top: 40px; padding: 20px; background-color: #f9fafb; text-align: center; font-size: 12px; color: #666;">
-                <p>Este es un reporte automático generado por el Sistema SRIUC.</p>
-                <p>&copy; {datetime.now().year} Branco Industries - Todos los derechos reservados.</p>
-            </div>
-        </body>
-    </html>
-    """
 
     try:
         success = await send_automatic_report(subject, recipient, html)
