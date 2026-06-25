@@ -1286,6 +1286,35 @@ async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[
     return VehicleRecord(**doc)
 
 
+def compress_image_base64(base64_str: str, max_size=(600, 600)) -> str:
+    """Comprime y redimensiona una imagen en base64 para que el correo no sea pesado."""
+    try:
+        if not base64_str or "data:image" not in base64_str:
+            return base64_str
+
+        # Extraer el contenido base64
+        header, encoded = base64_str.split(",", 1)
+        image_data = base64.b64decode(encoded)
+        image = Image.open(io.BytesIO(image_data))
+
+        # Convertir a RGB si es necesario (para evitar problemas con PNG transparentes en JPEG)
+        if image.mode in ("RGBA", "P"):
+            image = image.convert("RGB")
+
+        # Redimensionar manteniendo proporción
+        image.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+        # Guardar comprimido
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG", quality=60, optimize=True)
+
+        # Convertir de nuevo a base64
+        compressed_base64 = base64.b64encode(buffer.getvalue()).decode()
+        return f"data:image/jpeg;base64,{compressed_base64}"
+    except Exception as e:
+        logger.error(f"Error comprimiendo imagen: {e}")
+        return base64_str
+
 async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[str] = None):
     logger.info(f"Generando reporte consolidado para ID: {rec_id}")
     record = await db.vehicle_records.find_one({"id": rec_id})
