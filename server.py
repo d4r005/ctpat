@@ -1400,57 +1400,76 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
     <html>
         <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; line-height: 1.6; max-width: 800px; margin: auto; border: 1px solid #eee; padding: 20px;">
             <div style="background-color: {color_header}; padding: 20px; text-align: center; color: white;">
-                <h1 style="margin: 0;">Reporte Consolidado de Unidad</h1>
-                <p style="margin: 5px 0 0 0; opacity: 0.8;">Sistema de Registro e Inspección (SRIUC)</p>
-                {f'<p style="background: white; color: {color_header}; display: inline-block; padding: 2px 10px; font-weight: bold; margin-top: 10px;">¡ALERTA: FALLA DETECTADA!</p>' if inspection and inspection.get("status_general") == "malo" else ''}
+                <h1 style="margin: 0;">Reporte Consolidado de Unidad / 综合报告</h1>
+                <p style="margin: 5px 0 0 0; opacity: 0.8;">Sistema de Registro e Inspección (SRIUC) / 注册、检查和运输系统</p>
+                {f'<p style="background: white; color: {color_header}; display: inline-block; padding: 2px 10px; font-weight: bold; margin-top: 10px;">¡ALERTA: FALLA DETECTADA! / 警报：检测到故障！</p>' if inspection and inspection.get("status_general") == "malo" else ''}
             </div>
 
             <div style="padding: 20px;">
-                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px;">1. Movimiento de Caseta</h2>
+                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px;">1. Movimiento de Caseta / 门卫室记录</h2>
                 <table style="width: 100%; border-collapse: collapse;">
-                    <tr><td style="padding: 8px; font-weight: bold; width: 30%;">Placas Unidad:</td><td style="padding: 8px;">{record['entry']['placas_unidad']}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Conductor:</td><td style="padding: 8px;">{record['entry']['chofer_nombre']}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Compañía:</td><td style="padding: 8px;">{record['entry'].get('compania_transporte', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Fecha Entrada:</td><td style="padding: 8px;">{record['entry'].get('fecha_entrada', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold; color: #16A34A;">Fecha Salida:</td><td style="padding: 8px; color: #16A34A; font-weight: bold;">{record['exit'].get('fecha_salida', 'N/A') if record.get('exit') else 'No registrada (En Patio)'}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold; width: 40%;">Placas Unidad / 车牌号:</td><td style="padding: 8px;">{record['entry']['placas_unidad']}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Conductor / 司机姓名:</td><td style="padding: 8px;">{record['entry']['chofer_nombre']}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Compañía / 运输公司:</td><td style="padding: 8px;">{record['entry'].get('compania_transporte', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Fecha Entrada / 进场时间:</td><td style="padding: 8px;">{record['entry'].get('fecha_entrada', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold; color: #16A34A;">Fecha Salida / 出场时间:</td><td style="padding: 8px; color: #16A34A; font-weight: bold;">{record['exit'].get('fecha_salida', 'N/A') if record.get('exit') else 'No registrada (En Patio) / 未登记（在场）'}</td></tr>
                 </table>
+                <div style="margin-top: 15px; display: flex; gap: 20px;">
+                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA CONDUCTOR (ENTRADA) / 司机签字 (入场):</p><img src="{record["entry"]["firma_operador"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if record["entry"].get("firma_operador") else ''}
+                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA GUARDIA (SALIDA) / 警卫签字 (出场):</p><img src="{record["exit"]["firma_guardia"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if record.get("exit") and record["exit"].get("firma_guardia") else ''}
+                </div>
                 <div style="margin-top: 10px;">{caseta_photos_html}</div>
 
-                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">2. Inspección C-TPAT ({inspection.get('inspection_type', 'N/A').replace('_', ' ').upper()})</h2>
+                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">2. Inspección C-TPAT / C-TPAT 检查 ({inspection.get('inspection_type', 'N/A').replace('_', ' ').upper()})</h2>
                 {f'''
                 <div style="background-color: {"#f0fdf4" if inspection.get("status_general") == "bueno" else "#fef2f2"}; padding: 15px; border-radius: 5px; border-left: 5px solid {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"}; margin-bottom: 10px;">
-                    <p style="margin: 0;">Estado General: <b style="color: {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">{inspection.get('status_general', 'N/A').upper()}</b></p>
-                    <p style="margin: 5px 0 0 0;">Inspector: {inspection.get('inspector_nombre', 'N/A')}</p>
-                    <p style="margin: 5px 0 0 0;">Estado Aprobación: <b>{inspection.get('approval_status', 'pendiente').upper()}</b></p>
-                    <p style="margin: 5px 0 0 0;">Autorizado por: {inspection.get('approved_by_name', 'N/A')}</p>
-                    {f'<div style="margin-top:10px;"><p style="font-size:8px; margin:0; color:#666;">FIRMA AUTORIZACIÓN:</p><img src="{inspection["approved_by_signature"]}" style="height:70px; border-bottom:1px solid #0A2540;" /></div>' if inspection.get("approved_by_signature") else ''}
+                    <p style="margin: 0;">Estado General / 总体状态: <b style="color: {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">{inspection.get('status_general', 'N/A').upper()} / {"良好" if inspection.get("status_general") == "bueno" else "故障"}</b></p>
+                    <p style="margin: 5px 0 0 0;">Inspector / 检查员: {inspection.get('inspector_nombre', 'N/A')}</p>
+                    <p style="margin: 5px 0 0 0;">Estado Aprobación / 批准状态: <b>{inspection.get('approval_status', 'pendiente').upper()} / {"已批准" if inspection.get('approval_status') == "aprobada" else "已拒绝" if inspection.get('approval_status') == "rechazada" else "待定"}</b></p>
+                    <p style="margin: 5px 0 0 0;">Autorizado por / 授权人: {inspection.get('approved_by_name', 'N/A')}</p>
+                    <div style="margin-top: 15px; display: flex; gap: 20px;">
+                        {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA INSPECTOR / 检查员签字:</p><img src="{inspection["inspector_firma"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if inspection.get("inspector_firma") else ''}
+                        {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA AUTORIZACIÓN / 授权签字:</p><img src="{inspection["approved_by_signature"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if inspection.get("approved_by_signature") else ''}
+                    </div>
                 </div>
                 <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
                     <tr style="background: #f1f5f9; font-weight: bold;">
                         <td style="padding: 5px; border: 1px solid #ddd; width: 30px;">#</td>
-                        <td style="padding: 5px; border: 1px solid #ddd;">Punto</td>
-                        <td style="padding: 5px; border: 1px solid #ddd; width: 80px;">Estado</td>
-                        <td style="padding: 5px; border: 1px solid #ddd;">Comentarios</td>
+                        <td style="padding: 5px; border: 1px solid #ddd;">Punto / 检查点</td>
+                        <td style="padding: 5px; border: 1px solid #ddd; width: 100px;">Estado / 状态</td>
+                        <td style="padding: 5px; border: 1px solid #ddd;">Comentarios / 备注</td>
                     </tr>
                     {inspection_rows}
                 </table>
                 <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
-                    <p style="font-size: 10px; color: #666;">(Solo se incluyen fotos de puntos con falla detectada)</p>
+                    <p style="font-size: 10px; color: #666;">(Solo se incluyen fotos de puntos con falla detectada / 仅包含检测到故障点的照片)</p>
                     {inspection_photos_html}
                 </div>
-                ''' if inspection else "<p style='color: #666; font-style: italic;'>No se realizó inspección digital para esta unidad.</p>"}
+                ''' if inspection else "<p style='color: #666; font-style: italic;'>No se realizó inspección digital para esta unidad / 该单位未进行数字检查。</p>"}
 
-                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">3. Ticket de Embarque</h2>
+                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">3. Ticket de Embarque / 运输单</h2>
                 {f'''
                 <table style="width: 100%; border-collapse: collapse;">
-                    <tr><td style="padding: 8px; font-weight: bold; width: 30%;">Cliente:</td><td style="padding: 8px;">{ticket.get('cliente', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Pallets:</td><td style="padding: 8px;">{ticket.get('numero_pallets', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Sellos:</td><td style="padding: 8px;">{ticket.get('sellos', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Almacenista:</td><td style="padding: 8px;">{ticket.get('almacenista', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold; width: 40%;">Cliente / 客户:</td><td style="padding: 8px;">{ticket.get('cliente', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Pallets / 托盘数量:</td><td style="padding: 8px;">{ticket.get('numero_pallets', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Sellos / 封条:</td><td style="padding: 8px;">{ticket.get('sellos', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Almacenista / 仓管员:</td><td style="padding: 8px;">{ticket.get('almacenista', 'N/A')}</td></tr>
                 </table>
-                {f'<div style="margin-top:15px;"><p style="font-size:8px; margin:0; color:#666;">FIRMA ALMACENISTA:</p><img src="{ticket["firma_almacenista"]}" style="height:70px; border-bottom:1px solid #0A2540;" /></div>' if ticket.get("firma_almacenista") else ''}
+                <div style="margin-top: 15px; display: flex; gap: 20px;">
+                    {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA ALMACENISTA / 仓管员签字:</p><img src="{ticket["firma_almacenista"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if ticket.get("firma_almacenista") else ''}
+                    {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA GUARDIA / 警卫签字:</p><img src="{ticket["firma_guardia"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if ticket.get("firma_guardia") else ''}
+                </div>
                 <div style="margin-top: 10px;">{ticket_photos_html}</div>
-                ''' if ticket else "<p style='color: #666; font-style: italic;'>No se generó ticket de embarque para este movimiento.</p>"}
+                ''' if ticket else "<p style='color: #666; font-style: italic;'>No se generó ticket de embarque para este movimiento / 本次操作未生成运输单。</p>"}
+            </div>
+
+            <div style="margin-top: 40px; padding: 20px; background-color: #f9fafb; text-align: center; font-size: 12px; color: #666;">
+                <p>Este es un reporte automático generado por el Sistema SRIUC / 这是由 SRIUC 系统生成的自动报告。</p>
+                <p>&copy; {datetime.now().year} Branco Industries - Todos los derechos reservados / 版权所有。</p>
+            </div>
+        </body>
+    </html>
+    """
             </div>
 
             <div style="margin-top: 40px; padding: 20px; background-color: #f9fafb; text-align: center; font-size: 12px; color: #666;">
