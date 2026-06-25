@@ -11,7 +11,7 @@ import { colors, spacing, typography } from '@/src/constants/theme';
 export default function CasetaDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [rec, setRec] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -28,6 +28,11 @@ export default function CasetaDetail() {
   });
   const [saving, setSaving] = useState(false);
 
+  const [editEntry, setEditEntry] = useState(false);
+  const [entryForm, setEntryForm] = useState<any>({});
+
+  const isAdmin = ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+
   const pickPhoto = async (type: 'entry' | 'exit', field: string) => {
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -35,26 +40,26 @@ export default function CasetaDetail() {
       const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
       if (!r.canceled && r.assets[0]?.base64) {
         const dataUrl = `data:image/jpeg;base64,${r.assets[0].base64}`;
-        if (type === 'entry') setEntryForm({ ...entryForm, [field]: dataUrl });
-        else setExitData({ ...exitData, [field]: dataUrl });
+        if (type === 'entry') setEntryForm((prev: any) => ({ ...prev, [field]: dataUrl }));
+        else setExitData((prev: any) => ({ ...prev, [field]: dataUrl }));
       }
     } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
   };
 
-  const [editEntry, setEditEntry] = useState(false);
-  const [entryForm, setEntryForm] = useState<any>(null);
-
-  const isAdmin = ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(useAuth().user?.email || '');
-
   const load = async () => {
+    if (!token) return;
     setLoading(true);
     try {
       const data = await apiCall<any>(`/vehicle-records/${id}`, { token });
-      setRec(data);
-      setEntryForm(data.entry);
-      if (data.exit) setExitData(data.exit);
-    } catch (e: any) { alert(e.message); }
-    finally { setLoading(false); }
+      if (data) {
+        setRec(data);
+        setEntryForm(data.entry || {});
+        if (data.exit) setExitData(data.exit);
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert("Error al cargar datos");
+    } finally { setLoading(false); }
   };
 
   const handleRemoveExitPhoto = async (field: string) => {
@@ -110,7 +115,7 @@ export default function CasetaDetail() {
     finally { setSaving(false); }
   };
 
-  if (loading || !rec) {
+  if (loading) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} /></View>
@@ -118,9 +123,23 @@ export default function CasetaDetail() {
     );
   }
 
-  const e = rec.entry;
-  const x = rec.exit;
+  const e = rec?.entry || {};
+  const x = rec?.exit;
   const STATUS_COLOR: any = { entrada: colors.warning, inspeccionado: colors.info, salida: colors.success };
+
+  if (!rec || !rec.entry) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}><Text style={{ color: colors.muted }}>Error al cargar los datos del vehículo</Text></View>
+      </SafeAreaView>
+    );
+  }
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}><Text style={{ color: colors.muted }}>Error al cargar los datos del vehículo</Text></View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="caseta-detail">
@@ -309,7 +328,10 @@ export default function CasetaDetail() {
                     <Pressable onPress={() => setExitData({ ...exitData, sello_vvtt_foto: '' })} style={{ position: 'absolute', top: 5, right: 5, backgroundColor: '#FFF', borderRadius: 15 }}><Ionicons name="close-circle" size={30} color={colors.error} /></Pressable>
                   </View>
                 ) : (
-                  <Pressable onPress={pickExitPhoto} style={{ borderWidth: 2, borderColor: colors.borderStrong, borderStyle: 'dashed', padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, backgroundColor: colors.surfaceSecondary }}>
+                  <Pressable
+                    onPress={() => pickPhoto('exit', 'sello_vvtt_foto')}
+                    style={{ borderWidth: 2, borderColor: colors.borderStrong, borderStyle: 'dashed', padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, backgroundColor: colors.surfaceSecondary }}
+                  >
                     <Ionicons name="camera" size={32} color={colors.brandPrimary} />
                     <Text style={{ fontWeight: '900', color: colors.brandPrimary, marginTop: 4 }}>FOTO DEL SELLO VVTT</Text>
                   </Pressable>
