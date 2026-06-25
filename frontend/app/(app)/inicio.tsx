@@ -12,6 +12,7 @@ import * as Haptics from 'expo-haptics';
 import { colors, spacing, radius, typography } from '@/src/constants/theme';
 import { apiCall } from '@/src/api/client';
 
+// UI Update: Professional Brand Header
 export default function Inicio() {
   const { user, token } = useAuth();
   const { t } = useTranslation();
