@@ -1396,23 +1396,26 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
     if ticket and ticket.get("foto_final_carga"):
         ticket_photos_html = get_photo_html(ticket["foto_final_carga"], "CARGA FINALIZADA")
 
-    # Reglamento y Declaraciones
-    reglas_html = "".join([f"<div style='margin-bottom:2px;'>{r}</div>" for r in [
-        '1. No romper el sello hasta que la cortina asignada esté abierta y el almacenista responsable esté presente.',
-        '2. No pasar materiales/equipos ajenos a NAF por la cortina.',
-        '3. Prohibido brincar rampas y entrar al almacén sin autorización.',
-        '4. Prohibidos drogas, armas, agentes biológicos, aerosoles, cámaras de video/foto, pornografía y bebidas alcohólicas.',
-        '5. Prohibido dar propinas, premios o incentivos al personal de seguridad/almacén NAF.',
-        '6. No menores de edad ni personal ajeno a NAF en el patio de maniobras.',
-        '7. Prohibido tirar basura en el patio de maniobras.',
-        '8. Velocidad máxima 10 km/h.'
-    ]])
-    declaraciones_html = "".join([f"<div style='margin-bottom:2px;'>{d}</div>" for d in [
-        '1. Declaro NO transportar drogas, agentes biológicos, bioterrorismo, municiones, armas, contrabando ni personas indocumentadas.',
-        '2. Declaro estar en condición física adecuada y buen estado de salud.',
-        '3. Declaro NO haber consumido alcohol o drogas recientemente y NO estar bajo su influencia.',
-        '4. Declaro que al estar en instalaciones NAF he leído, entendido y aceptado plenamente estas instrucciones.'
-    ]])
+    # Reglamento y Declaraciones Bilingüe
+    reglas_data = [
+        ('1. No romper el sello hasta que la cortina asignada esté abierta y el almacenista responsable esté presente.', '1. 在指定的卸货门打开且负责的仓库人员到场之前，请勿破坏封条。'),
+        ('2. No pasar materiales/equipos ajenos a NAF por la cortina.', '2. 请勿通过卸货门运送不属于 NAF 的材料/设备。'),
+        ('3. Prohibido brincar rampas y entrar al almacén sin autorización.', '3. 禁止未经授权跳过坡道或进入仓库。'),
+        ('4. Prohibidos drogas, armas, agentes biológicos, aerosoles, cámaras de video/foto, pornografía y bebidas alcohólicas.', '4. 禁止携带毒品、武器、生物制剂、气雾剂、摄相机、色情制品和酒精饮料。'),
+        ('5. Prohibido dar propinas, premios o incentivos al personal de seguridad/almacén NAF.', '5. 禁止向 NAF 安保或仓库人员提供小费、奖品或奖励。'),
+        ('6. No menores de edad ni personal ajeno a NAF en el patio de maniobras.', '6. 禁止未成年人或非 NAF 人员进入操作场区。'),
+        ('7. Prohibido tirar basura en el patio de maniobras.', '7. 禁止在操作场区乱扔垃圾。'),
+        ('8. Velocidad máxima 10 km/h.', '8. 最高时速 10 公里/小时。')
+    ]
+    declaraciones_data = [
+        ('1. Declaro NO transportar drogas, agentes biológicos, bioterrorismo, municiones, armas, contrabando ni personas indocumentadas.', '1. 我声明不运输毒品、生物制剂、生物恐怖主义物品、弹药、武器、走私品或无证人员。'),
+        ('2. Declaro estar en condición física adecuada y buen estado de salud.', '2. 我声明身体状况良好，健康状态佳。'),
+        ('3. Declaro NO haber consumido alcohol o drogas recientemente y NO estar bajo su influencia.', '3. 我声明最近没有饮酒或吸毒，且不受其影响。'),
+        ('4. Declaro que al estar en instalaciones NAF he leído, entendido y aceptado plenamente estas instrucciones.', '4. 我声明在 NAF 设施内已阅读、理解并完全接受这些指令。')
+    ]
+
+    reglas_html = "".join([f"<div style='margin-bottom:4px;'>{es}<br/><span style='color:#666; font-size:8px;'>{zh}</span></div>" for es, zh in reglas_data])
+    declaraciones_html = "".join([f"<div style='margin-bottom:4px;'>{es}<br/><span style='color:#666; font-size:8px;'>{zh}</span></div>" for es, zh in declaraciones_data])
 
     html = f"""
     <html>
@@ -1456,7 +1459,7 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
                     <p style="margin: 5px 0 0 0;">Autorizado por / 授权人: {inspection.get('approved_by_name', 'N/A')}</p>
                     <div style="margin-top: 15px; display: flex; gap: 20px;">
                         {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA INSPECTOR / 检查员签字:</p><img src="{inspection["inspector_firma"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if inspection.get("inspector_firma") else ''}
-                        {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA AUTORIZACIÓN / 授权签字:</p><img src="{inspection["approved_by_signature"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if inspection.get("approved_by_signature") else ''}
+                        {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA AUTORIZACIÓN / 授权签字 (Supervisor):</p><img src="{inspection["approved_by_signature"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if inspection.get("approved_by_signature") else ''}
                     </div>
                 </div>
                 <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
