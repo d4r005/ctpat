@@ -108,6 +108,7 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
       <p style="margin: 10px 0 5px 0; font-weight: bold; color: #0A2540;">DECLARACIONES / 司机声明:</p>
       ${declsHtml}
       <p style="margin-top: 10px; font-weight: bold; color: #16a34a;">ACEPTADO / 已接受 ✓</p>
+      ${caseta.entry.firma_operador ? `<div style="margin-top:5px;"><img src="${caseta.entry.firma_operador}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>` : ''}
     </div>
 
     <div style="margin-bottom:15px;">
@@ -115,10 +116,6 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
       ${getPhotoHtml(caseta.entry.foto_atras_caja, 'TRASERA')}
       ${getPhotoHtml(caseta.entry.foto_id_chofer, 'ID CHOFER')}
       ${caseta.exit ? getPhotoHtml(caseta.exit.sello_vvtt_foto, 'SELLO VVTT') : ''}
-    </div>
-
-    <div style="margin-top: 10px;">
-      ${caseta.entry.firma_operador ? `<div><p style="font-size:8px; margin:0; color:#666;">FIRMA CONDUCTOR (ENTRADA) / 司机签字:</p><img src="${caseta.entry.firma_operador}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>` : ''}
     </div>
   ` : `<p style="color:#666;font-style:italic;">${p.noData}</p>`;
 
@@ -128,23 +125,26 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
       <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Pallets / 托盘数量</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.numero_pallets}</td></tr>
       <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.seal}</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.numero_sello}</td></tr>
       <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.destination}</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.observaciones?.replace('Destino: ', '') || '-'}</td></tr>
-      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Almacenista / 仓管员</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.almacenista}</td></tr>
-      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Guardia / 警卫</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.nombre_guardia || '-'}</td></tr>
+      <tr>
+        <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Almacenista / 仓管员</b></td>
+        <td style="padding:6px;border:1px solid #ddd;">
+          ${embarque.almacenista}<br/>
+          ${embarque.firma_almacenista ? `<img src="${embarque.firma_almacenista}" style="height:50px; margin-top:5px; border-bottom:1px solid #0A2540;" />` : ''}
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Guardia / 警卫</b></td>
+        <td style="padding:6px;border:1px solid #ddd;">
+          ${embarque.nombre_guardia || '-'}<br/>
+          ${embarque.firma_guardia ? `<img src="${embarque.firma_guardia}" style="height:50px; margin-top:5px; border-bottom:1px solid #0A2540;" />` : ''}
+        </td>
+      </tr>
     </table>
 
     <div style="margin-bottom:15px;">
       ${getPhotoHtml(embarque.foto_inicio_carga, 'INICIO CARGA')}
       ${getPhotoHtml(embarque.foto_media_carga, 'MEDIA CARGA')}
       ${getPhotoHtml(embarque.foto_final_carga, 'FINAL CARGA')}
-    </div>
-
-    <div style="margin-top: 10px; display: table; width: 100%;">
-      <div style="display: table-cell; width: 50%;">
-        ${embarque.firma_almacenista ? `<div><p style="font-size:8px; margin:0; color:#666;">FIRMA ALMACENISTA / 仓管员签字:</p><img src="${embarque.firma_almacenista}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>` : ''}
-      </div>
-      <div style="display: table-cell; width: 50%;">
-        ${embarque.firma_guardia ? `<div><p style="font-size:8px; margin:0; color:#666;">FIRMA GUARDIA / 警卫签字:</p><img src="${embarque.firma_guardia}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>` : ''}
-      </div>
     </div>
   ` : `<p style="color:#666;font-style:italic;">${p.noData}</p>`;
 
