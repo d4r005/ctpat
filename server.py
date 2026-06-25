@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
@@ -29,7 +30,15 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
+# Optimización de conexión para carga rápida
+client = AsyncIOMotorClient(
+    mongo_url,
+    maxPoolSize=50,
+    minPoolSize=10,
+    maxIdleTimeMS=10000,
+    connectTimeoutMS=5000,
+    serverSelectionTimeoutMS=5000
+)
 db = client[os.environ['DB_NAME']]
 
 JWT_SECRET = os.environ.get('JWT_SECRET', 'naf-inspection-secret-change-in-prod')
@@ -544,6 +553,7 @@ def _serialize_inspection(doc: Dict[str, Any]) -> Inspection:
         approval_status=doc.get("approval_status", "pendiente"),
         approval_note=doc.get("approval_note", ""),
         approved_by_name=doc.get("approved_by_name", ""),
+        approved_by_signature=doc.get("approved_by_signature", ""),
         approved_at=doc.get("approved_at", ""),
     )
 
@@ -1855,6 +1865,9 @@ async def health():
 
 app.include_router(api_router)
 
+# Compresión GZip para transferencia ultra rápida de datos
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -1865,6 +1878,26 @@ app.add_middleware(
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+@app.on_event("startup")
+async def ensure_indexes():
+    """Asegura que la base de datos tenga índices para búsquedas instantáneas"""
+    try:
+        # Índices para Inspecciones
+        await db.inspections.create_index([("created_at", -1)])
+        await db.inspections.create_index([("id", 1)], unique=True)
+        await db.inspections.create_index([("user_id", 1)])
+        await db.inspections.create_index([("placas_unidad", 1)])
+
+        # Índices para Caseta
+        await db.vehicle_records.create_index([("created_at", -1)])
+        await db.vehicle_records.create_index([("id", 1)], unique=True)
+        await db.vehicle_records.create_index([("status", 1)])
+
+        logger.info("Índices de base de datos verificados y activos.")
+    except Exception as e:
+        logger.error(f"Error al crear índices: {e}")
 
 
 @app.on_event("shutdown")
