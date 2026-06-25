@@ -134,12 +134,6 @@ export default function CasetaDetail() {
       </SafeAreaView>
     );
   }
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.center}><Text style={{ color: colors.muted }}>Error al cargar los datos del vehículo</Text></View>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="caseta-detail">
