@@ -939,8 +939,8 @@ async def send_automatic_report(subject: str, recipient: str, body_html: str):
     smtp_pass = os.environ.get("SMTP_PASS")
 
     if not all([smtp_host, smtp_user, smtp_pass]):
-        print("SMTP not configured. Skipping email.")
-        return
+        logger.error("SMTP not configured. Skipping email.")
+        return False
 
     message = MIMEMultipart()
     message["From"] = smtp_user
@@ -960,8 +960,10 @@ async def send_automatic_report(subject: str, recipient: str, body_html: str):
             timeout=15,
         )
         logger.info(f"Reporte enviado exitosamente a {recipient}")
+        return True
     except Exception as e:
         logger.error(f"Error al enviar correo a {recipient}: {e}")
+        return False
 
 
 @api_router.get("/notifications", response_model=List[Notification])
@@ -1363,8 +1365,8 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
     """
 
     try:
-        await send_automatic_report(subject, recipient, html)
-        return True
+        success = await send_automatic_report(subject, recipient, html)
+        return success
     except Exception as e:
         logger.error(f"Fallo al enviar reporte automático: {e}")
         return False

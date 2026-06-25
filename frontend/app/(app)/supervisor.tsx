@@ -135,7 +135,7 @@ export default function Supervisor() {
       await apiCall(`/vehicle-records/${recordId}/send-report`, {
         method: 'POST',
         token,
-        body: { recipient: 'd.trujillo@brancoindustries.com' }
+        body: { } // El backend usará el destinatario por defecto configurado en .env
       });
       alert('Reporte enviado exitosamente');
     } catch (e: any) {

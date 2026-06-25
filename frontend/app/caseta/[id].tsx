@@ -32,7 +32,7 @@ export default function CasetaDetail() {
   const [editEntry, setEditEntry] = useState(false);
   const [entryForm, setEntryForm] = useState<any>({});
 
-  const isAdmin = ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+  const isAdmin = user?.role === 'admin' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
 
   const pickPhoto = async (type: 'entry' | 'exit', field: string) => {
     try {
@@ -113,7 +113,9 @@ export default function CasetaDetail() {
   const handleUpdateEntry = async () => {
     setSaving(true);
     try {
-      await apiCall(`/vehicle-records/${id}`, { method: 'PUT', body: { entry: entryForm }, token });
+      const body: any = { entry: entryForm };
+      if (rec.exit) body.exit = exitData;
+      await apiCall(`/vehicle-records/${id}`, { method: 'PUT', body, token });
       setEditEntry(false);
       await load();
     } catch (e: any) { alert(e.message); }
@@ -185,7 +187,7 @@ export default function CasetaDetail() {
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
           <Text style={[styles.secTitle, { flex: 1, marginBottom: 0 }]}>ENTRADA — DATOS DEL VEHÍCULO</Text>
-          {isAdmin && !rec.exit && (
+          {isAdmin && (
             <Pressable
               onPress={() => editEntry ? handleUpdateEntry() : setEditEntry(true)}
               style={{ backgroundColor: editEntry ? colors.success : colors.brandSecondary, paddingHorizontal: 12, paddingVertical: 6, marginLeft: 8 }}
