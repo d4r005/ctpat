@@ -86,17 +86,37 @@ export default function Supervisor() {
   const handleDownloadPdf = async (recordId: string, plates: string) => {
     setReportLoading(recordId);
     try {
-      const insp = allInspections.find(i => i.placas_unidad === plates);
       const record = allRecords.find(r => r.id === recordId);
-      const ticket = allTickets.find(t => t.placas_unidad === plates);
+      const cleanPlates = plates.trim().toUpperCase();
 
-      if (!insp) throw new Error('No se encontró inspección para esta unidad');
+      // Búsqueda mucho más flexible y robusta
+      const insp = allInspections.find(i =>
+        (record?.inspection_id && i.id === record.inspection_id) ||
+        (i.placas_unidad?.trim().toUpperCase() === cleanPlates) ||
+        (i.numero_trailer?.trim().toUpperCase() === cleanPlates) // Respaldo por si se confundió trailer con placa
+      );
+
+      const ticket = allTickets.find(t => t.placas_unidad?.trim().toUpperCase() === cleanPlates);
+
+      if (!insp) {
+          console.log("Debug - Placas buscadas:", cleanPlates);
+          console.log("Debug - Inspecciones disponibles:", allInspections.map(ins => ins.placas_unidad));
+          throw new Error('No se encontró inspección digital vinculada. Verifique que las placas coincidan exactamente.');
+      }
 
       const html = generateConsolidatedReportHtml({ inspection: insp, caseta: record, embarque: ticket }, 'es');
       const { uri } = await Print.printToFileAsync({ html, base64: false });
 
       if (Platform.OS === 'web') {
-        alert('Reporte generado. Use el diálogo de impresión.');
+        // En web disparamos la previsualización/impresión directa
+        const win = window.open("", "_blank");
+        if (win) {
+            win.document.write(html);
+            win.document.close();
+            setTimeout(() => win.print(), 500);
+        } else {
+            alert('El bloqueador de ventanas impidió abrir el reporte. Por favor permita ventanas emergentes.');
+        }
       } else {
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Reporte Consolidado' });
       }
@@ -244,16 +264,6 @@ export default function Supervisor() {
               onEdit={() => router.push(`/caseta/${item.id}`)}
               onPdf={() => handleDownloadPdf(item.id, item.entry.placas_unidad)}
               onEmail={() => handleSendEmail(item.id)}
-              onInspect={() => {
-                const params = new URLSearchParams({
-                  record_id: item.id,
-                  compania: item.entry.compania_transporte || '',
-                  placas: item.entry.placas_unidad || '',
-                  trailer: item.entry.numero_caja || '',
-                  sello: item.entry.sello_entrada || '',
-                });
-                router.push(`/(app)/nueva?${params.toString()}`);
-              }}
               loadingPdf={reportLoading === item.id}
               loadingEmail={emailLoading === item.id}
             />
@@ -319,10 +329,9 @@ function TabItem({ label, active, onPress, icon }: any) {
   );
 }
 
-function RecordRow({ item, onEdit, onPdf, onEmail, onInspect, loadingPdf, loadingEmail }: any) {
+function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail }: any) {
   const e = item.entry;
   const statusColor = item.status === 'salida' ? colors.success : item.status === 'inspeccionado' ? colors.info : colors.warning;
-  const needsInsp = !item.inspection_id;
 
   const steps = {
     entry: true,
@@ -340,21 +349,19 @@ function RecordRow({ item, onEdit, onPdf, onEmail, onInspect, loadingPdf, loadin
         <View style={styles.btnRow}>
           <Pressable onPress={onEdit} style={styles.actionBtn}>
             <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
-            <Text style={styles.actionText}>EDITAR</Text>
+            <Text style={styles.actionText}>EDITOR</Text>
           </Pressable>
-          {needsInsp && (
-            <Pressable onPress={onInspect} style={[styles.actionBtn, { backgroundColor: colors.warning + '22', borderRadius: 4, paddingHorizontal: 4 }]}>
-              <Ionicons name="clipboard-outline" size={16} color={colors.warning} />
-              <Text style={[styles.actionText, { color: colors.warning }]}>INSPECCIONAR</Text>
-            </Pressable>
-          )}
-          <Pressable onPress={onPdf} style={styles.actionBtn} disabled={loadingPdf}>
-            {loadingPdf ? <ActivityIndicator size={14} color={colors.brandPrimary} /> : <Ionicons name="document-outline" size={16} color={colors.brandPrimary} />}
-            <Text style={styles.actionText}>PDF</Text>
+          <Pressable onPress={onPdf} style={[styles.actionBtn, { backgroundColor: colors.brandPrimary, paddingHorizontal: 8, borderRadius: 2 }]} disabled={loadingPdf}>
+            {loadingPdf ? <ActivityIndicator size={14} color="#FFF" /> : <Ionicons name="eye-outline" size={16} color="#FFF" />}
+            <Text style={[styles.actionText, { color: '#FFF' }]}>VER REPORTE COMPLETO (PDF)</Text>
           </Pressable>
           <Pressable onPress={onEmail} style={styles.actionBtn} disabled={loadingEmail}>
             {loadingEmail ? <ActivityIndicator size={14} color={colors.brandPrimary} /> : <Ionicons name="mail-outline" size={16} color={colors.brandPrimary} />}
-            <Text style={styles.actionText}>EMAIL</Text>
+            <Text style={styles.actionText}>CORREO ELECTRÓNICO</Text>
+          </Pressable>
+        </View>
+      </View>
+            <Text style={styles.actionText}>CORREO ELECTRÓNICO</Text>
           </Pressable>
         </View>
       </View>
