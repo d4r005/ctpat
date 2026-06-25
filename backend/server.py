@@ -1396,9 +1396,27 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
     if ticket and ticket.get("foto_final_carga"):
         ticket_photos_html = get_photo_html(ticket["foto_final_carga"], "CARGA FINALIZADA")
 
+    # Reglamento y Declaraciones
+    reglas_html = "".join([f"<div style='margin-bottom:2px;'>{r}</div>" for r in [
+        '1. No romper el sello hasta que la cortina asignada esté abierta y el almacenista responsable esté presente.',
+        '2. No pasar materiales/equipos ajenos a NAF por la cortina.',
+        '3. Prohibido brincar rampas y entrar al almacén sin autorización.',
+        '4. Prohibidos drogas, armas, agentes biológicos, aerosoles, cámaras de video/foto, pornografía y bebidas alcohólicas.',
+        '5. Prohibido dar propinas, premios o incentivos al personal de seguridad/almacén NAF.',
+        '6. No menores de edad ni personal ajeno a NAF en el patio de maniobras.',
+        '7. Prohibido tirar basura en el patio de maniobras.',
+        '8. Velocidad máxima 10 km/h.'
+    ]])
+    declaraciones_html = "".join([f"<div style='margin-bottom:2px;'>{d}</div>" for d in [
+        '1. Declaro NO transportar drogas, agentes biológicos, bioterrorismo, municiones, armas, contrabando ni personas indocumentadas.',
+        '2. Declaro estar en condición física adecuada y buen estado de salud.',
+        '3. Declaro NO haber consumido alcohol o drogas recientemente y NO estar bajo su influencia.',
+        '4. Declaro que al estar en instalaciones NAF he leído, entendido y aceptado plenamente estas instrucciones.'
+    ]])
+
     html = f"""
     <html>
-        <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; line-height: 1.6; max-width: 800px; margin: auto; border: 1px solid #eee; padding: 20px;">
+        <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; line-height: 1.4; max-width: 800px; margin: auto; border: 1px solid #eee; padding: 20px; font-size: 11px;">
             <div style="background-color: {color_header}; padding: 20px; text-align: center; color: white;">
                 <h1 style="margin: 0;">Reporte Consolidado de Unidad / 综合报告</h1>
                 <p style="margin: 5px 0 0 0; opacity: 0.8;">Sistema de Registro e Inspección (SRIUC) / 注册、检查和运输系统</p>
@@ -1414,9 +1432,18 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
                     <tr><td style="padding: 8px; font-weight: bold;">Fecha Entrada / 进场时间:</td><td style="padding: 8px;">{record['entry'].get('fecha_entrada', 'N/A')}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold; color: #16A34A;">Fecha Salida / 出场时间:</td><td style="padding: 8px; color: #16A34A; font-weight: bold;">{record['exit'].get('fecha_salida', 'N/A') if record.get('exit') else 'No registrada (En Patio) / 未登记（在场）'}</td></tr>
                 </table>
+
+                <div style="background: #f1f5f9; padding: 10px; border: 1px solid #ddd; margin-top: 10px; font-size: 9px;">
+                    <p style="margin: 0 0 5px 0; font-weight: bold; color: #0A2540;">REGLAMENTO Y SEGURIDAD / 安全条例:</p>
+                    {reglas_html}
+                    <p style="margin: 10px 0 5px 0; font-weight: bold; color: #0A2540;">DECLARACIONES / 司机声明:</p>
+                    {declaraciones_html}
+                    <p style="margin-top: 5px; font-weight: bold; color: #16a34a;">ACEPTADO / 已接受 ✓</p>
+                </div>
+
                 <div style="margin-top: 15px; display: flex; gap: 20px;">
-                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA CONDUCTOR (ENTRADA) / 司机签字 (入场):</p><img src="{record["entry"]["firma_operador"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if record["entry"].get("firma_operador") else ''}
-                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA GUARDIA (SALIDA) / 警卫签字 (出场):</p><img src="{record["exit"]["firma_guardia"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if record.get("exit") and record["exit"].get("firma_guardia") else ''}
+                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA CONDUCTOR (ENTRADA) / 司机签字:</p><img src="{record["entry"]["firma_operador"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if record["entry"].get("firma_operador") else ''}
+                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA GUARDIA (SALIDA) / 警卫签字:</p><img src="{record["exit"]["firma_guardia"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if record.get("exit") and record["exit"].get("firma_guardia") else ''}
                 </div>
                 <div style="margin-top: 10px;">{caseta_photos_html}</div>
 
