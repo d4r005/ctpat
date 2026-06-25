@@ -249,7 +249,7 @@ def create_token(user_id: str) -> str:
 
 def is_admin(user: Dict[str, Any]) -> bool:
     admins = ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"]
-    return user.get("email") in admins
+    return user.get("email") in admins or user.get("role") == "admin"
 
 async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
     try:
