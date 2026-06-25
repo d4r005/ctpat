@@ -27,6 +27,7 @@ export default function Supervisor() {
   // ACCESO MAESTRO TOTAL
   const isMaster = userEmail.includes('d.trujillo') || userEmail.includes('d4r005') || user?.role === 'admin';
   const isSupervisor = user?.role === 'supervisor' || isMaster;
+  const isAdmin = isMaster;
 
   const router = useRouter();
   const { allInspections, refreshAll: refreshInspections, loading: inspLoading, exportCsvUrl, sendManualReport } = useInspections();
@@ -357,10 +358,6 @@ function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail }: a
           </Pressable>
           <Pressable onPress={onEmail} style={styles.actionBtn} disabled={loadingEmail}>
             {loadingEmail ? <ActivityIndicator size={14} color={colors.brandPrimary} /> : <Ionicons name="mail-outline" size={16} color={colors.brandPrimary} />}
-            <Text style={styles.actionText}>CORREO ELECTRÓNICO</Text>
-          </Pressable>
-        </View>
-      </View>
             <Text style={styles.actionText}>CORREO ELECTRÓNICO</Text>
           </Pressable>
         </View>
