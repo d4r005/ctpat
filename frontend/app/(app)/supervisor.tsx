@@ -171,6 +171,20 @@ export default function Supervisor() {
     } catch (e: any) { alert(e.message); }
   };
 
+  const handleDeleteRecord = async (type: TabType, id: string) => {
+    const confirm = (msg: string) => Platform.OS === 'web' ? window.confirm(msg) : true; // Simplificado para nativo
+    if (!confirm('¿Estás seguro de que deseas eliminar este registro permanentemente?')) return;
+
+    try {
+      const endpoint = type === 'caseta' ? 'vehicle-records' : type === 'inspeccion' ? 'inspections' : 'shipping-tickets';
+      await apiCall(`/${endpoint}/${id}/admin-delete`, { method: 'DELETE', token });
+      alert('Registro eliminado correctamente');
+      fetchAllData();
+    } catch (e: any) {
+      alert(`Error al eliminar: ${e.message}`);
+    }
+  };
+
   const filteredData = useMemo(() => {
     const q = query.toLowerCase().trim();
     if (activeTab === 'caseta') {
@@ -270,6 +284,8 @@ export default function Supervisor() {
               onEdit={() => router.push(`/caseta/${item.id}`)}
               onPdf={() => handleDownloadPdf(item.id, item.entry.placas_unidad)}
               onEmail={() => handleSendEmail(item.id)}
+              onDelete={() => handleDeleteRecord('caseta', item.id)}
+              isAdmin={isAdmin}
               loadingPdf={reportLoading === item.id}
               loadingEmail={emailLoading === item.id}
             />
@@ -279,8 +295,17 @@ export default function Supervisor() {
               return (
                 <View style={[styles.activityCard, { borderLeftWidth: 4, borderLeftColor: colors.warning }]}>
                    <View style={{ flex: 1 }}>
-                    <Text style={styles.cardTitleText}>{(item as any).entry.placas_unidad} · {(item as any).entry.chofer_nombre}</Text>
-                    <Text style={[styles.cardSubText, { color: colors.warning, fontWeight: '900' }]}>⚠️ INSPECCIÓN PENDIENTE</Text>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.cardTitleText}>{(item as any).entry.placas_unidad} · {(item as any).entry.chofer_nombre}</Text>
+                        <Text style={[styles.cardSubText, { color: colors.warning, fontWeight: '900' }]}>⚠️ INSPECCIÓN PENDIENTE</Text>
+                      </View>
+                      {isAdmin && (
+                        <Pressable onPress={() => handleDeleteRecord('caseta', item.id)} style={{ padding: 4 }}>
+                          <Ionicons name="trash-outline" size={20} color={colors.error} />
+                        </Pressable>
+                      )}
+                    </View>
                     <View style={{ marginVertical: 8 }}>
                       <ProcessTracker steps={{ entry: true, inspection: false, shipping: !!(item as any).has_shipping_ticket, exit: false }} compact />
                     </View>
@@ -308,6 +333,8 @@ export default function Supervisor() {
               <InspectionRow
                 item={item}
                 onEdit={() => router.push(`/inspection/${item.id}?edit=true`)}
+                onDelete={() => handleDeleteRecord('inspeccion', item.id)}
+                isAdmin={isAdmin}
                 t={t}
                 records={allRecords}
                 tickets={allTickets}
@@ -318,6 +345,8 @@ export default function Supervisor() {
             <TicketRow
               item={item}
               onEdit={() => router.push(`/embarque/${item.id}`)}
+              onDelete={() => handleDeleteRecord('embarque', item.id)}
+              isAdmin={isAdmin}
               records={allRecords}
             />
           );
@@ -346,7 +375,7 @@ function TabItem({ label, active, onPress, icon }: any) {
   );
 }
 
-function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail }: any) {
+function RecordRow({ item, onEdit, onPdf, onEmail, onDelete, isAdmin, loadingPdf, loadingEmail }: any) {
   const e = item.entry;
   const statusColor = item.status === 'salida' ? colors.success : item.status === 'inspeccionado' ? colors.info : colors.warning;
 
@@ -362,8 +391,15 @@ function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail }: a
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
           <Text style={styles.cardTitleText}>{e.placas_unidad}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-            <Text style={styles.statusBadgeText}>{item.status.toUpperCase()}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
+              <Text style={styles.statusBadgeText}>{item.status.toUpperCase()}</Text>
+            </View>
+            {isAdmin && (
+              <Pressable onPress={onDelete} style={{ padding: 4 }}>
+                <Ionicons name="trash-outline" size={18} color={colors.error} />
+              </Pressable>
+            )}
           </View>
         </View>
         <Text style={styles.cardSubText}>{e.chofer_nombre} · {e.compania_transporte}</Text>
@@ -390,7 +426,7 @@ function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail }: a
   );
 }
 
-function InspectionRow({ item, onEdit, t, records = [], tickets = [] }: any) {
+function InspectionRow({ item, onEdit, onDelete, isAdmin, t, records = [], tickets = [] }: any) {
   const statusColor = item.approval_status === 'aprobada' ? colors.success : item.approval_status === 'rechazada' ? colors.error : colors.warning;
 
   const relatedRecord = records.find((r: any) =>
@@ -410,13 +446,18 @@ function InspectionRow({ item, onEdit, t, records = [], tickets = [] }: any) {
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
           <Text style={styles.cardTitleText}>{item.placas_unidad} · {item.numero_trailer}</Text>
-          <View style={{ flexDirection: 'row', gap: 4 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <View style={[styles.statusBadge, { backgroundColor: item.status_general === 'bueno' ? colors.success : colors.error }]}>
               <Text style={styles.statusBadgeText}>{item.status_general === 'bueno' ? t('bueno') : t('falla')}</Text>
             </View>
             <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
               <Text style={styles.statusBadgeText}>{t(item.approval_status || 'pendiente').toUpperCase()}</Text>
             </View>
+            {isAdmin && (
+              <Pressable onPress={onDelete} style={{ padding: 4, marginLeft: 4 }}>
+                <Ionicons name="trash-outline" size={18} color={colors.error} />
+              </Pressable>
+            )}
           </View>
         </View>
         <Text style={styles.cardSubText}>{item.inspector_nombre}</Text>
@@ -433,7 +474,7 @@ function InspectionRow({ item, onEdit, t, records = [], tickets = [] }: any) {
   );
 }
 
-function TicketRow({ item, onEdit, records = [] }: any) {
+function TicketRow({ item, onEdit, onDelete, isAdmin, records = [] }: any) {
   const relatedRecord = records.find((r: any) =>
     r.entry.placas_unidad?.trim().toUpperCase() === item.placas_unidad?.trim().toUpperCase() &&
     new Date(r.created_at).getTime() <= new Date(item.created_at).getTime()
@@ -449,7 +490,14 @@ function TicketRow({ item, onEdit, records = [] }: any) {
   return (
     <View style={styles.activityCard}>
       <View style={{ flex: 1 }}>
-        <Text style={styles.cardTitleText}>{item.placas_unidad} · {item.cliente}</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <Text style={styles.cardTitleText}>{item.placas_unidad} · {item.cliente}</Text>
+          {isAdmin && (
+            <Pressable onPress={onDelete} style={{ padding: 4 }}>
+              <Ionicons name="trash-outline" size={18} color={colors.error} />
+            </Pressable>
+          )}
+        </View>
         <Text style={styles.cardSubText}>{item.almacenista}</Text>
         <View style={{ marginVertical: 8 }}>
           <ProcessTracker steps={steps} compact />
