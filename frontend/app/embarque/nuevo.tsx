@@ -227,7 +227,17 @@ function F({ label, v, on, tid, multiline, kb, placeholder }: any) {
   return (
     <>
       <Text style={styles.label}>{label}</Text>
-      <TextInput testID={tid} style={[styles.input, multiline && { minHeight: 70, textAlignVertical: 'top' }]} value={v} onChangeText={on} multiline={!!multiline} keyboardType={kb || 'default'} placeholder={placeholder} placeholderTextColor={colors.muted} />
+      <TextInput
+        testID={tid}
+        autoCapitalize="characters"
+        style={[styles.input, multiline && { minHeight: 70, textAlignVertical: 'top' }]}
+        value={v}
+        onChangeText={(text) => on(text.toUpperCase())}
+        multiline={!!multiline}
+        keyboardType={kb || 'default'}
+        placeholder={placeholder}
+        placeholderTextColor={colors.muted}
+      />
     </>
   );
 }

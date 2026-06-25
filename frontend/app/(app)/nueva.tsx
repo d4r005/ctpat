@@ -561,13 +561,14 @@ function Field({ label, value, onChange, testID, onScan, scanTestID, disabled }:
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <TextInput
           testID={testID}
+          autoCapitalize="characters"
           style={[
             styles.input,
             { flex: 1 },
             disabled && { backgroundColor: colors.border, opacity: 0.6 }
           ]}
           value={disabled ? 'N/A' : value}
-          onChangeText={onChange}
+          onChangeText={(text) => onChange(text.toUpperCase())}
           placeholderTextColor={colors.muted}
           editable={!disabled}
         />

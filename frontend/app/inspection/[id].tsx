@@ -492,9 +492,10 @@ function Row({ label, value, isEdit, onEdit }: { label: string; value: string; i
       <Text style={styles.rowLabel}>{label}</Text>
       {isEdit && onEdit ? (
         <TextInput
+          autoCapitalize="characters"
           style={[styles.rowValue, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 4 }]}
           value={value}
-          onChangeText={onEdit}
+          onChangeText={(text) => onEdit(text.toUpperCase())}
         />
       ) : (
         <Text style={styles.rowValue}>{value}</Text>

@@ -412,13 +412,14 @@ function Field({ label, value, onChange, testID, multiline, disabled }: any) {
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
         testID={testID}
+        autoCapitalize="characters"
         style={[
           styles.input,
           multiline && { minHeight: 80, textAlignVertical: 'top' },
           disabled && { backgroundColor: colors.border, opacity: 0.6 }
         ]}
         value={disabled ? 'N/A' : value}
-        onChangeText={onChange}
+        onChangeText={(text) => onChange(text.toUpperCase())}
         multiline={!!multiline}
         placeholderTextColor={colors.muted}
         editable={!disabled}
