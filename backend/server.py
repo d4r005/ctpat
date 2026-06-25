@@ -181,6 +181,7 @@ class VehicleRecord(BaseModel):
     entry: VehicleEntry
     exit: Optional[VehicleExit] = None
     inspection_id: Optional[str] = None
+    has_shipping_ticket: bool = False
     created_at: str
 
 
@@ -1069,12 +1070,31 @@ async def list_vehicle_records(
     status: Optional[str] = None,
 ):
     filt: Dict[str, Any] = {}
-    if current_user.get("role") != "supervisor":
-        filt["user_id"] = current_user["id"]
+    # Administradores y supervisores ven todo.
+    # Inspectores ven lo suyo y lo que está actualmente en patio (para poder inspeccionar)
+    if current_user.get("role") not in ["supervisor", "admin"] and not is_admin(current_user):
+        filt["$or"] = [
+            {"user_id": current_user["id"]},
+            {"status": {"$in": ["entrada", "inspeccionado"]}}
+        ]
+
     if status:
         filt["status"] = status
     docs = await db.vehicle_records.find(filt, {"_id": 0}).sort("created_at", -1).to_list(1000)
-    return [VehicleRecord(**d) for d in docs]
+
+    # Check for shipping tickets to sync status
+    res = []
+    for d in docs:
+        plates = d["entry"].get("placas_unidad", "")
+        # Find if there is a shipping ticket after this entry
+        ticket = await db.shipping_tickets.find_one({
+            "placas_unidad": plates,
+            "created_at": {"$gte": d["created_at"]}
+        })
+        d["has_shipping_ticket"] = bool(ticket)
+        res.append(VehicleRecord(**d))
+
+    return res
 
 
 @api_router.get("/vehicle-records/{rec_id}", response_model=VehicleRecord)

@@ -6,15 +6,38 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useInspections } from '@/src/context/InspectionContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
+import ProcessTracker from '@/src/components/ProcessTracker';
 
 type Filter = 'todos' | 'bueno' | 'malo';
 
 export default function Historico() {
   const router = useRouter();
   const { t } = useTranslation();
-  const { inspections, refresh, loading } = useInspections();
+  const { inspections, refresh, loading, token } = useInspections();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('todos');
+  const [records, setRecords] = useState<any[]>([]);
+  const [tickets, setTickets] = useState<any[]>([]);
+
+  const fetchExtra = async () => {
+    if (!token) return;
+    try {
+      const [r, tick] = await Promise.all([
+        apiCall<any[]>('/vehicle-records', { token }),
+        apiCall<any[]>('/shipping-tickets', { token })
+      ]);
+      setRecords(r);
+      setTickets(tick);
+    } catch {}
+  };
+
+  React.useEffect(() => {
+    fetchExtra();
+  }, [token]);
+
+  const refreshAll = async () => {
+    await Promise.all([refresh(), fetchExtra()]);
+  };
 
   const filtered = useMemo(() => {
     return inspections.filter((i) => {
@@ -65,41 +88,49 @@ export default function Historico() {
         data={filtered}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={colors.brandPrimary} />}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={refreshAll} tintColor={colors.brandPrimary} />}
         ListEmptyComponent={
           <View style={styles.empty} testID="historico-empty">
             <Ionicons name="clipboard-outline" size={48} color={colors.muted} />
             <Text style={styles.emptyText}>{t('sin_resultados_inspecciones')}</Text>
           </View>
         }
-        renderItem={({ item }) => (
-          <Pressable
-            testID={`historico-item-${item.id}`}
-            style={styles.item}
-            onPress={() => router.push(`/inspection/${item.id}`)}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={styles.itemTitle}>{item.placas_unidad || t('sin_placas')}</Text>
-              <Text style={styles.itemSub}>{item.compania_transportista}</Text>
-              <Text style={styles.itemMeta}>
-                <Text style={{ fontWeight: '700', color: colors.onSurface }}>{t('trailer')}:</Text> {item.numero_trailer}
-                {'  •  '}
-                <Text style={{ fontWeight: '700', color: colors.onSurface }}>{t('precinto')}:</Text> {item.numero_precinto?.toUpperCase() === 'NA' ? 'N/A' : item.numero_precinto}
-              </Text>
-              <Text style={styles.itemDate}>{new Date(item.created_at).toLocaleString()}</Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              {item._pending && (
-                <View style={styles.pendingChip}>
-                  <Text style={styles.pendingChipText}>{t('pend')}</Text>
-                </View>
-              )}
-              <View style={[styles.statusChip, { backgroundColor: item.status_general === 'bueno' ? colors.success : colors.error }]}>
-                <Text style={styles.statusChipText}>{item.status_general === 'bueno' ? t('bueno') : t('falla')}</Text>
+        renderItem={({ item }) => {
+          const relatedRecord = records.find(r => r.inspection_id === item.id || r.entry.placas_unidad === item.placas_unidad);
+          const hasTicket = tickets.some(t => t.placas_unidad === item.placas_unidad);
+
+          const steps = {
+            entry: !!relatedRecord,
+            inspection: true,
+            shipping: hasTicket,
+            exit: relatedRecord?.status === 'salida'
+          };
+
+          return (
+            <Pressable
+              testID={`historico-item-${item.id}`}
+              style={styles.item}
+              onPress={() => router.push(`/inspection/${item.id}`)}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.itemTitle}>{item.placas_unidad || t('sin_placas')}</Text>
+                <Text style={styles.itemSub}>{item.compania_transportista}</Text>
+                <ProcessTracker steps={steps} compact />
+                <Text style={styles.itemDate}>{new Date(item.created_at).toLocaleString()}</Text>
               </View>
-            </View>
-          </Pressable>
-        )}
+              <View style={{ alignItems: 'flex-end' }}>
+                {item._pending && (
+                  <View style={styles.pendingChip}>
+                    <Text style={styles.pendingChipText}>{t('pend')}</Text>
+                  </View>
+                )}
+                <View style={[styles.statusChip, { backgroundColor: item.status_general === 'bueno' ? colors.success : colors.error }]}>
+                  <Text style={styles.statusChipText}>{item.status_general === 'bueno' ? t('bueno') : t('falla')}</Text>
+                </View>
+              </View>
+            </Pressable>
+          );
+        }}
       />
     </SafeAreaView>
   );

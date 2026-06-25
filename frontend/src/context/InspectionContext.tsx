@@ -63,6 +63,7 @@ interface InspectionContextValue {
   updateShippingTicket: (id: string, payload: any) => Promise<void>;
   sendManualReport: (id: string) => Promise<void>;
   exportCsvUrl: (mode: 'summary' | 'detailed', scope: 'mine' | 'all') => string;
+  token: string | null;
 }
 
 const InspectionContext = createContext<InspectionContextValue | undefined>(undefined);
@@ -256,6 +257,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
         inspections, allInspections, pendingCount, isOnline, loading,
         refresh, refreshAll, saveInspection, getById, syncQueue,
         approveInspection, rejectInspection, updateInspection, updateVehicleRecord, updateShippingTicket, sendManualReport, exportCsvUrl,
+        token
       }}
     >
       {children}

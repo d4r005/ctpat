@@ -16,6 +16,7 @@ import { useAuth } from '@/src/context/AuthContext';
 import { apiCall } from '@/src/api/client';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import { generateConsolidatedReportHtml } from '@/src/utils/reportGenerator';
+import ProcessTracker from '@/src/components/ProcessTracker';
 
 type TabType = 'caseta' | 'inspeccion' | 'embarque';
 
@@ -264,6 +265,7 @@ export default function Supervisor() {
                    <View style={{ flex: 1 }}>
                     <Text style={styles.rowTitle}>{item.entry.placas_unidad} · {item.entry.chofer_nombre}</Text>
                     <Text style={[styles.rowSub, { color: colors.warning, fontWeight: '700' }]}>⚠️ INSPECCIÓN PENDIENTE</Text>
+                    <ProcessTracker steps={{ entry: true, inspection: false, shipping: !!item.has_shipping_ticket, exit: false }} compact />
                     <Pressable
                       onPress={() => {
                         const params = new URLSearchParams({
@@ -289,6 +291,8 @@ export default function Supervisor() {
                 item={item}
                 onEdit={() => router.push(`/inspection/${item.id}?edit=true`)}
                 t={t}
+                records={allRecords}
+                tickets={allTickets}
               />
             );
           }
@@ -296,6 +300,7 @@ export default function Supervisor() {
             <TicketRow
               item={item}
               onEdit={() => router.push(`/embarque/${item.id}`)}
+              records={allRecords}
             />
           );
         }}
@@ -319,11 +324,19 @@ function RecordRow({ item, onEdit, onPdf, onEmail, onInspect, loadingPdf, loadin
   const statusColor = item.status === 'salida' ? colors.success : item.status === 'inspeccionado' ? colors.info : colors.warning;
   const needsInsp = !item.inspection_id;
 
+  const steps = {
+    entry: true,
+    inspection: !!item.inspection_id,
+    shipping: !!item.has_shipping_ticket,
+    exit: item.status === 'salida'
+  };
+
   return (
     <View style={styles.row}>
       <View style={{ flex: 1 }}>
         <Text style={styles.rowTitle}>{e.placas_unidad} · {e.chofer_nombre}</Text>
-        <Text style={styles.rowSub}>{e.compania_transporte} · {new Date(e.fecha_entrada).toLocaleString()}</Text>
+        <Text style={styles.rowSub}>{e.compania_transporte}</Text>
+        <ProcessTracker steps={steps} compact />
         <View style={styles.btnRow}>
           <Pressable onPress={onEdit} style={styles.actionBtn}>
             <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
@@ -352,13 +365,23 @@ function RecordRow({ item, onEdit, onPdf, onEmail, onInspect, loadingPdf, loadin
   );
 }
 
-function InspectionRow({ item, onEdit, t }: { item: Inspection, onEdit: () => void, t: any }) {
+function InspectionRow({ item, onEdit, t, records = [], tickets = [] }: any) {
   const statusColor = item.approval_status === 'aprobada' ? colors.success : item.approval_status === 'rechazada' ? colors.error : colors.warning;
+
+  const relatedRecord = records.find((r: any) => r.inspection_id === item.id || r.entry.placas_unidad === item.placas_unidad);
+  const steps = {
+    entry: !!relatedRecord,
+    inspection: true,
+    shipping: !!tickets.some((t: any) => t.placas_unidad === item.placas_unidad),
+    exit: relatedRecord?.status === 'salida'
+  };
+
   return (
     <View style={styles.row}>
       <View style={{ flex: 1 }}>
         <Text style={styles.rowTitle}>{item.placas_unidad} · {item.numero_trailer}</Text>
-        <Text style={styles.rowSub}>{item.inspector_nombre} · {new Date(item.created_at).toLocaleString()}</Text>
+        <Text style={styles.rowSub}>{item.inspector_nombre}</Text>
+        <ProcessTracker steps={steps} compact />
         <Pressable onPress={onEdit} style={[styles.actionBtn, { marginTop: 8 }]}>
           <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
           <Text style={styles.actionText}>EDITAR INSPECCIÓN</Text>
@@ -376,12 +399,25 @@ function InspectionRow({ item, onEdit, t }: { item: Inspection, onEdit: () => vo
   );
 }
 
-function TicketRow({ item, onEdit }: any) {
+function TicketRow({ item, onEdit, records = [] }: any) {
+  const relatedRecord = records.find((r: any) =>
+    r.entry.placas_unidad?.trim().toUpperCase() === item.placas_unidad?.trim().toUpperCase() &&
+    new Date(r.created_at).getTime() <= new Date(item.created_at).getTime()
+  );
+
+  const steps = {
+    entry: !!relatedRecord,
+    inspection: !!(relatedRecord?.inspection_id || relatedRecord?.status === 'inspeccionado'),
+    shipping: true,
+    exit: relatedRecord?.status === 'salida'
+  };
+
   return (
     <View style={styles.row}>
       <View style={{ flex: 1 }}>
         <Text style={styles.rowTitle}>{item.placas_unidad} · {item.cliente}</Text>
-        <Text style={styles.rowSub}>{item.almacenista} · {new Date(item.created_at).toLocaleString()}</Text>
+        <Text style={styles.rowSub}>{item.almacenista}</Text>
+        <ProcessTracker steps={steps} compact />
         <Pressable onPress={onEdit} style={[styles.actionBtn, { marginTop: 8 }]}>
           <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
           <Text style={styles.actionText}>EDITAR TICKET</Text>

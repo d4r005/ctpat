@@ -23,13 +23,23 @@ export default function Inicio() {
   const [activities, setActivities] = useState<any[]>([]);
   const [lastActivityId, setLastActivityId] = useState<string | null>(null);
   const [loadingActivities, setLoadingActivities] = useState(false);
+  const [pendingYardCount, setPendingYardCount] = useState(0);
+  const [pendingApprovCount, setPendingApprovCount] = useState(0);
 
   const loadActivities = useCallback(async (isInitial = false) => {
     if (!token) return;
     if (isInitial) setLoadingActivities(true);
     try {
-      const data = await apiCall<any[]>('/activities', { token });
-      const newActivities = Array.isArray(data) ? data : [];
+      const [actData, yardData] = await Promise.all([
+        apiCall<any[]>('/activities', { token }),
+        apiCall<any[]>('/vehicle-records', { token })
+      ]);
+
+      const newActivities = Array.isArray(actData) ? actData : [];
+
+      // Conteo de pendientes para las notificaciones del panel
+      setPendingYardCount(yardData.filter((r: any) => !r.inspection_id && r.status === 'entrada').length);
+      setPendingApprovCount(allInspections.filter(i => i.approval_status === 'pendiente').length);
 
       // Lógica de notificación (Sonido/Vibración) si hay actividad nueva
       if (!isInitial && newActivities.length > 0) {
@@ -140,6 +150,35 @@ export default function Inicio() {
           </Pressable>
         </View>
 
+        {(pendingYardCount > 0 || pendingApprovCount > 0) && (
+          <View style={styles.alertBox}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.sm }}>
+              <Ionicons name="warning" size={20} color={colors.warning} />
+              <Text style={styles.alertTitle}>ATENCIÓN: PROCESOS PENDIENTES</Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: spacing.md }}>
+              {pendingYardCount > 0 && (
+                <Pressable
+                  style={[styles.alertItem, { backgroundColor: colors.warning + '15', borderColor: colors.warning }]}
+                  onPress={() => router.push('/(app)/nueva')}
+                >
+                  <Text style={styles.alertCount}>{pendingYardCount}</Text>
+                  <Text style={styles.alertText}>Por Inspeccionar</Text>
+                </Pressable>
+              )}
+              {pendingApprovCount > 0 && (
+                <Pressable
+                  style={[styles.alertItem, { backgroundColor: colors.info + '15', borderColor: colors.info }]}
+                  onPress={() => router.push('/(app)/supervisor')}
+                >
+                  <Text style={styles.alertCount}>{pendingApprovCount}</Text>
+                  <Text style={styles.alertText}>Por Aprobar</Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        )}
+
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{todayInspections.length}</Text>
@@ -222,6 +261,23 @@ const styles = StyleSheet.create({
   badgeText: { color: '#FFF', fontWeight: '900', fontSize: 11 },
   hello: { fontSize: typography.sizes.xxl, fontWeight: '900', color: colors.onSurface },
   headerSub: { fontSize: typography.sizes.base, color: colors.muted, marginTop: 2 },
+  alertBox: {
+    backgroundColor: colors.surfaceSecondary,
+    borderWidth: 2,
+    borderColor: colors.borderStrong,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  alertTitle: { fontSize: 11, fontWeight: '900', color: colors.onSurface, letterSpacing: 1 },
+  alertItem: {
+    flex: 1,
+    borderWidth: 1,
+    padding: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  alertCount: { fontSize: 18, fontWeight: '900', color: colors.onSurface },
+  alertText: { fontSize: 10, fontWeight: '700', color: colors.muted, marginTop: 2 },
   statsRow: {
     flexDirection: 'row', borderWidth: 2, borderColor: colors.borderStrong,
     backgroundColor: colors.surfaceSecondary, marginBottom: spacing.lg,

@@ -8,6 +8,7 @@ import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { useInspections, Inspection } from '@/src/context/InspectionContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
+import ProcessTracker from '@/src/components/ProcessTracker';
 
 interface Ticket {
   id: string;
@@ -169,17 +170,31 @@ export default function Embarque() {
             <Text style={styles.emptyText}>{t('sin_tickets')}</Text>
           </View>
         )}
-        renderItem={({ item }) => (
-          <Pressable testID={`embarque-item-${item.id}`} style={styles.row} onPress={() => router.push(`/embarque/${item.id}`)}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.rowTitle}>{item.cliente || t('sin_cliente')}</Text>
-              <Text style={styles.rowSub}>{item.operador} · {item.placas_unidad}</Text>
-              <Text style={styles.rowMeta}>{t('caja')}: {item.numero_caja} · {t('sello')}: {item.numero_sello}</Text>
-              <Text style={styles.rowDate}>{new Date(item.fecha || item.created_at).toLocaleString()}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={24} color={colors.muted} />
-          </Pressable>
-        )}
+        renderItem={({ item }) => {
+          const relatedRecord = vehicleRecords.find(r =>
+            r.entry.placas_unidad?.trim().toUpperCase() === item.placas_unidad?.trim().toUpperCase() &&
+            new Date(r.created_at).getTime() <= new Date(item.created_at).getTime()
+          );
+
+          const steps = {
+            entry: !!relatedRecord,
+            inspection: !!(relatedRecord?.inspection_id || relatedRecord?.status === 'inspeccionado'),
+            shipping: true,
+            exit: relatedRecord?.status === 'salida'
+          };
+
+          return (
+            <Pressable testID={`embarque-item-${item.id}`} style={styles.row} onPress={() => router.push(`/embarque/${item.id}`)}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>{item.cliente || t('sin_cliente')}</Text>
+                <Text style={styles.rowSub}>{item.operador} · {item.placas_unidad}</Text>
+                <ProcessTracker steps={steps} compact />
+                <Text style={styles.rowDate}>{new Date(item.fecha || item.created_at).toLocaleString()}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color={colors.muted} />
+            </Pressable>
+          );
+        }}
       />
     </SafeAreaView>
   );
