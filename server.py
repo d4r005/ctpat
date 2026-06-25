@@ -618,8 +618,8 @@ async def list_inspections(
 ):
     filt: Dict[str, Any] = {}
     if scope == "all":
-        if current_user.get("role") != "supervisor":
-            raise HTTPException(status_code=403, detail="Solo supervisores pueden ver todas las inspecciones")
+        if current_user.get("role") not in ["supervisor", "admin"] and not is_admin(current_user):
+            raise HTTPException(status_code=403, detail="Solo supervisores o administradores pueden ver todas las inspecciones")
         if inspector_id:
             filt["user_id"] = inspector_id
     else:
