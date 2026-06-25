@@ -187,6 +187,15 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
                     >
                       <Text style={[styles.toggleBtnText, { fontSize: 9 }]}>{item.active ? 'PAUSAR' : 'ACTIVAR'}</Text>
                     </Pressable>
+                    {isAdmin && (
+                      <Pressable
+                        testID={`usuario-delete-${item.id}`}
+                        style={[styles.toggleBtn, { backgroundColor: colors.error, paddingHorizontal: spacing.sm }]}
+                        onPress={() => handleDelete(item)}
+                      >
+                        <Ionicons name="trash" size={14} color="#FFF" />
+                      </Pressable>
+                    )}
                   </>
                 )}
               </View>
