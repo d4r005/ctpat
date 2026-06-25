@@ -18,6 +18,7 @@ import jwt as pyjwt
 import aiosmtplib
 import requests
 import base64
+import re
 from PIL import Image, ImageDraw
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -323,7 +324,7 @@ async def sync_to_appsheet(table_name: str, data: Dict[str, Any]):
     # Aplicar marca de agua a fotos conocidas en Caseta y otras tablas
     photo_fields = [
         "entry_foto_frente_unidad", "entry_foto_atras_caja", "entry_foto_id_chofer",
-        "exit_sello_vvtt_foto", "plano_carga",
+        "exit_sello_vvtt_foto",
         "foto_inicio_carga", "foto_media_carga", "foto_final_carga"
     ]
     for field in photo_fields:
@@ -763,10 +764,20 @@ async def manual_send_report(
     # Look for the vehicle record that corresponds to this inspection
     record = await db.vehicle_records.find_one({"inspection_id": inspection_id})
     if not record and placas:
+        # Intento exacto
         record = await db.vehicle_records.find_one(
             {"entry.placas_unidad": placas},
             sort=[("created_at", -1)]
         )
+        if not record:
+            # Intento flexible
+            norm_placas = re.sub(r'[^a-zA-Z0-9]', '', placas)
+            if norm_placas:
+                flex_regex = ".*".join(list(norm_placas))
+                record = await db.vehicle_records.find_one(
+                    {"entry.placas_unidad": {"$regex": flex_regex, "$options": "i"}},
+                    sort=[("created_at", -1)]
+                )
 
     if not record:
         raise HTTPException(status_code=404, detail="No se encontró registro de caseta vinculado para generar reporte consolidado")
@@ -1179,31 +1190,50 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
 
     placas = record["entry"].get("placas_unidad", "").strip()
 
-    # Buscar inspección vinculada o por placas (respaldo)
+    # Buscar inspección vinculada o por placas (con búsqueda flexible)
     inspection = None
     if record.get("inspection_id"):
         inspection = await db.inspections.find_one({"id": record["inspection_id"]})
 
     if not inspection and placas:
-        logger.info(f"Buscando inspección de respaldo para placas: {placas}")
+        # Intentar búsqueda exacta primero
         inspection = await db.inspections.find_one(
             {"placas_unidad": placas},
             sort=[("created_at", -1)]
         )
+        if not inspection:
+            # Búsqueda flexible (solo letras y números)
+            norm_placas = re.sub(r'[^a-zA-Z0-9]', '', placas)
+            if norm_placas:
+                flex_regex = ".*".join(list(norm_placas))
+                inspection = await db.inspections.find_one(
+                    {"placas_unidad": {"$regex": flex_regex, "$options": "i"}},
+                    sort=[("created_at", -1)]
+                )
 
-    # Buscar ticket de embarque
-    fecha_inicio = record["created_at"]
-    # If no exit yet, use current time as limit
-    fecha_fin = record.get("exit", {}).get("fecha_salida") or datetime.now(timezone.utc).isoformat()
+    # Buscar ticket de embarque con búsqueda flexible
+    ticket = None
+    if placas:
+        fecha_inicio = record["created_at"]
+        fecha_fin = record.get("exit", {}).get("fecha_salida") or datetime.now(timezone.utc).isoformat()
+        # Expandimos rango de búsqueda a 3 horas para mayor seguridad
+        start_dt = datetime.fromisoformat(fecha_inicio.replace('Z', '+00:00')) - timedelta(hours=3)
+        end_dt = datetime.fromisoformat(fecha_fin.replace('Z', '+00:00')) + timedelta(hours=3)
 
-    # Expand search a bit to be sure
-    start_dt = datetime.fromisoformat(fecha_inicio.replace('Z', '+00:00')) - timedelta(hours=1)
-    end_dt = datetime.fromisoformat(fecha_fin.replace('Z', '+00:00')) + timedelta(hours=1)
-
-    ticket = await db.shipping_tickets.find_one({
-        "placas_unidad": placas,
-        "created_at": {"$gte": start_dt.isoformat(), "$lte": end_dt.isoformat()}
-    })
+        # Intento exacto
+        ticket = await db.shipping_tickets.find_one({
+            "placas_unidad": placas,
+            "created_at": {"$gte": start_dt.isoformat(), "$lte": end_dt.isoformat()}
+        })
+        if not ticket:
+            # Intento flexible
+            norm_placas = re.sub(r'[^a-zA-Z0-9]', '', placas)
+            if norm_placas:
+                flex_regex = ".*".join(list(norm_placas))
+                ticket = await db.shipping_tickets.find_one({
+                    "placas_unidad": {"$regex": flex_regex, "$options": "i"},
+                    "created_at": {"$gte": start_dt.isoformat(), "$lte": end_dt.isoformat()}
+                })
 
     logger.info(f"Datos encontrados - Inspección: {'SI' if inspection else 'NO'}, Ticket: {'SI' if ticket else 'NO'}")
 
@@ -1214,6 +1244,61 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
     color_header = "#0A2540"
     if inspection and inspection.get("status_general") == "malo":
         color_header = "#dc2626" # Rojo si hay falla
+
+    # Helper para generar HTML de fotos con marca de agua opcional
+    def get_photo_html(b64, label):
+        if not b64 or not isinstance(b64, str) or "data:image" not in b64:
+            return ""
+        # Aplicamos marca de agua para asegurar que la imagen tenga un tamaño razonable y metadata correcta
+        watermarked_b64 = add_watermark(b64)
+        return f'''
+        <div style="display: inline-block; width: 30%; margin: 1%; vertical-align: top; border: 1px solid #eee; padding: 5px; background: #f9fafb; text-align: center;">
+            <p style="margin: 0 0 5px 0; font-size: 8px; font-weight: bold; color: #666; text-transform: uppercase;">{label}</p>
+            <img src="{watermarked_b64}" style="width: 100%; height: 120px; object-fit: cover; border: 1px solid #ddd;" />
+        </div>
+        '''
+
+    # Fotos de Caseta
+    caseta_photos = []
+    if record["entry"].get("foto_frente_unidad"):
+        caseta_photos.append(get_photo_html(record["entry"]["foto_frente_unidad"], "FRONTAL"))
+    if record["entry"].get("foto_atras_caja"):
+        caseta_photos.append(get_photo_html(record["entry"]["foto_atras_caja"], "TRASERA"))
+    if record["entry"].get("foto_id_chofer"):
+        caseta_photos.append(get_photo_html(record["entry"]["foto_id_chofer"], "ID CHOFER"))
+    if record.get("exit") and record["exit"].get("sello_vvtt_foto"):
+        caseta_photos.append(get_photo_html(record["exit"]["sello_vvtt_foto"], "SELLO VVTT"))
+    caseta_photos_html = "".join(caseta_photos)
+
+    # Fotos de Inspección y Tabla
+    inspection_rows = ""
+    inspection_photos = []
+    if inspection and inspection.get("points"):
+        for p in inspection["points"]:
+            status_text = "BUENO" if p["estado"] == "bueno" else "FALLA"
+            status_color = "#16a34a" if p["estado"] == "bueno" else "#dc2626"
+            inspection_rows += f'''
+            <tr>
+                <td style="padding: 5px; border: 1px solid #ddd; width: 30px;">{p['number']}</td>
+                <td style="padding: 5px; border: 1px solid #ddd;">{p['name']}</td>
+                <td style="padding: 5px; border: 1px solid #ddd; font-weight: bold; color: {status_color};">{status_text}</td>
+                <td style="padding: 5px; border: 1px solid #ddd;">{p.get('comentarios', '-')}</td>
+            </tr>
+            '''
+            if p.get("photo"):
+                inspection_photos.append(get_photo_html(p["photo"], f"PUNTO {p['number']}"))
+    inspection_photos_html = "".join(inspection_photos)
+
+    # Fotos de Embarque
+    ticket_photos = []
+    if ticket:
+        if ticket.get("foto_inicio_carga"):
+            ticket_photos.append(get_photo_html(ticket["foto_inicio_carga"], "INICIO CARGA"))
+        if ticket.get("foto_media_carga"):
+            ticket_photos.append(get_photo_html(ticket["foto_media_carga"], "MEDIA CARGA"))
+        if ticket.get("foto_final_carga"):
+            ticket_photos.append(get_photo_html(ticket["foto_final_carga"], "FINAL CARGA"))
+    ticket_photos_html = "".join(ticket_photos)
 
     html = f"""
     <html>
@@ -1236,15 +1321,25 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
                     <tr><td style="padding: 8px; font-weight: bold;">Sello VVTT (Salida):</td><td style="padding: 8px; text-transform: uppercase;">{record['exit'].get('sello_vvtt_estado', 'N/A')}</td></tr>
                     ''' if record.get('exit') else ''}
                 </table>
+                <div style="margin-top: 10px;">{caseta_photos_html}</div>
 
-                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">2. Inspección C-TPAT (19 Puntos)</h2>
+                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">2. Inspección C-TPAT</h2>
                 {f'''
-                <div style="background-color: {"#f0fdf4" if inspection.get("status_general") == "bueno" else "#fef2f2"}; padding: 15px; border-radius: 5px; border-left: 5px solid {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">
+                <div style="background-color: {"#f0fdf4" if inspection.get("status_general") == "bueno" else "#fef2f2"}; padding: 15px; border-radius: 5px; border-left: 5px solid {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"}; margin-bottom: 10px;">
                     <p style="margin: 0;">Estado General: <b style="color: {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">{inspection.get('status_general', 'N/A').upper()}</b></p>
                     <p style="margin: 5px 0 0 0;">Inspector: {inspection.get('inspector_nombre', 'N/A')}</p>
                     <p style="margin: 5px 0 0 0;">Aprobación: <b>{inspection.get('approval_status', 'pendiente').upper()}</b></p>
-                    <p style="margin: 5px 0 0 0;">Autorizado por: {inspection.get('approved_by_name', 'N/A') if inspection.get('approval_status') != 'pendiente' else 'Pendiente'}</p>
                 </div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                    <tr style="background: #f1f5f9; font-weight: bold;">
+                        <td style="padding: 5px; border: 1px solid #ddd; width: 30px;">#</td>
+                        <td style="padding: 5px; border: 1px solid #ddd;">Punto</td>
+                        <td style="padding: 5px; border: 1px solid #ddd; width: 80px;">Estado</td>
+                        <td style="padding: 5px; border: 1px solid #ddd;">Comentarios</td>
+                    </tr>
+                    {inspection_rows}
+                </table>
+                <div style="margin-top: 10px;">{inspection_photos_html}</div>
                 ''' if inspection else "<p style='color: #666; font-style: italic;'>No se realizó inspección digital para esta unidad.</p>"}
 
                 <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">3. Ticket de Embarque</h2>
@@ -1255,6 +1350,7 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
                     <tr><td style="padding: 8px; font-weight: bold;">Pallets:</td><td style="padding: 8px;">{ticket.get('numero_pallets', 'N/A')}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold;">Sellos:</td><td style="padding: 8px;">{ticket.get('sellos', 'N/A')}</td></tr>
                 </table>
+                <div style="margin-top: 10px;">{ticket_photos_html}</div>
                 ''' if ticket else "<p style='color: #666; font-style: italic;'>No se generó ticket de embarque para este movimiento.</p>"}
             </div>
 
