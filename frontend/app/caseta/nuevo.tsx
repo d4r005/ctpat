@@ -168,7 +168,8 @@ export default function CasetaNuevo() {
         compania: body.compania_transporte,
         placas: body.placas_unidad,
         trailer: body.numero_caja,
-        sello: body.sello_entrada
+        sello: body.sello_entrada,
+        chofer: body.chofer_nombre // Añadido para prellenado
       }).toString();
 
       if (Platform.OS === 'web') {

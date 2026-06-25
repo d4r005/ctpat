@@ -24,7 +24,15 @@ export default function Nueva() {
   const { user, token } = useAuth();
   const { saveInspection } = useInspections();
   const { t } = useTranslation();
-  const params = useLocalSearchParams<{ record_id?: string; compania?: string; placas?: string; trailer?: string; sello?: string; type?: string }>();
+  const params = useLocalSearchParams<{
+    record_id?: string;
+    compania?: string;
+    placas?: string;
+    trailer?: string;
+    sello?: string;
+    type?: string;
+    chofer?: string; // Recibir chofer
+  }>();
 
   const [showTypeSelector, setShowTypeSelector] = useState(!params.type);
   const [selectedType, setSelectedType] = useState<any>(params.type || null);
@@ -108,6 +116,14 @@ export default function Nueva() {
   const [inspectorNombre, setInspectorNombre] = useState(user?.name || '');
   const [inspectorFirma, setInspectorFirma] = useState('');
   const [showSigInspector, setShowSigInspector] = useState(false);
+
+  // Efecto para prellenar datos cuando cambian los params (especialmente útil al venir de caseta)
+  React.useEffect(() => {
+    if (params.compania) setCompania(params.compania);
+    if (params.placas) setPlacas(params.placas);
+    if (params.trailer) setTrailer(params.trailer);
+    if (params.sello) setSelloAlta(params.sello);
+  }, [params.record_id]);
   const [scanning, setScanning] = useState<null | 'placas' | 'trailer' | 'precinto'>(null);
 
   const handleScan = (value: string) => {
@@ -179,7 +195,7 @@ export default function Nueva() {
             placas: placas,
             trailer: trailer,
             sello: precinto !== 'N/A' ? precinto : '',
-            operador: inspectorNombre
+            operador: params.chofer || inspectorNombre // Usar nombre del chofer si viene de caseta
           });
           router.replace(`/embarque/nuevo?${queryParams.toString()}`);
         } else {
@@ -206,7 +222,7 @@ export default function Nueva() {
                 placas: placas,
                 trailer: trailer,
                 sello: precinto !== 'N/A' ? precinto : '',
-                operador: inspectorNombre
+                operador: params.chofer || inspectorNombre
               });
               router.replace(`/embarque/nuevo?${queryParams.toString()}`);
             }
