@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, Platform, TextInput, Image, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator, Platform, TextInput, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,80 +7,75 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as ImagePicker from 'expo-image-picker';
 import Signature from '@/src/components/SignaturePad';
-import { useInspections, Inspection } from '@/src/context/InspectionContext';
+import { useInspections, Inspection, InspectionPoint } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
-import { apiCall } from '@/src/api/client';
+import { getInspectionPoints } from '@/src/constants/inspectionPoints';
 
 export default function InspectionDetail() {
-  const { id, record_id } = useLocalSearchParams<{ id: string; record_id?: string }>();
+  const { id, edit } = useLocalSearchParams<{ id: string, edit?: string }>();
   const router = useRouter();
-  const { getById, approveInspection, rejectInspection, deleteInspection, refreshAll } = useInspections();
-  const { user, token } = useAuth();
+  const { getById, approveInspection, rejectInspection, updateInspection } = useInspections();
+  const { user } = useAuth();
   const [insp, setInsp] = useState<Inspection | undefined>(undefined);
   const [generating, setGenerating] = useState(false);
+  const [isEditing, setIsEditing] = useState(edit === 'true');
+  const [editData, setEditData] = useState<Partial<Inspection>>({});
   const [approvalNote, setApprovalNote] = useState('');
   const [approvalName, setApprovalName] = useState(user?.name || '');
   const [approvalSignature, setApprovalSignature] = useState('');
   const [showSigModal, setShowSigModal] = useState(false);
   const [acting, setActing] = useState(false);
-  const isSupervisor = user?.role === 'supervisor' || user?.role === 'admin';
-  const isAdmin = user?.role === 'admin';
-
-  const adminUpdatePointPhoto = async (pointNum: number) => {
-    try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) return;
-      const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
-      if (r.canceled || !r.assets[0]?.base64) return;
-
-      const photo_data = `data:image/jpeg;base64,${r.assets[0].base64}`;
-      await apiCall(`/admin/inspections/${id}/point/${pointNum}/photo`, {
-        method: 'PATCH',
-        body: { field_path: 'photo', photo_data },
-        token
-      });
-      await refreshAll();
-      setInsp(getById(id));
-    } catch (e: any) { alert(e.message); }
-  };
-
-  const adminDeletePointPhoto = async (pointNum: number) => {
-    if (!window.confirm('¿Eliminar esta foto permanentemente?')) return;
-    try {
-      await apiCall(`/admin/inspections/${id}/point/${pointNum}/photo`, {
-        method: 'PATCH',
-        body: { field_path: 'photo', photo_data: '' },
-        token
-      });
-      await refreshAll();
-      setInsp(getById(id));
-    } catch (e: any) { alert(e.message); }
-  };
-
-  const AdminPointPhotoActions = ({ pointNum, hasPhoto }: { pointNum: number, hasPhoto: boolean }) => {
-    if (!isAdmin) return null;
-    return (
-      <View style={hasPhoto ? styles.adminPhotoOverlay : styles.adminAddPhotoContainer}>
-        <Pressable onPress={() => adminUpdatePointPhoto(pointNum)} style={hasPhoto ? styles.adminPhotoBtn : styles.adminAddBtn}>
-          <Ionicons name={hasPhoto ? "pencil" : "add-circle"} size={hasPhoto ? 14 : 20} color="#FFF" />
-          {!hasPhoto && <Text style={styles.adminAddText}>AGREGAR FOTO</Text>}
-        </Pressable>
-        {hasPhoto && (
-          <Pressable onPress={() => adminDeletePointPhoto(pointNum)} style={[styles.adminPhotoBtn, { backgroundColor: colors.error }]}>
-            <Ionicons name="trash" size={14} color="#FFF" />
-          </Pressable>
-        )}
-      </View>
-    );
-  };
+  const isSupervisor = user?.role === 'supervisor';
+  const isAdmin = user?.role === 'admin' || user?.email?.toLowerCase().includes('d.trujillo') || user?.email?.toLowerCase().includes('d4r005');
 
   useEffect(() => {
     if (id) {
       const data = getById(id);
       setInsp(data);
+      if (data) setEditData(data);
     }
   }, [id, getById]);
+
+  const handleSaveEdit = async () => {
+    if (!id) return;
+
+    // Validación: Si hay puntos con falla, la foto es obligatoria
+    const points = editData.points || insp?.points || [];
+    const missingPhoto = points.find(p => p.estado === 'malo' && !p.photo);
+    if (missingPhoto) {
+      alert(`El punto ${missingPhoto.number} tiene falla. La foto es obligatoria.`);
+      return;
+    }
+
+    setActing(true);
+    try {
+      await updateInspection(id, editData);
+      setInsp(getById(id));
+      setIsEditing(false);
+      alert('Cambios guardados correctamente');
+    } catch (e: any) { alert(e.message); }
+    finally { setActing(false); }
+  };
+
+  const pickPointPhoto = async (idx: number) => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
+      const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+      if (!r.canceled && r.assets[0]?.base64) {
+        const newPoints = [...(editData.points || insp?.points || [])];
+        newPoints[idx] = { ...newPoints[idx], photo: `data:image/jpeg;base64,${r.assets[0].base64}` };
+        setEditData({ ...editData, points: newPoints });
+      }
+    } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
+  };
+
+  const removePointPhoto = (idx: number) => {
+    const newPoints = [...(editData.points || insp?.points || [])];
+    newPoints[idx] = { ...newPoints[idx], photo: '' };
+    setEditData({ ...editData, points: newPoints });
+  };
 
   const handleApprove = async () => {
     if (!id) return;
@@ -118,35 +113,6 @@ export default function InspectionDetail() {
     finally { setActing(false); }
   };
 
-  const handleDelete = async () => {
-    if (!id) return;
-
-    const confirmed = Platform.OS === 'web'
-      ? window.confirm('¿Estás seguro de que deseas eliminar esta inspección de prueba?')
-      : await new Promise(resolve => {
-          Alert.alert(
-            "Eliminar Inspección",
-            "¿Estás seguro de que deseas eliminar esta inspección de prueba?",
-            [
-              { text: "Cancelar", style: "cancel", onPress: () => resolve(false) },
-              { text: "Eliminar", style: "destructive", onPress: () => resolve(true) }
-            ]
-          );
-        });
-
-    if (!confirmed) return;
-
-    setActing(true);
-    try {
-      await deleteInspection(id);
-      router.back();
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setActing(false);
-    }
-  };
-
   if (!insp) {
     return (
       <SafeAreaView style={styles.safe}>
@@ -172,6 +138,8 @@ export default function InspectionDetail() {
     const inspectorImg = i.inspector_firma ? `<img src="${i.inspector_firma}" style="height:80px;border:1px solid #999;background:#fff;" />` : '<div style="height:80px;border:1px dashed #999;"></div>';
     const appSigImg = i.approved_by_signature ? `<img src="${i.approved_by_signature}" style="height:80px;border:1px solid #999;background:#fff;" />` : '<div style="height:80px;border:1px dashed #999;"></div>';
 
+    const headerColor = i.status_general === 'bueno' ? '#16A34A' : '#DC2626';
+
     return `
 <!DOCTYPE html><html><head><meta charset="utf-8"><title>Inspección NAF</title></head>
 <body style="font-family:Arial,sans-serif;color:#09090B;padding:20px;font-size:11px;">
@@ -184,9 +152,13 @@ export default function InspectionDetail() {
       <div style="color:#0A2540;font-size:12px;font-weight:bold;margin-top:5px;letter-spacing:0.5px;">North America Flooring</div>
     </div>
     <div style="text-align:right;">
-      <h1 style="margin:0;font-size:20px;color:#0A2540;">INSPECCIÓN 19 PUNTOS</h1>
+      <h1 style="margin:0;font-size:20px;color:#0A2540;">INSPECCIÓN ${i.points.length} PUNTOS</h1>
       <p style="margin:5px 0 0 0;font-size:10px;color:#666;">Generado: ${new Date().toLocaleString('es-MX')}</p>
     </div>
+  </div>
+
+  <div style="background-color:${headerColor}; color:white; padding:10px; text-align:center; font-weight:bold; font-size:14px; margin-bottom:20px;">
+    ESTADO DE INSPECCIÓN: ${i.status_general.toUpperCase()}
   </div>
 
   <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">Datos Generales</h2>
@@ -201,7 +173,7 @@ export default function InspectionDetail() {
     <tr><td style="padding:6px;border:1px solid #999;"><b>Estado General</b></td><td style="padding:6px;border:1px solid #999;background:${i.status_general === 'bueno' ? '#dcfce7' : '#fee2e2'};font-weight:bold;">${i.status_general.toUpperCase()}</td></tr>
   </table>
 
-  <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">Examen de Inspección — 19 Puntos</h2>
+  <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">Examen de Inspección — ${i.points.length} Puntos</h2>
   <table style="width:100%;border-collapse:collapse;">
     <tr style="background:#E4E4E7;font-weight:bold;">
       <td style="padding:6px;border:1px solid #999;width:5%;">#</td>
@@ -254,11 +226,21 @@ export default function InspectionDetail() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="inspection-detail">
       <View style={styles.topBar}>
-        <Pressable onPress={() => router.back()} testID="detail-back">
-          <Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} />
+        <Pressable
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/(app)/supervisor')}
+          style={{ padding: 10, marginLeft: -10 }}
+          testID="detail-back"
+        >
+          <Ionicons name="arrow-back" size={28} color={colors.onBrandPrimary} />
         </Pressable>
-        <Text style={styles.topTitle}>Inspección</Text>
-        <View style={{ width: 24 }} />
+        <Text style={styles.topTitle}>{isEditing ? 'Editar Inspección' : 'Inspección'}</Text>
+        {isEditing ? (
+          <Pressable onPress={handleSaveEdit} disabled={acting}>
+            {acting ? <ActivityIndicator size={20} color="#FFF" /> : <Ionicons name="save" size={24} color="#FFF" />}
+          </Pressable>
+        ) : (
+          <View style={{ width: 24 }} />
+        )}
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -291,7 +273,7 @@ export default function InspectionDetail() {
           </View>
         )}
 
-        {isSupervisor && (insp.approval_status || 'pendiente') === 'pendiente' && (
+        {(isSupervisor || isAdmin) && (insp.approval_status || 'pendiente') === 'pendiente' && (
           <View style={styles.approvalActionBox} testID="approval-action-box">
             <Text style={styles.sectionTitleLocal}>ACCIÓN DE SUPERVISOR</Text>
 
@@ -333,52 +315,69 @@ export default function InspectionDetail() {
           </View>
         )}
 
-        {(insp.status_general === 'bueno' || insp.approval_status === 'aprobada') && (
-          <Pressable
-            style={[styles.exportBtn, { backgroundColor: colors.brandSecondary, marginTop: spacing.md, marginBottom: spacing.lg }]}
-            onPress={() => {
-              const queryParams = new URLSearchParams({
-                record_id: record_id || '',
-                inspection_id: insp.id,
-                compania: insp.compania_transportista,
-                placas: insp.placas_unidad,
-                trailer: insp.numero_trailer,
-                sello: insp.numero_precinto !== 'N/A' ? insp.numero_precinto : '',
-                operador: insp.inspector_nombre
-              });
-              router.push(`/embarque/nuevo?${queryParams.toString()}`);
-            }}
-          >
-            <Ionicons name="cube" size={24} color={colors.onBrandSecondary} />
-            <Text style={[styles.exportText, { color: colors.onBrandSecondary }]}>GENERAR TICKET DE EMBARQUE</Text>
-          </Pressable>
-        )}
-
         <Section title="DATOS GENERALES">
-          <Row label="Compañía" value={insp.compania_transportista} />
-          <Row label="Placas" value={insp.placas_unidad} />
-          <Row label="Tráiler" value={insp.numero_trailer} />
-          <Row label="Precinto" value={insp.numero_precinto} />
-          <Row label="Sello Alta Seg." value={insp.sello_alta_seguridad} />
+          {isAdmin && isEditing && (
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>Tipo Inspección</Text>
+              <Pressable
+                style={{ flex: 1, backgroundColor: colors.brandTertiary, padding: 8, borderRadius: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.brandPrimary }}
+                onPress={() => {
+                  const currentType = editData.inspection_type || insp.inspection_type;
+                  const nextType = currentType === '9_puntos_contenedor' ? '19_puntos' : '9_puntos_contenedor';
+                  const nextPoints = getInspectionPoints(nextType).map(p => ({ ...p, estado: 'bueno', comentarios: '', photo: '' }));
+                  setEditData({ ...editData, inspection_type: nextType, points: nextPoints });
+                }}
+              >
+                <Text style={{ color: colors.brandPrimary, fontWeight: '900', fontSize: 13 }}>
+                  {(editData.inspection_type || insp.inspection_type).replace('_', ' ').toUpperCase()}
+                </Text>
+                <Ionicons name="swap-horizontal" size={18} color={colors.brandPrimary} />
+              </Pressable>
+            </View>
+          )}
+          <Row label="Compañía" value={insp.compania_transportista} isEdit={isEditing} onEdit={(v) => setEditData({...editData, compania_transportista: v})} />
+          <Row label="Placas" value={insp.placas_unidad} isEdit={isEditing} onEdit={(v) => setEditData({...editData, placas_unidad: v})} />
+          <Row label="Tráiler" value={insp.numero_trailer} isEdit={isEditing} onEdit={(v) => setEditData({...editData, numero_trailer: v})} />
+          <Row label="Precinto" value={insp.numero_precinto} isEdit={isEditing} onEdit={(v) => setEditData({...editData, numero_precinto: v})} />
+          <Row label="Sello Alta Seg." value={insp.sello_alta_seguridad} isEdit={isEditing} onEdit={(v) => setEditData({...editData, sello_alta_seguridad: v})} />
           <Row label="Sello Verificado" value={insp.sello_verificado ? 'SÍ' : 'NO'} />
           <Row label="Fecha y Hora" value={new Date(insp.fecha_hora).toLocaleString('es-MX')} />
         </Section>
 
-        <Section title="19 PUNTOS DE INSPECCIÓN">
-          {insp.points.map((p) => (
+        <Section title="PUNTOS DE INSPECCIÓN">
+          {(isEditing ? editData.points : insp.points)?.map((p, idx) => (
             <View key={p.number} style={styles.pointRow} testID={`detail-point-${p.number}`}>
               <Text style={styles.pointNum}>{p.number}.</Text>
               <View style={{ flex: 1 }}>
                 <Text style={styles.pointName}>{p.name}</Text>
                 {p.comentarios ? <Text style={styles.pointComment}>{p.comentarios}</Text> : null}
-                {p.photo ? (
-                  <View>
-                    <Image source={{ uri: p.photo }} style={styles.pointPhoto} testID={`detail-point-${p.number}-photo`} />
-                    <AdminPointPhotoActions pointNum={p.number} hasPhoto={true} />
-                  </View>
-                ) : (
-                  <AdminPointPhotoActions pointNum={p.number} hasPhoto={false} />
+
+                {isEditing && p.estado === 'malo' && !p.photo && (
+                  <Text style={{ color: colors.error, fontSize: 10, fontWeight: '900', marginTop: 4 }}>
+                    ⚠ FOTO OBLIGATORIA POR FALLA
+                  </Text>
                 )}
+
+                <View style={{ marginTop: 8 }}>
+                  {p.photo ? (
+                    <View>
+                      <Image source={{ uri: p.photo }} style={styles.pointPhoto} testID={`detail-point-${p.number}-photo`} />
+                      {isEditing && (
+                        <Pressable onPress={() => removePointPhoto(idx)} style={{ position: 'absolute', top: 5, right: 5, backgroundColor: '#FFF', borderRadius: 12 }}>
+                          <Ionicons name="close-circle" size={24} color={colors.error} />
+                        </Pressable>
+                      )}
+                    </View>
+                  ) : (isEditing && p.estado === 'malo') ? (
+                    <Pressable
+                      onPress={() => pickPointPhoto(idx)}
+                      style={[styles.pointPhoto, { borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface }]}
+                    >
+                      <Ionicons name="camera" size={32} color={colors.brandPrimary} />
+                      <Text style={{ fontSize: 10, color: colors.brandPrimary, fontWeight: '900', marginTop: 4 }}>AGREGAR FOTO</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
               </View>
               <View style={[styles.pointChip, { backgroundColor: p.estado === 'bueno' ? colors.success : p.estado === 'malo' ? colors.error : colors.muted }]}>
                 <Text style={styles.pointChipText}>{(p.estado || 'NA').toUpperCase()}</Text>
@@ -396,9 +395,8 @@ export default function InspectionDetail() {
           <Text style={styles.value}>{insp.inspector_nombre}</Text>
           {insp.inspector_firma ? (
             <View style={styles.firmaWrap}>
-              <View style={styles.firmaImagePlaceholder}>
-                <Text style={styles.firmaLabel}>FIRMA CAPTURADA</Text>
-              </View>
+              <Image source={{ uri: insp.inspector_firma }} style={{ width: '100%', height: 100, resizeMode: 'contain', backgroundColor: '#fff' }} />
+              <Text style={[styles.firmaLabel, { marginTop: 4 }]}>FIRMA INSPECTOR</Text>
             </View>
           ) : null}
           {insp.approved_by_signature ? (
@@ -406,9 +404,8 @@ export default function InspectionDetail() {
               <Text style={[styles.label, { marginTop: spacing.md }]}>APROBACIÓN / RECHAZO POR</Text>
               <Text style={styles.value}>{insp.approved_by_name}</Text>
               <View style={styles.firmaWrap}>
-                <View style={[styles.firmaImagePlaceholder, { borderColor: insp.approval_status === 'aprobada' ? colors.success : colors.error }]}>
-                  <Text style={[styles.firmaLabel, { color: insp.approval_status === 'aprobada' ? colors.success : colors.error }]}>FIRMA SUPERVISOR</Text>
-                </View>
+                <Image source={{ uri: insp.approved_by_signature }} style={{ width: '100%', height: 100, resizeMode: 'contain', backgroundColor: '#fff', borderColor: insp.approval_status === 'aprobada' ? colors.success : colors.error, borderWidth: 1 }} />
+                <Text style={[styles.firmaLabel, { color: insp.approval_status === 'aprobada' ? colors.success : colors.error, marginTop: 4 }]}>FIRMA AUTORIZACIÓN</Text>
               </View>
             </>
           ) : null}
@@ -429,24 +426,6 @@ export default function InspectionDetail() {
             </>
           )}
         </Pressable>
-
-        {isAdmin && (
-          <Pressable
-            testID="detail-delete-btn"
-            style={[styles.deleteBtn, acting && { opacity: 0.6 }]}
-            onPress={handleDelete}
-            disabled={acting}
-          >
-            {acting ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <>
-                <Ionicons name="trash" size={20} color="#FFF" />
-                <Text style={styles.deleteBtnText}>ELIMINAR INSPECCIÓN (PRUEBA)</Text>
-              </>
-            )}
-          </Pressable>
-        )}
       </ScrollView>
       {showSigModal && (
         <SignatureModal
@@ -507,11 +486,19 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, isEdit, onEdit }: { label: string; value: string; isEdit?: boolean; onEdit?: (v: string) => void }) {
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue}>{value}</Text>
+      {isEdit && onEdit ? (
+        <TextInput
+          style={[styles.rowValue, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 4 }]}
+          value={value}
+          onChangeText={onEdit}
+        />
+      ) : (
+        <Text style={styles.rowValue}>{value}</Text>
+      )}
     </View>
   );
 }
@@ -555,11 +542,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.lg, minHeight: 64,
   },
   exportText: { color: colors.onBrandSecondary, fontWeight: '900', letterSpacing: 1, fontSize: typography.sizes.base },
-  deleteBtn: {
-    backgroundColor: colors.error, padding: spacing.lg, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.md, minHeight: 52,
-  },
-  deleteBtnText: { color: '#FFF', fontWeight: '900', letterSpacing: 1, fontSize: typography.sizes.sm },
   approvBadge: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderWidth: 2 },
   approvBadgeText: { color: '#FFF', fontWeight: '900', fontSize: 10, letterSpacing: 1 },
   approvalInfo: { borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, backgroundColor: colors.surfaceSecondary, marginBottom: spacing.lg },
@@ -580,13 +562,6 @@ const styles = StyleSheet.create({
   },
   signatureCta: { color: colors.muted, fontWeight: '700', letterSpacing: 1 },
   signatureDone: { color: colors.success, fontWeight: '900', letterSpacing: 1 },
-  modalOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    justifyContent: 'center',
-    padding: spacing.lg,
-    zIndex: 1000,
-  },
   modalCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong },
   modalTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface, marginBottom: spacing.md, letterSpacing: 1 },
   signatureCanvas: { height: 280 },
@@ -594,29 +569,4 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: colors.onBrandPrimary, fontWeight: '900', letterSpacing: 1 },
   secondaryBtn: { backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
   secondaryBtnText: { color: colors.onSurface, fontWeight: '900', letterSpacing: 1 },
-  adminPhotoOverlay: {
-    position: 'absolute', top: 15, right: 10, flexDirection: 'row', gap: 5,
-  },
-  adminPhotoBtn: {
-    width: 28, height: 28, borderRadius: 14, backgroundColor: colors.brandPrimary,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3,
-  },
-  adminAddPhotoContainer: {
-    marginTop: 8,
-  },
-  adminAddBtn: {
-    backgroundColor: colors.brandPrimary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 6,
-    borderRadius: 4,
-    gap: 5,
-    alignSelf: 'flex-start',
-  },
-  adminAddText: {
-    color: '#FFF',
-    fontSize: 9,
-    fontWeight: '900',
-  },
 });

@@ -20,17 +20,34 @@ const TOTAL_STEPS = 4;
 
 export default function Nueva() {
   const router = useRouter();
+  const { user, token } = useAuth();
+  const { saveInspection } = useInspections();
   const { t } = useTranslation();
   const params = useLocalSearchParams<{ record_id?: string; compania?: string; placas?: string; trailer?: string; sello?: string; type?: string }>();
 
   const [showTypeSelector, setShowTypeSelector] = useState(!params.type);
   const [selectedType, setSelectedType] = useState<any>(params.type || null);
+  const [pendingInYard, setPendingInYard] = useState<any[]>([]);
+  const [loadingPending, setLoadingPending] = useState(false);
+
+  const fetchPending = async () => {
+    if (!token) return;
+    setLoadingPending(true);
+    try {
+      const data = await apiCall<any[]>('/vehicle-records', { token });
+      // Registros que no tienen inspección vinculada y están en patio
+      setPendingInYard(data.filter(r => !r.inspection_id && r.status === 'entrada'));
+    } catch {} finally { setLoadingPending(false); }
+  };
+
+  React.useEffect(() => {
+    if (showTypeSelector && token) fetchPending();
+  }, [showTypeSelector, token]);
 
   const inspectionType = (selectedType === '9_puntos_contenedor' ? '9_puntos_contenedor' : '19_puntos') as '19_puntos' | '9_puntos_contenedor';
   const pointsDef = getInspectionPoints(inspectionType);
   const totalPoints = pointsDef.length;
-  const { user, token } = useAuth();
-  const { saveInspection } = useInspections();
+
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
 
@@ -97,7 +114,15 @@ export default function Nueva() {
 
   const canNext = () => {
     if (step === 0) return compania.trim() && placas.trim() && trailer.trim() && (precintoNA || precinto.trim());
-    if (step === 1) return points.every((p) => p.estado !== '');
+    if (step === 1) {
+      // Todos los puntos deben tener estado
+      // Si el estado es "malo", la foto es OBLIGATORIA
+      return points.every((p) => {
+        if (p.estado === '') return false;
+        if (p.estado === 'malo' && !p.photo) return false;
+        return true;
+      });
+    }
     if (step === 2) return true;
     if (step === 3) return inspectorNombre.trim() && inspectorFirma;
     return false;
@@ -192,7 +217,51 @@ export default function Nueva() {
           <Text style={styles.selectorTitle}>{t('nueva_inspeccion')}</Text>
         </View>
 
-        <View style={styles.selectorContent}>
+        <ScrollView contentContainerStyle={styles.selectorContent} keyboardShouldPersistTaps="handled">
+          {pendingInYard.length > 0 && (
+            <View style={{ marginBottom: spacing.xl }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.md }}>
+                <Ionicons name="time-outline" size={20} color={colors.warning} />
+                <Text style={[styles.selectorLabel, { marginBottom: 0, textAlign: 'left' }]}>PENDIENTES EN PATIO ({pendingInYard.length})</Text>
+              </View>
+              {pendingInYard.map((r) => (
+                <Pressable
+                  key={r.id}
+                  style={styles.pendingCard}
+                  onPress={() => {
+                    setCompania(r.entry.compania_transporte || '');
+                    setPlacas(r.entry.placas_unidad || '');
+                    setTrailer(r.entry.numero_caja || '');
+                    setSelloAlta(r.entry.sello_entrada || '');
+                    router.setParams({ record_id: r.id });
+
+                    if (Platform.OS === 'web') {
+                      const is9p = window.confirm("¿Deseas realizar inspección de 9 PUNTOS (CONTENEDOR)? \n\n(Aceptar = 9 Puntos / Cancelar = 19 Puntos)");
+                      setSelectedType(is9p ? '9_puntos_contenedor' : '19_puntos');
+                      setShowTypeSelector(false);
+                    } else {
+                      Alert.alert(
+                        "Iniciar Inspección",
+                        `¿Qué tipo de inspección realizarás para la unidad ${r.entry.placas_unidad}?`,
+                        [
+                          { text: "19 PUNTOS", onPress: () => { setSelectedType('19_puntos'); setShowTypeSelector(false); } },
+                          { text: "9 PUNTOS", onPress: () => { setSelectedType('9_puntos_contenedor'); setShowTypeSelector(false); } },
+                          { text: "CANCELAR", style: 'cancel' }
+                        ]
+                      );
+                    }
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.pendingPlates}>{r.entry.placas_unidad}</Text>
+                    <Text style={styles.pendingSub}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
+                  </View>
+                  <Ionicons name="arrow-forward" size={20} color={colors.brandPrimary} />
+                </Pressable>
+              ))}
+            </View>
+          )}
+
           <Text style={styles.selectorLabel}>{t('selecciona_tipo')}</Text>
 
           <Pressable
@@ -218,7 +287,7 @@ export default function Nueva() {
             </View>
             <Ionicons name="chevron-forward" size={24} color="#FFF" />
           </Pressable>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -295,7 +364,7 @@ export default function Nueva() {
                     <Pressable
                       testID={`nueva-point-${p.number}-bueno`}
                       style={[styles.toggleBtn, p.estado === 'bueno' && styles.toggleBuenoOn, p.estado === 'na' && { opacity: 0.3 }]}
-                      onPress={() => p.estado !== 'na' && updatePoint(idx, { estado: 'bueno' })}
+                      onPress={() => p.estado !== 'na' && updatePoint(idx, { estado: 'bueno', comentarios: '', photo: '' })}
                       disabled={p.estado === 'na'}
                     >
                       <Ionicons name="checkmark-circle" size={20} color={p.estado === 'bueno' ? colors.onSuccess : colors.muted} />
@@ -327,6 +396,13 @@ export default function Nueva() {
                         placeholderTextColor={colors.muted}
                         multiline
                       />
+                      {!p.photo && (
+                        <View style={{ backgroundColor: colors.error + '11', padding: 8, marginTop: 8, borderWidth: 1, borderColor: colors.error }}>
+                          <Text style={{ color: colors.error, fontSize: 10, fontWeight: '900', textAlign: 'center' }}>
+                            ⚠ LA FOTO ES OBLIGATORIA CUANDO HAY FALLA
+                          </Text>
+                        </View>
+                      )}
                       <View style={styles.photoRow}>
                         {p.photo ? (
                           <View style={styles.photoPreviewWrap}>
@@ -586,9 +662,21 @@ const styles = StyleSheet.create({
   selectorHeader: { backgroundColor: colors.brandPrimary, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   selectorTitle: { color: '#FFF', fontWeight: '900', fontSize: 18, letterSpacing: 1 },
   backBtn: { padding: 4 },
-  selectorContent: { flex: 1, padding: spacing.xl, justifyContent: 'center', gap: spacing.lg },
+  selectorContent: { padding: spacing.xl, gap: spacing.lg },
   selectorLabel: { fontWeight: '900', color: colors.muted, fontSize: 12, letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.md },
-  typeCard: { flexDirection: 'row', alignItems: 'center', padding: spacing.xl, gap: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong },
+  pendingCard: {
+    backgroundColor: colors.surfaceSecondary,
+    borderWidth: 2,
+    borderColor: colors.warning,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md
+  },
+  pendingPlates: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface },
+  pendingSub: { fontSize: 11, color: colors.muted, marginTop: 2 },
+  typeCard: { flexDirection: 'row', alignItems: 'center', padding: spacing.xl, gap: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong, marginBottom: spacing.md },
   typeTitle: { color: '#FFF', fontWeight: '900', fontSize: 18, letterSpacing: 1 },
   typeSub: { color: '#FFF', opacity: 0.8, fontSize: 12, marginTop: 2 },
 });

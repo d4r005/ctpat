@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +14,6 @@ export default function CasetaDetail() {
   const { token, user } = useAuth();
   const [rec, setRec] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState(false);
 
   // Exit form
   const [showExit, setShowExit] = useState(false);
@@ -28,81 +27,107 @@ export default function CasetaDetail() {
     guardia_salida_nombre: '',
   });
   const [saving, setSaving] = useState(false);
+  const [ticket, setTicket] = useState<any>(null);
 
-  const pickExitPhoto = async () => {
+  const [editEntry, setEditEntry] = useState(false);
+  const [entryForm, setEntryForm] = useState<any>({});
+
+  const isAdmin = user?.role === 'admin' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+
+  const pickPhoto = async (type: 'entry' | 'exit', field: string) => {
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
-      const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+
+      // En web launchCameraAsync puede fallar, usamos launchImageLibraryAsync como fallback
+      let r;
+      if (Platform.OS === 'web') {
+        r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+      } else {
+        r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+      }
+
       if (!r.canceled && r.assets[0]?.base64) {
-        setExitData({ ...exitData, sello_vvtt_foto: `data:image/jpeg;base64,${r.assets[0].base64}` });
+        const dataUrl = `data:image/jpeg;base64,${r.assets[0].base64}`;
+        if (type === 'entry') setEntryForm((prev: any) => ({ ...prev, [field]: dataUrl }));
+        else setExitData((prev: any) => ({ ...prev, [field]: dataUrl }));
       }
     } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
   };
 
   const load = async () => {
+    if (!token) return;
     setLoading(true);
     try {
       const data = await apiCall<any>(`/vehicle-records/${id}`, { token });
-      setRec(data);
+      if (data) {
+        setRec(data);
+        setEntryForm(data.entry || {});
+        if (data.exit) {
+          setExitData(data.exit);
+        }
 
-      // Auto-prefill exit data from associated shipping ticket if not already exited
-      if (!data.exit) {
+        // Buscar ticket de embarque para prellenado
         try {
-          const tickets = await apiCall<any[]>(`/shipping-tickets`, { token });
+          const tickets = await apiCall<any[]>('/shipping-tickets', { token });
           const myTicket = tickets.find(t =>
-            t.placas_unidad?.trim().toUpperCase() === data.entry.placas_unidad?.trim().toUpperCase() &&
+            t.placas_unidad === data.entry.placas_unidad &&
             new Date(t.created_at).getTime() >= new Date(data.created_at).getTime()
           );
-
-          if (myTicket) {
-            setExitData((prev: any) => ({
-              ...prev,
-              hora_apertura_cortina: myTicket.hora_apertura_cortina || '',
-              hora_cierre_cortina: myTicket.hora_cierre_cortina || '',
-              cortina_salida: myTicket.area || '',
-              sello_salida: myTicket.numero_sello || '',
-              pallets: myTicket.numero_pallets || '',
-              destino: myTicket.observaciones?.replace('Destino: ', '') || data.entry.destino || '',
-              numero_tractor_salida: myTicket.numero_economico || data.entry.numero_tractor || '',
-              numero_caja_salida: myTicket.numero_caja || data.entry.numero_caja || '',
-            }));
-          }
-        } catch (e) {
-          console.warn("Failed to fetch tickets for prefill", e);
-        }
-      } else {
-        setExitData(data.exit);
+          if (myTicket) setTicket(myTicket);
+        } catch {}
       }
-    } catch (e: any) { alert(e.message); }
-    finally { setLoading(false); }
+    } catch (e: any) {
+      console.error(e);
+      alert("Error al cargar datos");
+    } finally { setLoading(false); }
   };
 
-  const handleDelete = async () => {
-    const confirmed = Platform.OS === 'web'
-      ? window.confirm('¿Estás seguro de que deseas eliminar este registro de caseta? Esta acción no se puede deshacer.')
-      : await new Promise(resolve => {
-          Alert.alert(
-            "Eliminar Registro",
-            "¿Estás seguro de que deseas eliminar este registro de caseta?",
-            [
-              { text: "Cancelar", style: "cancel", onPress: () => resolve(false) },
-              { text: "Eliminar", style: "destructive", onPress: () => resolve(true) }
-            ]
-          );
-        });
+  const openExitForm = () => {
+    // Prellenado de datos extendido desde Ticket de Embarque
+    setExitData({
+      ...exitData,
+      numero_tractor_salida: rec.entry.numero_tractor || '',
+      numero_caja_salida: rec.entry.numero_caja || '',
+      destino: rec.entry.destino || ticket?.observaciones?.replace('Destino: ', '') || '',
+      pallets: ticket?.numero_pallets || '',
+      sello_salida: ticket?.numero_sello || '',
+      condicion_salida: rec.entry.condicion_carga === 'descarga' ? 'vacio' : 'carga_cliente',
+      guardia_salida_nombre: user?.name || '',
+      // Nuevos datos prellenados desde Tiempos y Carga del Ticket
+      hora_apertura_cortina: ticket?.hora_apertura_cortina || '',
+      hora_cierre_cortina: ticket?.hora_cierre_cortina || '',
+      cortina_salida: ticket?.area || '',
+    });
+    setShowExit(true);
+  };
 
-    if (!confirmed) return;
-
-    setDeleting(true);
+  const handleRemoveExitPhoto = async (field: string) => {
+    if (!confirm('¿Quitar esta foto del registro de salida?')) return;
+    setSaving(true);
     try {
-      await apiCall(`/vehicle-records/${id}`, { method: 'DELETE', token });
-      router.back();
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setDeleting(false);
-    }
+      const updatedExit = { ...exitData, [field]: '' };
+      await apiCall(`/vehicle-records/${id}`, { method: 'PUT', body: { exit: updatedExit }, token });
+      await load();
+    } catch (e: any) { alert(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const confirm = (msg: string) => {
+    if (Platform.OS === 'web') return window.confirm(msg);
+    return true;
+  };
+
+  const handleUpdateEntry = async () => {
+    setSaving(true);
+    try {
+      const body: any = { entry: entryForm };
+      if (rec.exit) body.exit = exitData;
+      await apiCall(`/vehicle-records/${id}`, { method: 'PUT', body, token });
+      setEditEntry(false);
+      await load();
+    } catch (e: any) { alert(e.message); }
+    finally { setSaving(false); }
   };
 
   useEffect(() => { if (id) load(); }, [id, token]);
@@ -127,26 +152,12 @@ export default function CasetaDetail() {
     try {
       await apiCall(`/vehicle-records/${id}/exit`, { method: 'PATCH', body: exitData, token });
       setShowExit(false);
-
-      if (Platform.OS === 'web') {
-        alert("Salida Registrada Exitosamente. El movimiento de la unidad ha concluido.");
-        await load();
-        return;
-      }
-
-      Alert.alert(
-        "Salida Registrada",
-        "El movimiento de la unidad ha concluido exitosamente.",
-        [{ text: "OK", onPress: load }]
-      );
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setSaving(false);
-    }
+      await load();
+    } catch (e: any) { alert(e.message); }
+    finally { setSaving(false); }
   };
 
-  if (loading || !rec) {
+  if (loading) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}><ActivityIndicator color={colors.brandPrimary} /></View>
@@ -154,61 +165,27 @@ export default function CasetaDetail() {
     );
   }
 
-  const e = rec.entry;
-  const x = rec.exit;
-  const isAdmin = user?.role === 'admin';
+  const e = rec?.entry || {};
+  const x = rec?.exit;
   const STATUS_COLOR: any = { entrada: colors.warning, inspeccionado: colors.info, salida: colors.success };
 
-  const adminUpdatePhoto = async (field: string) => {
-    try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) return;
-      const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
-      if (r.canceled || !r.assets[0]?.base64) return;
-
-      const photo_data = `data:image/jpeg;base64,${r.assets[0].base64}`;
-      await apiCall(`/admin/vehicle-records/${id}/photo`, {
-        method: 'PATCH',
-        body: { field_path: field, photo_data },
-        token
-      });
-      load();
-    } catch (e: any) { alert(e.message); }
-  };
-
-  const adminDeletePhoto = async (field: string) => {
-    if (!window.confirm('¿Eliminar esta foto permanentemente?')) return;
-    try {
-      await apiCall(`/admin/vehicle-records/${id}/photo`, {
-        method: 'PATCH',
-        body: { field_path: field, photo_data: '' },
-        token
-      });
-      load();
-    } catch (e: any) { alert(e.message); }
-  };
-
-  const AdminPhotoActions = ({ field, hasPhoto }: { field: string, hasPhoto: boolean }) => {
-    if (!isAdmin) return null;
+  if (!rec || !rec.entry) {
     return (
-      <View style={hasPhoto ? styles.adminPhotoOverlay : styles.adminAddPhotoContainer}>
-        <Pressable onPress={() => adminUpdatePhoto(field)} style={hasPhoto ? styles.adminPhotoBtn : styles.adminAddBtn}>
-          <Ionicons name={hasPhoto ? "pencil" : "add-circle"} size={hasPhoto ? 16 : 24} color="#FFF" />
-          {!hasPhoto && <Text style={styles.adminAddText}>AGREGAR FOTO</Text>}
-        </Pressable>
-        {hasPhoto && (
-          <Pressable onPress={() => adminDeletePhoto(field)} style={[styles.adminPhotoBtn, { backgroundColor: colors.error }]}>
-            <Ionicons name="trash" size={16} color="#FFF" />
-          </Pressable>
-        )}
-      </View>
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}><Text style={{ color: colors.muted }}>Error al cargar los datos del vehículo</Text></View>
+      </SafeAreaView>
     );
-  };
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="caseta-detail">
       <View style={styles.topBar}>
-        <Pressable onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} /></Pressable>
+        <Pressable
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/(app)/supervisor')}
+          style={{ padding: 10, marginLeft: -10 }}
+        >
+          <Ionicons name="arrow-back" size={28} color={colors.onBrandPrimary} />
+        </Pressable>
         <Text style={styles.topTitle}>Registro {e.placas_unidad}</Text>
         <View style={[styles.statusChip, { backgroundColor: STATUS_COLOR[rec.status] }]}>
           <Text style={styles.statusChipText}>{rec.status.toUpperCase()}</Text>
@@ -216,17 +193,42 @@ export default function CasetaDetail() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}>
-        <Section title="ENTRADA — DATOS DEL VEHÍCULO">
-          <Row label="Placas" value={e.placas_unidad} />
-          <Row label="Chofer" value={e.chofer_nombre} />
-          <Row label="Licencia" value={e.licencia_conductor} />
-          <Row label="Compañía" value={e.compania_transporte} />
-          <Row label="# Tractor" value={e.numero_tractor} />
-          <Row label="Caja / Tráiler" value={`${e.compania_caja} · ${e.numero_caja}`} />
-          <Row label="Sello entrada" value={e.sello_entrada} />
-          <Row label="Cortina" value={e.cortina_asignada} />
-          <Row label="Guardia caseta" value={e.guardia_caseta_nombre} />
-          <Row label="Fecha entrada" value={new Date(e.fecha_entrada).toLocaleString('es-MX')} />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
+          <Text style={[styles.secTitle, { flex: 1, marginBottom: 0 }]}>ENTRADA — DATOS DEL VEHÍCULO</Text>
+          {isAdmin && (
+            <Pressable
+              onPress={() => editEntry ? handleUpdateEntry() : setEditEntry(true)}
+              style={{ backgroundColor: editEntry ? colors.success : colors.brandSecondary, paddingHorizontal: 12, paddingVertical: 6, marginLeft: 8 }}
+            >
+              <Text style={{ color: '#FFF', fontWeight: '900', fontSize: 10 }}>{editEntry ? 'GUARDAR' : 'EDITAR'}</Text>
+            </Pressable>
+          )}
+        </View>
+
+        <Section>
+          {editEntry ? (
+            <View style={{ padding: spacing.sm }}>
+              <EditField label="PLACAS" v={entryForm.placas_unidad} on={(t: string) => setEntryForm({...entryForm, placas_unidad: t})} />
+              <EditField label="CHOFER" v={entryForm.chofer_nombre} on={(t: string) => setEntryForm({...entryForm, chofer_nombre: t})} />
+              <EditField label="COMPAÑÍA" v={entryForm.compania_transporte} on={(t: string) => setEntryForm({...entryForm, compania_transporte: t})} />
+              <EditField label="TRAILER" v={entryForm.numero_caja} on={(t: string) => setEntryForm({...entryForm, numero_caja: t})} />
+              <EditField label="SELLO" v={entryForm.sello_entrada} on={(t: string) => setEntryForm({...entryForm, sello_entrada: t})} />
+              <EditField label="CORTINA" v={entryForm.cortina_asignada} on={(t: string) => setEntryForm({...entryForm, cortina_asignada: t})} />
+            </View>
+          ) : (
+            <>
+              <Row label="Placas" value={e.placas_unidad} />
+              <Row label="Chofer" value={e.chofer_nombre} />
+              <Row label="Licencia" value={e.licencia_conductor} />
+              <Row label="Compañía" value={e.compania_transporte} />
+              <Row label="# Tractor" value={e.numero_tractor} />
+              <Row label="Caja / Tráiler" value={`${e.compania_caja} · ${e.numero_caja}`} />
+              <Row label="Sello entrada" value={e.sello_entrada} />
+              <Row label="Cortina" value={e.cortina_asignada} />
+              <Row label="Guardia caseta" value={e.guardia_caseta_nombre} />
+              <Row label="Fecha entrada" value={new Date(e.fecha_entrada).toLocaleString('es-MX')} />
+            </>
+          )}
         </Section>
 
         <Section title="CARGA">
@@ -248,48 +250,39 @@ export default function CasetaDetail() {
 
         <Section title="FOTOGRAFÍAS DE ENTRADA">
           <View style={styles.photoGrid}>
-            <View style={styles.photoItem}>
-              <Text style={styles.photoLabel}>FRENTE UNIDAD</Text>
-              {e.foto_frente_unidad ? (
-                <View>
-                  <Image source={{ uri: e.foto_frente_unidad }} style={styles.photoImg} />
-                  <AdminPhotoActions field="entry.foto_frente_unidad" hasPhoto={true} />
-                </View>
-              ) : (
-                <>
-                  <Text style={styles.noPhoto}>Sin foto</Text>
-                  <AdminPhotoActions field="entry.foto_frente_unidad" hasPhoto={false} />
-                </>
-              )}
-            </View>
-            <View style={styles.photoItem}>
-              <Text style={styles.photoLabel}>ATRÁS CAJA</Text>
-              {e.foto_atras_caja ? (
-                <View>
-                  <Image source={{ uri: e.foto_atras_caja }} style={styles.photoImg} />
-                  <AdminPhotoActions field="entry.foto_atras_caja" hasPhoto={true} />
-                </View>
-              ) : (
-                <>
-                  <Text style={styles.noPhoto}>Sin foto</Text>
-                  <AdminPhotoActions field="entry.foto_atras_caja" hasPhoto={false} />
-                </>
-              )}
-            </View>
-            <View style={styles.photoItem}>
-              <Text style={styles.photoLabel}>ID CHOFER</Text>
-              {e.foto_id_chofer ? (
-                <View>
-                  <Image source={{ uri: e.foto_id_chofer }} style={styles.photoImg} />
-                  <AdminPhotoActions field="entry.foto_id_chofer" hasPhoto={true} />
-                </View>
-              ) : (
-                <>
-                  <Text style={styles.noPhoto}>Sin foto</Text>
-                  <AdminPhotoActions field="entry.foto_id_chofer" hasPhoto={false} />
-                </>
-              )}
-            </View>
+            <PhotoBox
+              label="FRENTE UNIDAD"
+              uri={entryForm?.foto_frente_unidad}
+              onPress={() => editEntry && pickPhoto('entry', 'foto_frente_unidad')}
+              onRemove={() => {
+                if (confirm('¿Borrar esta foto?')) {
+                  setEntryForm({...entryForm, foto_frente_unidad: ''});
+                }
+              }}
+              isEdit={editEntry}
+            />
+            <PhotoBox
+              label="ATRÁS CAJA"
+              uri={entryForm?.foto_atras_caja}
+              onPress={() => editEntry && pickPhoto('entry', 'foto_atras_caja')}
+              onRemove={() => {
+                if (confirm('¿Borrar esta foto?')) {
+                  setEntryForm({...entryForm, foto_atras_caja: ''});
+                }
+              }}
+              isEdit={editEntry}
+            />
+            <PhotoBox
+              label="ID CHOFER"
+              uri={entryForm?.foto_id_chofer}
+              onPress={() => editEntry && pickPhoto('entry', 'foto_id_chofer')}
+              onRemove={() => {
+                if (confirm('¿Borrar esta foto?')) {
+                  setEntryForm({...entryForm, foto_id_chofer: ''});
+                }
+              }}
+              isEdit={editEntry}
+            />
           </View>
         </Section>
 
@@ -319,39 +312,21 @@ export default function CasetaDetail() {
             <Row label="# Caja salida" value={x.numero_caja_salida || '-'} />
             <Row label="Pallets / Cajas / Bultos" value={`${x.pallets || 0} / ${x.cajas || 0} / ${x.bultos || 0}`} />
             <Row label="Sello VVTT" value={(x.sello_vvtt_estado || '-').toUpperCase()} />
-            {x.sello_vvtt_foto ? (
-              <View style={{ padding: spacing.sm, alignItems: 'center' }}>
-                <Image source={{ uri: x.sello_vvtt_foto }} style={{ width: '100%', height: 200, resizeMode: 'contain', borderWidth: 1, borderColor: colors.border }} />
-                <AdminPhotoActions field="exit.sello_vvtt_foto" hasPhoto={true} />
-              </View>
-            ) : (
-              <View style={{ padding: spacing.sm }}>
-                <AdminPhotoActions field="exit.sello_vvtt_foto" hasPhoto={false} />
-              </View>
-            )}
+            <View style={styles.photoGrid}>
+              <PhotoBox
+                label="SELLO VVTT"
+                uri={exitData.sello_vvtt_foto || x.sello_vvtt_foto}
+                onPress={() => isAdmin && pickPhoto('exit', 'sello_vvtt_foto')}
+                onRemove={() => isAdmin && handleRemoveExitPhoto('sello_vvtt_foto')}
+                isEdit={isAdmin}
+              />
+            </View>
             <Row label="Guardia salida" value={x.guardia_salida_nombre} />
           </Section>
         ) : (
-          <Pressable testID="caseta-open-exit" style={[styles.bigBtn, { backgroundColor: colors.success }]} onPress={() => setShowExit(true)}>
+          <Pressable testID="caseta-open-exit" style={[styles.bigBtn, { backgroundColor: colors.success }]} onPress={openExitForm}>
             <Ionicons name="exit" size={24} color={colors.onSuccess} />
             <Text style={styles.bigBtnText}>REGISTRAR SALIDA</Text>
-          </Pressable>
-        )}
-
-        {isAdmin && (
-          <Pressable
-            style={[styles.bigBtn, { backgroundColor: colors.error, marginTop: spacing.md }]}
-            onPress={handleDelete}
-            disabled={deleting}
-          >
-            {deleting ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <>
-                <Ionicons name="trash" size={24} color="#FFF" />
-                <Text style={styles.bigBtnText}>ELIMINAR REGISTRO (Solo Admin)</Text>
-              </>
-            )}
           </Pressable>
         )}
       </ScrollView>
@@ -401,7 +376,10 @@ export default function CasetaDetail() {
                     <Pressable onPress={() => setExitData({ ...exitData, sello_vvtt_foto: '' })} style={{ position: 'absolute', top: 5, right: 5, backgroundColor: '#FFF', borderRadius: 15 }}><Ionicons name="close-circle" size={30} color={colors.error} /></Pressable>
                   </View>
                 ) : (
-                  <Pressable onPress={pickExitPhoto} style={{ borderWidth: 2, borderColor: colors.borderStrong, borderStyle: 'dashed', padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, backgroundColor: colors.surfaceSecondary }}>
+                  <Pressable
+                    onPress={() => pickPhoto('exit', 'sello_vvtt_foto')}
+                    style={{ borderWidth: 2, borderColor: colors.borderStrong, borderStyle: 'dashed', padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, backgroundColor: colors.surfaceSecondary }}
+                  >
                     <Ionicons name="camera" size={32} color={colors.brandPrimary} />
                     <Text style={{ fontWeight: '900', color: colors.brandPrimary, marginTop: 4 }}>FOTO DEL SELLO VVTT</Text>
                   </Pressable>
@@ -425,7 +403,7 @@ export default function CasetaDetail() {
 function Section({ title, children }: any) {
   return (
     <View style={{ marginBottom: spacing.lg }}>
-      <Text style={styles.secTitle}>{title}</Text>
+      {title && <Text style={styles.secTitle}>{title}</Text>}
       <View style={styles.secBody}>{children}</View>
     </View>
   );
@@ -435,6 +413,43 @@ function Row({ label, value }: { label: string; value: any }) {
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
       <Text style={styles.rowValue}>{value || '-'}</Text>
+    </View>
+  );
+}
+
+function PhotoBox({ label, uri, onPress, onRemove, isEdit }: any) {
+  return (
+    <View style={styles.photoItem}>
+      <Text style={styles.photoLabel}>{label}</Text>
+      {uri ? (
+        <View>
+          <Image source={{ uri }} style={styles.photoImg} />
+          {isEdit && (
+            <Pressable onPress={onRemove} style={{ position: 'absolute', top: 5, right: 5, backgroundColor: '#FFF', borderRadius: 12 }}>
+              <Ionicons name="close-circle" size={24} color={colors.error} />
+            </Pressable>
+          )}
+        </View>
+      ) : (
+        <Pressable
+          onPress={onPress}
+          style={[styles.photoImg, { borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface }]}
+          disabled={!isEdit}
+        >
+          <Ionicons name="camera" size={32} color={isEdit ? colors.brandPrimary : colors.border} />
+          <Text style={{ fontSize: 9, color: isEdit ? colors.brandPrimary : colors.border, fontWeight: '900', marginTop: 4 }}>
+            {isEdit ? 'AGREGAR FOTO' : 'SIN FOTO'}
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+function EditField({ label, v, on, tid, kb }: any) {
+  return (
+    <View style={{ marginBottom: spacing.sm }}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput testID={tid} style={styles.exitInput} value={v} onChangeText={on} keyboardType={kb || 'default'} placeholderTextColor={colors.muted} />
     </View>
   );
 }
@@ -478,29 +493,4 @@ const styles = StyleSheet.create({
   photoLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, marginBottom: 4, letterSpacing: 0.5 },
   photoImg: { width: '100%', height: 120, resizeMode: 'cover', borderWidth: 2, borderColor: colors.borderStrong },
   noPhoto: { fontSize: 10, color: colors.muted, fontStyle: 'italic' },
-  adminPhotoOverlay: {
-    position: 'absolute', top: 5, right: 5, flexDirection: 'row', gap: 5,
-  },
-  adminPhotoBtn: {
-    width: 30, height: 30, borderRadius: 15, backgroundColor: colors.brandPrimary,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3,
-  },
-  adminAddPhotoContainer: {
-    marginTop: 5,
-  },
-  adminAddBtn: {
-    backgroundColor: colors.brandPrimary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 4,
-    gap: 5,
-    justifyContent: 'center',
-  },
-  adminAddText: {
-    color: '#FFF',
-    fontSize: 10,
-    fontWeight: '900',
-  },
 });

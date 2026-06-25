@@ -33,6 +33,11 @@ export default function Perfil() {
             <Text style={styles.avatarText}>{user?.name?.[0]?.toUpperCase() || 'I'}</Text>
           </View>
           <Text style={styles.name}>{user?.name}</Text>
+          {user?.role && (
+            <View style={[styles.roleChip, user.role === 'admin' && { backgroundColor: colors.info }]}>
+              <Text style={styles.roleChipText}>{user.role.toUpperCase()}</Text>
+            </View>
+          )}
           <Text style={styles.email}>{user?.email}</Text>
         </View>
 
@@ -111,6 +116,8 @@ const styles = StyleSheet.create({
   avatarText: { color: colors.onBrandPrimary, fontWeight: '900', fontSize: 32 },
   name: { fontSize: typography.sizes.xl, fontWeight: '900', color: colors.onSurface },
   email: { color: colors.muted, marginTop: 4 },
+  roleChip: { backgroundColor: colors.brandPrimary, paddingHorizontal: 12, paddingVertical: 4, marginTop: 8, borderRadius: 2 },
+  roleChipText: { color: '#FFF', fontWeight: '900', fontSize: 10, letterSpacing: 1 },
   statsBlock: { backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong, marginBottom: spacing.lg },
   statRow: {
     padding: spacing.md, flexDirection: 'row', justifyContent: 'space-between',

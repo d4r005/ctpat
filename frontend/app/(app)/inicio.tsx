@@ -8,6 +8,7 @@ import { useAuth } from '@/src/context/AuthContext';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useNotifications } from '@/src/context/NotificationsContext';
 import NotificationsPanel from '@/src/components/NotificationsPanel';
+import * as Haptics from 'expo-haptics';
 import { colors, spacing, radius, typography } from '@/src/constants/theme';
 import { apiCall } from '@/src/api/client';
 
@@ -20,33 +21,60 @@ export default function Inicio() {
   const router = useRouter();
 
   const [activities, setActivities] = useState<any[]>([]);
+  const [lastActivityId, setLastActivityId] = useState<string | null>(null);
   const [loadingActivities, setLoadingActivities] = useState(false);
+  const [pendingYardCount, setPendingYardCount] = useState(0);
+  const [pendingApprovCount, setPendingApprovCount] = useState(0);
 
-  const loadActivities = useCallback(async () => {
+  const loadActivities = useCallback(async (isInitial = false) => {
     if (!token) return;
-    setLoadingActivities(true);
+    if (isInitial) setLoadingActivities(true);
     try {
-      const data = await apiCall<any[]>('/activities', { token });
-      setActivities(Array.isArray(data) ? data : []);
+      const [actData, yardData] = await Promise.all([
+        apiCall<any[]>('/activities', { token }),
+        apiCall<any[]>('/vehicle-records', { token })
+      ]);
+
+      const newActivities = Array.isArray(actData) ? actData : [];
+
+      // Conteo de pendientes para las notificaciones del panel
+      setPendingYardCount(yardData.filter((r: any) => !r.inspection_id && r.status === 'entrada').length);
+      setPendingApprovCount(allInspections.filter(i => i.approval_status === 'pendiente').length);
+
+      // Lógica de notificación (Sonido/Vibración) si hay actividad nueva
+      if (!isInitial && newActivities.length > 0) {
+        const latest = newActivities[0];
+        if (latest.id !== lastActivityId) {
+          setLastActivityId(latest.id);
+          // Vibración
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          // El sonido usualmente requiere expo-av, pero la vibración táctil
+          // es inmediata para el usuario en el panel maestro.
+        }
+      } else if (isInitial && newActivities.length > 0) {
+        setLastActivityId(newActivities[0].id);
+      }
+
+      setActivities(newActivities);
     } catch (e) {
       console.error('Error fetching activities:', e);
       setActivities([]);
     } finally {
-      setLoadingActivities(false);
+      if (isInitial) setLoadingActivities(false);
     }
-  }, [token]);
+  }, [token, lastActivityId]);
 
   const refreshAll = async () => {
     await Promise.all([
       refreshInspections(),
       refreshNotifications(),
-      loadActivities()
+      loadActivities(true)
     ]);
   };
 
   useEffect(() => {
-    loadActivities();
-    const interval = setInterval(loadActivities, 30000); // refresh activities every 30s
+    loadActivities(true);
+    const interval = setInterval(() => loadActivities(false), 8000); // Polling cada 8 segundos para "tiempo real"
     return () => clearInterval(interval);
   }, [loadActivities]);
 
@@ -121,6 +149,35 @@ export default function Inicio() {
             )}
           </Pressable>
         </View>
+
+        {(pendingYardCount > 0 || pendingApprovCount > 0) && (
+          <View style={styles.alertBox}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.sm }}>
+              <Ionicons name="warning" size={20} color={colors.warning} />
+              <Text style={styles.alertTitle}>ATENCIÓN: PROCESOS PENDIENTES</Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: spacing.md }}>
+              {pendingYardCount > 0 && (
+                <Pressable
+                  style={[styles.alertItem, { backgroundColor: colors.warning + '15', borderColor: colors.warning }]}
+                  onPress={() => router.push('/(app)/nueva')}
+                >
+                  <Text style={styles.alertCount}>{pendingYardCount}</Text>
+                  <Text style={styles.alertText}>Por Inspeccionar</Text>
+                </Pressable>
+              )}
+              {pendingApprovCount > 0 && (
+                <Pressable
+                  style={[styles.alertItem, { backgroundColor: colors.info + '15', borderColor: colors.info }]}
+                  onPress={() => router.push('/(app)/supervisor')}
+                >
+                  <Text style={styles.alertCount}>{pendingApprovCount}</Text>
+                  <Text style={styles.alertText}>Por Aprobar</Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        )}
 
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
@@ -204,6 +261,23 @@ const styles = StyleSheet.create({
   badgeText: { color: '#FFF', fontWeight: '900', fontSize: 11 },
   hello: { fontSize: typography.sizes.xxl, fontWeight: '900', color: colors.onSurface },
   headerSub: { fontSize: typography.sizes.base, color: colors.muted, marginTop: 2 },
+  alertBox: {
+    backgroundColor: colors.surfaceSecondary,
+    borderWidth: 2,
+    borderColor: colors.borderStrong,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  alertTitle: { fontSize: 11, fontWeight: '900', color: colors.onSurface, letterSpacing: 1 },
+  alertItem: {
+    flex: 1,
+    borderWidth: 1,
+    padding: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  alertCount: { fontSize: 18, fontWeight: '900', color: colors.onSurface },
+  alertText: { fontSize: 10, fontWeight: '700', color: colors.muted, marginTop: 2 },
   statsRow: {
     flexDirection: 'row', borderWidth: 2, borderColor: colors.borderStrong,
     backgroundColor: colors.surfaceSecondary, marginBottom: spacing.lg,

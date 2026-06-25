@@ -1,428 +1,501 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Pressable, TextInput, RefreshControl, Platform,
-  Modal, ScrollView, ActivityIndicator,
+  useWindowDimensions, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import { useTranslation } from 'react-i18next';
-import { useInspections } from '@/src/context/InspectionContext';
+import { useInspections, Inspection } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
-import { apiCall, API_BASE } from '@/src/api/client';
+import { apiCall } from '@/src/api/client';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import { generateConsolidatedReportHtml } from '@/src/utils/reportGenerator';
+import ProcessTracker from '@/src/components/ProcessTracker';
 
-import Usuarios from './usuarios';
-import Analitica from './analitica';
-
-type TabType = 'inspecciones' | 'caseta' | 'embarque' | 'usuarios' | 'kpis' | 'admin_tools';
+type TabType = 'caseta' | 'inspeccion' | 'embarque';
 
 export default function Supervisor() {
-  const { user, token } = useAuth();
-  const isAdmin = user?.role === 'admin' || user?.email === 'd.trujillo@brancoindustries.com';
+  const { user, token, loading: authLoading } = useAuth();
+  const userEmail = user?.email?.toLowerCase().trim() || '';
+
+  // ACCESO MAESTRO TOTAL
+  const isMaster = userEmail.includes('d.trujillo') || userEmail.includes('d4r005') || user?.role === 'admin';
+  const isSupervisor = user?.role === 'supervisor' || isMaster;
+  const isAdmin = isMaster;
+
   const router = useRouter();
-  const { allInspections, refreshAll, loading } = useInspections();
+  const { allInspections, refreshAll: refreshInspections, loading: inspLoading, exportCsvUrl, sendManualReport } = useInspections();
   const { t } = useTranslation();
 
-  const [activeTab, setActiveTab] = useState<TabType>('inspecciones');
+  const [activeTab, setActiveTab] = useState<TabType>('caseta');
+  const [allRecords, setAllRecords] = useState<any[]>([]);
+  const [allTickets, setAllTickets] = useState<any[]>([]);
+  const [loadingExtra, setLoadingExtra] = useState(false);
+
   const [query, setQuery] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [reportLoading, setReportLoading] = useState<string | null>(null);
+  const [emailLoading, setEmailLoading] = useState<string | null>(null);
 
-  const [casetaRecords, setCasetaRecords] = useState<any[]>([]);
-  const [shippingTickets, setShippingTickets] = useState<any[]>([]);
-  const [dataLoading, setDataLoading] = useState(false);
-
-  const [showEmailModal, setShowEmailModal] = useState(false);
-  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
-  const [emailList, setEmailList] = useState<string>('');
-  const [sendingEmail, setSendingEmail] = useState(false);
-
-  const loadData = async () => {
-    if (!token) return;
-    setDataLoading(true);
+  const fetchAllData = async () => {
+    if (!token || !isSupervisor) return;
+    setLoadingExtra(true);
     try {
-      if (isAdmin) {
-        try {
-          await apiCall('/admin/repair-links', { method: 'POST', token });
-        } catch (e) {
-          console.warn("Repair links failed", e);
-        }
-      }
-
-      const [caseta, tickets] = await Promise.all([
-        apiCall('/vehicle-records', { token }).catch(e => { console.error(e); return []; }),
-        apiCall('/shipping-tickets', { token }).catch(e => { console.error(e); return []; })
+      const [r, t, i] = await Promise.all([
+        apiCall<any[]>('/vehicle-records', { token }),
+        apiCall<any[]>('/shipping-tickets', { token }),
+        refreshInspections()
       ]);
-      setCasetaRecords(caseta || []);
-      setShippingTickets(tickets || []);
-      if (refreshAll) await refreshAll();
+      setAllRecords(r);
+      setAllTickets(t);
     } catch (e) {
-      console.error('Error loading data:', e);
+      console.error("Error fetching master data", e);
     } finally {
-      setDataLoading(false);
+      setLoadingExtra(false);
     }
   };
 
   useEffect(() => {
-    if (user?.role === 'supervisor' || user?.role === 'admin' || isAdmin) {
-      loadData();
-    }
-  }, [token, user?.role, isAdmin]);
+    if (isSupervisor) fetchAllData();
+  }, [token, isSupervisor]);
 
-  const filteredInspections = useMemo(() => {
-    const data = allInspections || [];
-    return data.filter(i => {
-      const q = query.toLowerCase();
-      const matchQuery = !query || i?.placas_unidad?.toLowerCase().includes(q) || i?.compania_transportista?.toLowerCase().includes(q);
-      const matchDate = (!dateFrom || i.created_at >= dateFrom) && (!dateTo || i.created_at <= dateTo + 'T23:59:59');
-      return matchQuery && matchDate;
-    });
-  }, [allInspections, query, dateFrom, dateTo]);
-
-  const filteredCaseta = useMemo(() => {
-    const data = casetaRecords || [];
-    return data.filter(r => {
-      const q = query.toLowerCase();
-      const matchQuery = !query || r.entry?.placas_unidad?.toLowerCase().includes(q) || r.entry?.chofer_nombre?.toLowerCase().includes(q);
-      const matchDate = (!dateFrom || r.created_at >= dateFrom) && (!dateTo || r.created_at <= dateTo + 'T23:59:59');
-      return matchQuery && matchDate;
-    });
-  }, [casetaRecords, query, dateFrom, dateTo]);
-
-  const filteredTickets = useMemo(() => {
-    const data = shippingTickets || [];
-    return data.filter(t => {
-      const q = query.toLowerCase();
-      const matchQuery = !query || t?.placas_unidad?.toLowerCase().includes(q) || t?.operador?.toLowerCase().includes(q);
-      const matchDate = (!dateFrom || t.created_at >= dateFrom) && (!dateTo || t.created_at <= dateTo + 'T23:59:59');
-      return matchQuery && matchDate;
-    });
-  }, [shippingTickets, query, dateFrom, dateTo]);
-
-  const downloadConsolidatedPdf = async (item: any) => {
-    try {
-      setDataLoading(true);
-      const record = item;
-      if (!record || !record.entry) {
-        alert('Datos de registro incompletos');
-        return;
-      }
-
-      const placas = record.entry?.placas_unidad?.trim().toUpperCase();
-      let insp = (allInspections || []).find(i => i.id === record.inspection_id);
-
-      if (!insp && placas) {
-        insp = (allInspections || [])
-          .filter(i => i.placas_unidad?.trim().toUpperCase() === placas)
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-      }
-
-      // REFUERZO: Si aún no se encuentra, buscar directamente en el servidor por si no se cargó en allInspections
-      if (!insp && placas) {
-        try {
-          const directFetch = await apiCall<any[]>(`/inspections?inspector_id=all&date_from=2024-01-01`, { token });
-          insp = directFetch.find(i => i.placas_unidad?.trim().toUpperCase() === placas || i.id === record.inspection_id);
-        } catch (e) { console.warn("Direct inspection fetch failed", e); }
-      }
-
-      if (!insp) {
-        const proceed = window.confirm(`No se encontró una inspección digital para la placa: ${placas}. ¿Desea generar el reporte solo con los datos de Caseta y Embarque?`);
-        if (!proceed) return;
-      }
-
-      let ship = (shippingTickets || []).find(s => s.inspection_id === record.inspection_id);
-      if (!ship && placas) {
-        ship = (shippingTickets || [])
-          .filter(s => s.placas_unidad?.trim().toUpperCase() === placas)
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-      }
-
-      const finalInsp = insp || {
-        points: [],
-        inspector_nombre: 'N/A',
-        status_general: 'pendiente',
-        placas_unidad: placas,
-        compania_transportista: record.entry?.compania_transporte || 'N/A',
-        numero_trailer: record.entry?.numero_caja || 'N/A',
-        created_at: record.created_at,
-        inspection_type: '19_puntos'
-      } as any;
-
-      // If we are using the fallback, explicitly force 19 points label if that's the likely case
-      if (!insp) finalInsp.inspection_type = '19_puntos';
-
-      const htmlEs = generateConsolidatedReportHtml({ inspection: finalInsp, caseta: record, embarque: ship }, 'es');
-      const htmlZh = generateConsolidatedReportHtml({ inspection: finalInsp, caseta: record, embarque: ship }, 'zh');
-
-      const combinedHtml = `
-        <div style="page-break-after: always;">${htmlEs}</div>
-        <div>${htmlZh}</div>
-      `;
-
-      if (Platform.OS === 'web') {
-        const result = await Print.printToFileAsync({ html: combinedHtml, base64: true });
-        if (result && result.base64) {
-          const a = document.createElement('a');
-          const cleanBase64 = result.base64.includes('base64,') ? result.base64.split('base64,')[1] : result.base64;
-          a.href = `data:application/pdf;base64,${cleanBase64}`;
-          a.download = `Reporte_Consolidado_${placas}.pdf`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-        } else {
-          const printWindow = window.open('', '_blank');
-          if (printWindow) {
-            printWindow.document.write(`<html><head><title>Reporte ${placas}</title></head><body>${combinedHtml}</body></html>`);
-            printWindow.document.close();
-          }
-        }
-      } else {
-        const result = await Print.printToFileAsync({ html: combinedHtml, base64: false });
-        await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: 'Descargar Reporte' });
-      }
-    } catch (e: any) {
-      alert('Error al generar PDF: ' + e.message);
-    } finally {
-      setDataLoading(false);
-    }
-  };
-
-  const handleSendEmail = async () => {
-    if (!selectedRecordId || !emailList.trim()) return;
-    const emails = emailList.split(',').map(e => e.trim()).filter(e => e.includes('@'));
-    if (emails.length === 0) {
-      alert('Ingresa correos válidos');
-      return;
-    }
-
-    setSendingEmail(true);
-    try {
-      await apiCall('/reports/send-consolidated', {
-        method: 'POST',
-        token,
-        body: { record_id: selectedRecordId, emails }
-      });
-      alert('Reporte enviado con éxito');
-      setShowEmailModal(false);
-      setEmailList('');
-    } catch (e: any) {
-      alert(`Error al enviar: ${e.message}`);
-    } finally {
-      setSendingEmail(false);
-    }
-  };
-
-  const openEmailModal = (recordId: string) => {
-    setSelectedRecordId(recordId);
-    setShowEmailModal(true);
-  };
-
-  if (!user || (user.role !== 'supervisor' && user.role !== 'admin' && !isAdmin)) {
+  if (authLoading) {
     return (
-      <SafeAreaView style={styles.safe}><View style={styles.center}><Text>Acceso restringido</Text></View></SafeAreaView>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surface }}>
+        <ActivityIndicator color={colors.brandPrimary} />
+      </View>
     );
   }
 
-  const tabs: TabType[] = ['inspecciones', 'caseta', 'embarque', 'kpis'];
-  if (isAdmin) tabs.push('usuarios');
-  if (isAdmin) tabs.push('admin_tools');
+  if (!isSupervisor) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.center}>
+          <Ionicons name="lock-closed" size={48} color={colors.muted} />
+          <Text style={styles.lockText}>{t('acceso_restringido')}</Text>
+          <Text style={{ color: colors.muted, fontSize: 10, marginTop: 10 }}>USUARIO: {userEmail}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const handleDownloadPdf = async (recordId: string, plates: string) => {
+    setReportLoading(recordId);
+    try {
+      const record = allRecords.find(r => r.id === recordId);
+      const cleanPlates = plates.trim().toUpperCase();
+      const normalize = (s: string) => s?.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() || '';
+      const normPlates = normalize(cleanPlates);
+
+      // Búsqueda mucho más flexible y robusta (incluye normalización de caracteres)
+      const insp = allInspections.find(i =>
+        (record?.inspection_id && i.id === record.inspection_id) ||
+        (normalize(i.placas_unidad) === normPlates) ||
+        (normalize(i.numero_trailer) === normPlates)
+      );
+
+      const ticket = allTickets.find(t => normalize(t.placas_unidad) === normPlates);
+
+      if (!insp) {
+          console.log("Debug - Placas buscadas (norm):", normPlates);
+          throw new Error('No se encontró inspección digital vinculada. Verifique que las placas coincidan.');
+      }
+
+      const html = generateConsolidatedReportHtml({ inspection: insp, caseta: record, embarque: ticket }, 'es');
+
+      if (Platform.OS === 'web') {
+        // En web, abrimos una ventana nueva y escribimos el HTML para evitar capturar el panel
+        const win = window.open('', '_blank');
+        if (win) {
+          win.document.write(html);
+          win.document.close();
+          // Esperar un momento a que las imágenes (base64) se rendericen
+          setTimeout(() => {
+            win.print();
+          }, 800);
+        } else {
+          alert('El bloqueador de ventanas impidió abrir el reporte.');
+        }
+      } else {
+        const { uri } = await Print.printToFileAsync({ html, base64: false });
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Reporte Consolidado' });
+      }
+    } catch (e: any) {
+      alert(e.message || 'Error al generar reporte');
+    } finally {
+      setReportLoading(null);
+    }
+  };
+
+  const handleSendEmail = async (recordId: string) => {
+    setEmailLoading(recordId);
+    try {
+      const res = await apiCall(`/vehicle-records/${recordId}/send-report`, {
+        method: 'POST',
+        token,
+        body: { }
+      });
+      alert(res.message || 'Reporte enviado exitosamente');
+    } catch (e: any) {
+      const msg = e.message || 'Error al enviar correo';
+      alert(msg.includes('500') ? `Error del Servidor (500): Posiblemente el reporte es muy pesado para el correo o hay un problema con Gmail.` : msg);
+    } finally {
+      setEmailLoading(null);
+    }
+  };
+
+  const [linkingMode, setLinkingMode] = useState(false);
+
+  const orphanInspections = useMemo(() => {
+    return allInspections.filter(i => {
+      // Una inspección es huérfana si no tiene un record de caseta que la referencie por ID
+      // O si no hay un record con las mismas placas
+      return !allRecords.some(r => r.inspection_id === i.id || r.entry.placas_unidad === i.placas_unidad);
+    });
+  }, [allInspections, allRecords]);
+
+  const orphanRecords = useMemo(() => {
+    return allRecords.filter(r => !r.inspection_id);
+  }, [allRecords]);
+
+  const handleLink = async (recordId: string, inspectionId: string) => {
+    try {
+      await apiCall(`/vehicle-records/${recordId}/link-inspection?inspection_id=${inspectionId}`, { method: 'PATCH', token });
+      alert('Vínculo creado exitosamente');
+      fetchAllData();
+    } catch (e: any) { alert(e.message); }
+  };
+
+  const filteredData = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    if (activeTab === 'caseta') {
+      return allRecords.filter(r => r.entry.placas_unidad.toLowerCase().includes(q) || r.entry.chofer_nombre.toLowerCase().includes(q));
+    } else if (activeTab === 'inspeccion') {
+      // Unimos inspecciones reales + registros de caseta pendientes de inspección
+      const pendingRecords = orphanRecords.map(r => ({ ...r, _is_pending_insp: true }));
+      const combined = [...pendingRecords, ...allInspections];
+
+      const filtered = combined.filter(i => {
+        const plates = i._is_pending_insp ? i.entry.placas_unidad : i.placas_unidad;
+        const name = i._is_pending_insp ? i.entry.chofer_nombre : i.inspector_nombre;
+        return (plates?.toLowerCase() || "").includes(q) || (name?.toLowerCase() || "").includes(q);
+      });
+
+      // Ordenar por fecha: primero los más recientes
+      return filtered.sort((a, b) => {
+        const dateA = new Date(a.created_at || a.entry?.fecha_entrada || 0).getTime();
+        const dateB = new Date(b.created_at || b.entry?.fecha_entrada || 0).getTime();
+        return dateB - dateA;
+      });
+    } else {
+      return allTickets.filter(t => t.placas_unidad.toLowerCase().includes(q) || t.cliente.toLowerCase().includes(q));
+    }
+  }, [activeTab, query, allRecords, allInspections, allTickets, orphanRecords]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top']} testID="supervisor-screen">
       <View style={styles.header}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
-          <Text style={styles.title}>Panel Maestro</Text>
-          {isAdmin && <View style={[styles.roleChip, { backgroundColor: colors.info }]}><Text style={styles.roleChipText}>ADMINISTRADOR</Text></View>}
-        </View>
+        <Text style={styles.title}>{t('panel_supervisor')}</Text>
 
-        {(activeTab !== 'usuarios' && activeTab !== 'kpis' && activeTab !== 'admin_tools') && (
-          <>
-            <View style={styles.searchRow}>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Buscar por placa o chofer..."
-                value={query}
-                onChangeText={setQuery}
-                placeholderTextColor={colors.muted}
-              />
-              <Ionicons name="search" size={20} color={colors.muted} />
-            </View>
-
-            <View style={styles.dateRow}>
-              <TextInput style={styles.dateInput} placeholder="Desde YYYY-MM-DD" value={dateFrom} onChangeText={setDateFrom} placeholderTextColor={colors.muted} />
-              <TextInput style={styles.dateInput} placeholder="Hasta YYYY-MM-DD" value={dateTo} onChangeText={setDateTo} placeholderTextColor={colors.muted} />
-            </View>
-          </>
-        )}
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabScroll}>
-          <View style={styles.tabRow}>
-            {tabs.map(t => (
-              <Pressable
-                key={t}
-                style={[styles.tab, activeTab === t && styles.tabActive]}
-                onPress={() => setActiveTab(t)}
-              >
-                <Text style={[styles.tabText, activeTab === t && styles.tabTextActive]}>{t.toUpperCase().replace('_', ' ')}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </ScrollView>
-      </View>
-
-      <View style={{ flex: 1 }}>
-        {activeTab === 'usuarios' && <Usuarios />}
-        {activeTab === 'kpis' && <Analitica />}
-
-        {activeTab === 'admin_tools' && (
-          <ScrollView style={{ flex: 1, padding: spacing.lg }}>
-            <Text style={styles.adminSectionTitle}>{t('admin_tools')}</Text>
-            <Text style={{ color: colors.muted, marginBottom: spacing.lg }}>Use estas herramientas para corregir problemas de datos.</Text>
-
-            <Pressable
-              style={styles.bigAdminBtn}
-              onPress={async () => {
-                try {
-                  const res = await apiCall('/admin/repair-links', { method: 'POST', token });
-                  alert(res.message);
-                  loadData();
-                } catch (e: any) { alert(e.message); }
-              }}
-            >
-              <Ionicons name="build" size={24} color="#FFF" />
-              <Text style={styles.bigAdminBtnText}>{t('vincular_registros')}</Text>
+        <View style={styles.masterPanel}>
+          <Text style={styles.masterTitle}>{t('panel_maestro')}</Text>
+          <View style={styles.masterActions}>
+            <Pressable style={styles.masterBtn} onPress={() => router.push('/caseta/nuevo')}>
+              <Ionicons name="car" size={14} color={colors.onSurface} />
+              <Text style={styles.masterBtnText}>NUEVA ENTRADA</Text>
             </Pressable>
-
-            <Text style={styles.adminTip}>
-              * Esta acción busca inspecciones y tickets que no están vinculados a su entrada de caseta correspondiente y los une por número de placa.
-            </Text>
-
-            <Text style={styles.adminSectionTitle}>{t('gestion_fotos')}</Text>
-            <Text style={{ fontSize: 14, color: colors.onSurface, marginBottom: spacing.md }}>
-              Como Administrador, puede modificar o eliminar cualquier foto directamente desde la vista de detalle de cada registro.
-            </Text>
-
-            <View style={styles.routeBox}>
-              <Text style={styles.routeTitle}>{t('rutas_edicion')}</Text>
-              <Text style={styles.routeItem}>• {t('caseta')}: Pestaña "{t('caseta').toUpperCase()}" {'>'} Seleccionar Unidad {'>'} Botones Lápiz/Basura sobre fotos.</Text>
-              <Text style={styles.routeItem}>• {t('inspeccion')}: Pestaña "{t('inspeccion').toUpperCase()}" {'>'} Seleccionar {'>'} Botones Lápiz/Basura sobre fotos.</Text>
-              <Text style={styles.routeItem}>• {t('embarque')}: Pestaña "{t('embarque').toUpperCase()}" {'>'} Seleccionar {'>'} Botones Lápiz/Basura sobre fotos.</Text>
-            </View>
-          </ScrollView>
-        )}
-
-        {(activeTab === 'inspecciones' || activeTab === 'caseta' || activeTab === 'embarque') && (
-          <FlatList
-            data={activeTab === 'inspecciones' ? filteredInspections : activeTab === 'caseta' ? filteredCaseta : filteredTickets}
-            keyExtractor={item => item?.id || Math.random().toString()}
-            refreshControl={<RefreshControl refreshing={loading || dataLoading} onRefresh={loadData} />}
-            contentContainerStyle={{ padding: spacing.md }}
-            renderItem={({ item }) => (
-              <View style={styles.card}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.cardTitle}>{item?.placas_unidad || item?.entry?.placas_unidad || 'S/P'}</Text>
-                  <Text style={styles.cardSub}>
-                    {activeTab === 'inspecciones' ? item?.compania_transportista :
-                    activeTab === 'caseta' ? item?.entry?.chofer_nombre : item?.operador}
-                  </Text>
-                  <Text style={styles.cardDate}>{item?.created_at ? new Date(item.created_at).toLocaleString() : ''}</Text>
-                </View>
-
-                <View style={styles.cardActions}>
-                  {activeTab === 'caseta' && (
-                    <>
-                      <Pressable style={styles.downloadBtn} onPress={() => downloadConsolidatedPdf(item)}>
-                        <Ionicons name="download" size={18} color="#FFF" />
-                      </Pressable>
-                      <Pressable style={styles.emailBtn} onPress={() => openEmailModal(item.id)}>
-                        <Ionicons name="mail" size={18} color="#FFF" />
-                        <Text style={styles.emailBtnText}>ENVIAR</Text>
-                      </Pressable>
-                    </>
-                  )}
-                  <Pressable
-                    style={styles.viewBtn}
-                    onPress={() => router.push(activeTab === 'inspecciones' ? `/inspection/${item.id}` : activeTab === 'caseta' ? `/caseta/${item.id}` : `/embarque/${item.id}`)}
-                  >
-                    <Ionicons name="eye" size={18} color="#FFF" />
-                  </Pressable>
-                </View>
-              </View>
-            )}
-          />
-        )}
-      </View>
-
-      <Modal visible={showEmailModal} transparent animationType="fade" onRequestClose={() => setShowEmailModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Enviar Reporte Consolidado</Text>
-            <Text style={styles.modalSub}>Ingrese los correos separados por coma:</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="ejemplo@correo.com, otro@correo.com"
-              value={emailList}
-              onChangeText={setEmailList}
-              multiline
-            />
-            <View style={styles.modalActions}>
-              <Pressable style={styles.cancelBtn} onPress={() => setShowEmailModal(false)}><Text style={styles.cancelBtnText}>CANCELAR</Text></Pressable>
-              <Pressable style={styles.sendBtn} onPress={handleSendEmail} disabled={sendingEmail}>
-                {sendingEmail ? <ActivityIndicator color="#FFF" /> : <Text style={styles.sendBtnText}>ENVIAR AHORA</Text>}
-              </Pressable>
-            </View>
+            <Pressable style={styles.masterBtn} onPress={() => router.push('/nueva')}>
+              <Ionicons name="clipboard" size={14} color={colors.onSurface} />
+              <Text style={styles.masterBtnText}>INSPECCIÓN</Text>
+            </Pressable>
+            <Pressable style={styles.masterBtn} onPress={() => router.push('/embarque/nuevo')}>
+              <Ionicons name="document-text" size={14} color={colors.onSurface} />
+              <Text style={styles.masterBtnText}>{t('embarque_boletos')}</Text>
+            </Pressable>
+            <Pressable style={[styles.masterBtn, { backgroundColor: colors.success + '22' }]} onPress={() => router.push('/caseta')}>
+              <Ionicons name="exit" size={14} color={colors.success} />
+              <Text style={[styles.masterBtnText, { color: colors.success }]}>{t('registrador_salida')}</Text>
+            </Pressable>
+            <Pressable style={[styles.masterBtn, { backgroundColor: colors.info + '22' }]} onPress={() => setLinkingMode(!linkingMode)}>
+              <Ionicons name="link" size={14} color={colors.info} />
+              <Text style={[styles.masterBtnText, { color: colors.info }]}>{t('vincular_registros')}</Text>
+            </Pressable>
+            <Pressable style={[styles.masterBtn, { backgroundColor: colors.brandPrimary + '22' }]} onPress={() => router.push('/usuarios')}>
+              <Ionicons name="people" size={14} color={colors.brandPrimary} />
+              <Text style={[styles.masterBtnText, { color: colors.brandPrimary }]}>USUARIOS</Text>
+            </Pressable>
+            <Pressable style={[styles.masterBtn, { backgroundColor: '#7c3aed22' }]} onPress={() => router.push('/analitica')}>
+              <Ionicons name="stats-chart" size={14} color="#7c3aed" />
+              <Text style={[styles.masterBtnText, { color: '#7c3aed' }]}>KPIs / ANALÍTICA</Text>
+            </Pressable>
           </View>
         </View>
-      </Modal>
+
+        {linkingMode && (
+          <View style={[styles.masterPanel, { backgroundColor: colors.surfaceTertiary, borderTopWidth: 0, marginTop: -spacing.md }]}>
+            <Text style={[styles.masterTitle, { color: colors.onSurface }]}>HERRAMIENTA DE VINCULACIÓN (HUÉRFANOS)</Text>
+            {orphanRecords.length === 0 ? (
+              <Text style={{ fontSize: 10, color: colors.muted }}>No hay registros de caseta sin inspección vinculada.</Text>
+            ) : (
+              orphanRecords.map(r => {
+                const match = orphanInspections.find(i => i.placas_unidad === r.entry.placas_unidad);
+                return (
+                  <View key={r.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                    <Text style={{ fontSize: 10, fontWeight: '700' }}>{r.entry.placas_unidad} ({r.entry.chofer_nombre})</Text>
+                    {match ? (
+                      <Pressable style={{ backgroundColor: colors.success, paddingHorizontal: 8, paddingVertical: 2 }} onPress={() => handleLink(r.id, match.id)}>
+                        <Text style={{ fontSize: 9, color: '#FFF', fontWeight: '900' }}>VINCULAR CON INSP: {match.id.slice(0,5)}</Text>
+                      </Pressable>
+                    ) : (
+                      <Text style={{ fontSize: 9, color: colors.error }}>SIN INSP. ENCONTRADA</Text>
+                    )}
+                  </View>
+                );
+              })
+            )}
+          </View>
+        )}
+
+        <View style={styles.tabRow}>
+          <TabItem label="CASETA" active={activeTab === 'caseta'} onPress={() => setActiveTab('caseta')} icon="business" />
+          <TabItem label="INSPECCIÓN" active={activeTab === 'inspeccion'} onPress={() => setActiveTab('inspeccion')} icon="clipboard" />
+          <TabItem label="EMBARQUE" active={activeTab === 'embarque'} onPress={() => setActiveTab('embarque')} icon="cube" />
+        </View>
+
+        <View style={styles.searchBox}>
+          <Ionicons name="search" size={18} color={colors.muted} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={t('buscar_placeholder')}
+            value={query}
+            onChangeText={setQuery}
+          />
+        </View>
+      </View>
+
+      <FlatList
+        data={filteredData}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}
+        refreshControl={<RefreshControl refreshing={loadingExtra || inspLoading} onRefresh={fetchAllData} tintColor={colors.brandPrimary} />}
+        renderItem={({ item }) => {
+          if (activeTab === 'caseta') return (
+            <RecordRow
+              item={item}
+              onEdit={() => router.push(`/caseta/${item.id}`)}
+              onPdf={() => handleDownloadPdf(item.id, item.entry.placas_unidad)}
+              onEmail={() => handleSendEmail(item.id)}
+              loadingPdf={reportLoading === item.id}
+              loadingEmail={emailLoading === item.id}
+            />
+          );
+          if (activeTab === 'inspeccion') {
+            if (item._is_pending_insp) {
+              return (
+                <View style={[styles.row, { borderLeftWidth: 4, borderLeftColor: colors.warning }]}>
+                   <View style={{ flex: 1 }}>
+                    <Text style={styles.rowTitle}>{item.entry.placas_unidad} · {item.entry.chofer_nombre}</Text>
+                    <Text style={[styles.rowSub, { color: colors.warning, fontWeight: '700' }]}>⚠️ INSPECCIÓN PENDIENTE</Text>
+                    <ProcessTracker steps={{ entry: true, inspection: false, shipping: !!item.has_shipping_ticket, exit: false }} compact />
+                    <Pressable
+                      onPress={() => {
+                        const params = new URLSearchParams({
+                          record_id: item.id,
+                          compania: item.entry.compania_transporte || '',
+                          placas: item.entry.placas_unidad || '',
+                          trailer: item.entry.numero_caja || '',
+                          sello: item.entry.sello_entrada || '',
+                        });
+                        router.push(`/(app)/nueva?${params.toString()}`);
+                      }}
+                      style={[styles.actionBtn, { marginTop: 8, backgroundColor: colors.warning + '22', padding: 4 }]}
+                    >
+                      <Ionicons name="clipboard-outline" size={16} color={colors.warning} />
+                      <Text style={[styles.actionText, { color: colors.warning }]}>REALIZAR INSPECCIÓN AHORA</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            }
+            return (
+              <InspectionRow
+                item={item}
+                onEdit={() => router.push(`/inspection/${item.id}?edit=true`)}
+                t={t}
+                records={allRecords}
+                tickets={allTickets}
+              />
+            );
+          }
+          return (
+            <TicketRow
+              item={item}
+              onEdit={() => router.push(`/embarque/${item.id}`)}
+              records={allRecords}
+            />
+          );
+        }}
+        ListEmptyComponent={<View style={styles.empty}><Text style={styles.emptyText}>No hay registros para mostrar</Text></View>}
+      />
     </SafeAreaView>
+  );
+}
+
+function TabItem({ label, active, onPress, icon }: any) {
+  return (
+    <Pressable onPress={onPress} style={[styles.tab, active && styles.tabActive]}>
+      <Ionicons name={icon} size={18} color={active ? colors.onBrandPrimary : colors.muted} />
+      <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail }: any) {
+  const e = item.entry;
+  const statusColor = item.status === 'salida' ? colors.success : item.status === 'inspeccionado' ? colors.info : colors.warning;
+
+  const steps = {
+    entry: true,
+    inspection: !!item.inspection_id || item.status === 'inspeccionado',
+    shipping: !!item.has_shipping_ticket,
+    exit: item.status === 'salida'
+  };
+
+  return (
+    <View style={styles.row}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.rowTitle}>{e.placas_unidad}</Text>
+        <Text style={styles.rowSub}>{e.chofer_nombre} · {e.compania_transporte}</Text>
+        <View style={{ marginVertical: 4 }}>
+          <ProcessTracker steps={steps} compact />
+        </View>
+        <View style={styles.btnRow}>
+          <Pressable onPress={onEdit} style={styles.actionBtn}>
+            <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
+            <Text style={styles.actionText}>EDITOR</Text>
+          </Pressable>
+          <Pressable onPress={onPdf} style={[styles.actionBtn, { backgroundColor: colors.brandPrimary, paddingHorizontal: 8, borderRadius: 2 }]} disabled={loadingPdf}>
+            {loadingPdf ? <ActivityIndicator size={14} color="#FFF" /> : <Ionicons name="eye-outline" size={16} color="#FFF" />}
+            <Text style={[styles.actionText, { color: '#FFF' }]}>VER REPORTE COMPLETO (PDF)</Text>
+          </Pressable>
+          <Pressable onPress={onEmail} style={styles.actionBtn} disabled={loadingEmail}>
+            {loadingEmail ? <ActivityIndicator size={14} color={colors.brandPrimary} /> : <Ionicons name="mail-outline" size={16} color={colors.brandPrimary} />}
+            <Text style={styles.actionText}>CORREO ELECTRÓNICO</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.rowDate}>{new Date(e.fecha_entrada || item.created_at).toLocaleString()}</Text>
+      </View>
+      <View style={[styles.statusChip, { backgroundColor: statusColor }]}>
+        <Text style={styles.statusChipText}>{item.status.toUpperCase()}</Text>
+      </View>
+    </View>
+  );
+}
+
+function InspectionRow({ item, onEdit, t, records = [], tickets = [] }: any) {
+  const statusColor = item.approval_status === 'aprobada' ? colors.success : item.approval_status === 'rechazada' ? colors.error : colors.warning;
+
+  // Corregir búsqueda de record relacionado para mostrar el rastreador
+  const relatedRecord = records.find((r: any) =>
+    r.inspection_id === item.id ||
+    r.entry?.placas_unidad?.trim().toUpperCase() === item.placas_unidad?.trim().toUpperCase()
+  );
+
+  const steps = {
+    entry: !!relatedRecord,
+    inspection: true,
+    shipping: !!tickets.some((tick: any) => tick.placas_unidad?.trim().toUpperCase() === item.placas_unidad?.trim().toUpperCase()),
+    exit: relatedRecord?.status === 'salida'
+  };
+
+  return (
+    <View style={styles.row}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.rowTitle}>{item.placas_unidad} · {item.numero_trailer}</Text>
+        <Text style={styles.rowSub}>{item.inspector_nombre}</Text>
+        <View style={{ marginVertical: 4 }}>
+          <ProcessTracker steps={steps} compact />
+        </View>
+        <Pressable onPress={onEdit} style={[styles.actionBtn, { marginTop: 8 }]}>
+          <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
+          <Text style={styles.actionText}>EDITAR INSPECCIÓN</Text>
+        </Pressable>
+        <Text style={styles.rowDate}>{new Date(item.created_at).toLocaleString()}</Text>
+      </View>
+      <View style={{ alignItems: 'flex-end', gap: 4 }}>
+        <View style={[styles.statusChip, { backgroundColor: item.status_general === 'bueno' ? colors.success : colors.error }]}>
+          <Text style={styles.statusChipText}>{item.status_general === 'bueno' ? t('bueno') : t('falla')}</Text>
+        </View>
+        <View style={[styles.statusChip, { backgroundColor: statusColor }]}>
+          <Text style={styles.statusChipText}>{t(item.approval_status || 'pendiente').toUpperCase()}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function TicketRow({ item, onEdit, records = [] }: any) {
+  const relatedRecord = records.find((r: any) =>
+    r.entry.placas_unidad?.trim().toUpperCase() === item.placas_unidad?.trim().toUpperCase() &&
+    new Date(r.created_at).getTime() <= new Date(item.created_at).getTime()
+  );
+
+  const steps = {
+    entry: !!relatedRecord,
+    inspection: !!(relatedRecord?.inspection_id || relatedRecord?.status === 'inspeccionado'),
+    shipping: true,
+    exit: relatedRecord?.status === 'salida'
+  };
+
+  return (
+    <View style={styles.row}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.rowTitle}>{item.placas_unidad} · {item.cliente}</Text>
+        <Text style={styles.rowSub}>{item.almacenista}</Text>
+        <View style={{ marginVertical: 4 }}>
+          <ProcessTracker steps={steps} compact />
+        </View>
+        <Pressable onPress={onEdit} style={[styles.actionBtn, { marginTop: 8 }]}>
+          <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
+          <Text style={styles.actionText}>EDITAR TICKET</Text>
+        </Pressable>
+        <Text style={styles.rowDate}>{new Date(item.created_at).toLocaleString()}</Text>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { padding: spacing.lg, backgroundColor: colors.brandPrimary },
-  title: { fontSize: 24, fontWeight: '900', color: '#FFF', letterSpacing: 1 },
-  roleChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 4 },
-  roleChipText: { color: '#FFF', fontWeight: '900', fontSize: 10 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 12, borderRadius: 8, marginTop: 15 },
-  searchInput: { flex: 1, height: 44, color: colors.onSurface, fontSize: 14 },
-  dateRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
-  dateInput: { flex: 1, backgroundColor: '#FFF', height: 40, borderRadius: 8, paddingHorizontal: 12, fontSize: 12 },
-  tabScroll: { marginTop: 15 },
-  tabRow: { flexDirection: 'row', gap: 10 },
-  tab: { paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)' },
-  tabActive: { backgroundColor: colors.brandSecondary },
-  tabText: { color: 'rgba(255,255,255,0.7)', fontWeight: 'bold', fontSize: 11 },
-  tabTextActive: { color: colors.onBrandSecondary },
-  card: { backgroundColor: '#FFF', marginVertical: 6, padding: 15, borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border },
-  cardTitle: { fontWeight: '900', fontSize: 16, color: colors.onSurface },
-  cardSub: { color: colors.muted, fontSize: 13, marginTop: 2 },
-  cardDate: { color: colors.muted, fontSize: 10, marginTop: 5 },
-  cardActions: { flexDirection: 'row', gap: 8 },
-  downloadBtn: { backgroundColor: colors.success, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  emailBtn: { backgroundColor: colors.brandPrimary, height: 36, paddingHorizontal: 12, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 5 },
-  emailBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 10 },
-  viewBtn: { backgroundColor: colors.info, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
-  modalCard: { backgroundColor: '#FFF', padding: 20, borderRadius: 16 },
-  modalTitle: { fontWeight: '900', fontSize: 18, marginBottom: 5 },
-  modalSub: { color: colors.muted, marginBottom: 15, fontSize: 13 },
-  modalInput: { borderWidth: 2, borderColor: colors.border, borderRadius: 8, padding: 12, minHeight: 80, textAlignVertical: 'top', marginBottom: 20 },
-  modalActions: { flexDirection: 'row', gap: 10 },
-  cancelBtn: { flex: 1, height: 48, alignItems: 'center', justifyContent: 'center' },
-  cancelBtnText: { fontWeight: 'bold', color: colors.muted },
-  sendBtn: { flex: 2, backgroundColor: colors.brandPrimary, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  sendBtnText: { color: '#FFF', fontWeight: '900' },
-  adminSectionTitle: { fontWeight: 'bold', fontSize: 18, marginBottom: spacing.md, color: colors.onSurface, marginTop: spacing.lg },
-  bigAdminBtn: { backgroundColor: colors.brandPrimary, padding: spacing.lg, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  bigAdminBtnText: { color: '#FFF', fontWeight: 'bold', marginLeft: 10 },
-  adminTip: { fontSize: 12, color: colors.muted, marginTop: 10, fontStyle: 'italic' },
-  routeBox: { padding: spacing.md, backgroundColor: colors.surfaceTertiary, borderRadius: 8, marginTop: spacing.md },
-  routeTitle: { fontWeight: 'bold', fontSize: 12, marginBottom: 8 },
-  routeItem: { fontSize: 11, marginBottom: 4, color: colors.onSurfaceTertiary },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  header: { padding: spacing.lg, backgroundColor: colors.surfaceSecondary, borderBottomWidth: 2, borderBottomColor: colors.borderStrong },
+  title: { fontSize: typography.sizes.xxl, fontWeight: '900', color: colors.onSurface, marginBottom: spacing.md },
+  masterPanel: { marginBottom: spacing.md, padding: spacing.md, backgroundColor: colors.brandTertiary, borderWidth: 2, borderColor: colors.brandPrimary },
+  masterTitle: { fontSize: 10, fontWeight: '900', color: colors.onBrandTertiary, letterSpacing: 1, marginBottom: spacing.sm },
+  masterActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  masterBtn: { backgroundColor: colors.surface, paddingHorizontal: spacing.sm, paddingVertical: 6, borderWidth: 1, borderColor: colors.borderStrong, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  masterBtnText: { fontSize: 9, fontWeight: '900', color: colors.onSurface },
+  tabRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong },
+  tabActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  tabText: { fontWeight: '900', fontSize: 10, color: colors.muted, letterSpacing: 1 },
+  tabTextActive: { color: colors.onBrandPrimary },
+  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md },
+  searchInput: { flex: 1, padding: spacing.sm, fontSize: typography.sizes.base, color: colors.onSurface, height: 44 },
+  row: { backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center' },
+  rowTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface },
+  rowSub: { color: colors.muted, fontSize: typography.sizes.sm, marginTop: 2 },
+  btnRow: { flexDirection: 'row', gap: spacing.md, marginTop: 10 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  actionText: { fontWeight: '900', fontSize: 9, color: colors.brandPrimary, letterSpacing: 0.5 },
+  statusChip: { paddingHorizontal: spacing.sm, paddingVertical: 4 },
+  statusChipText: { color: '#FFF', fontWeight: '900', fontSize: 9, letterSpacing: 1 },
+  empty: { alignItems: 'center', padding: spacing.xxxl },
+  emptyText: { color: colors.muted },
+  lockText: { color: colors.muted, marginTop: spacing.md, fontWeight: '700' },
 });

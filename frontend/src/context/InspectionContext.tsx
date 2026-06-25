@@ -17,7 +17,6 @@ export interface InspectionPoint {
 }
 
 export interface InspectionPayload {
-  inspection_type?: string;
   compania_transportista: string;
   placas_unidad: string;
   numero_trailer: string;
@@ -59,8 +58,12 @@ interface InspectionContextValue {
   syncQueue: () => Promise<void>;
   approveInspection: (id: string, note: string, name: string, signature: string) => Promise<void>;
   rejectInspection: (id: string, note: string, name: string, signature: string) => Promise<void>;
-  deleteInspection: (id: string) => Promise<void>;
+  updateInspection: (id: string, payload: Partial<Inspection>) => Promise<void>;
+  updateVehicleRecord: (id: string, payload: any) => Promise<void>;
+  updateShippingTicket: (id: string, payload: any) => Promise<void>;
+  sendManualReport: (id: string) => Promise<void>;
   exportCsvUrl: (mode: 'summary' | 'detailed', scope: 'mine' | 'all') => string;
+  token: string | null;
 }
 
 const InspectionContext = createContext<InspectionContextValue | undefined>(undefined);
@@ -163,10 +166,9 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!token) return;
     const interval = setInterval(() => {
-      // Solo refrescar si la pestaña está activa o cada más tiempo para ahorrar recursos
       refresh();
       if (user?.role === 'supervisor' || user?.role === 'admin') refreshAll();
-    }, 45000); // Increasado a 45s para reducir carga de red
+    }, 15000); // Every 15 seconds for real-time feel
     return () => clearInterval(interval);
   }, [token, user?.role, refresh, refreshAll]);
 
@@ -224,11 +226,26 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     await Promise.all([refresh(), refreshAll()]);
   }, [token, refresh, refreshAll]);
 
-  const deleteInspection = useCallback(async (id: string) => {
+  const updateInspection = useCallback(async (id: string, payload: Partial<Inspection>) => {
     if (!token) return;
-    await apiCall(`/inspections/${id}`, { method: 'DELETE', token });
+    await apiCall(`/inspections/${id}`, { method: 'PUT', body: payload, token });
     await Promise.all([refresh(), refreshAll()]);
   }, [token, refresh, refreshAll]);
+
+  const updateVehicleRecord = useCallback(async (id: string, payload: any) => {
+    if (!token) return;
+    await apiCall(`/vehicle-records/${id}`, { method: 'PUT', body: payload, token });
+  }, [token]);
+
+  const updateShippingTicket = useCallback(async (id: string, payload: any) => {
+    if (!token) return;
+    await apiCall(`/shipping-tickets/${id}`, { method: 'PUT', body: payload, token });
+  }, [token]);
+
+  const sendManualReport = useCallback(async (id: string) => {
+    if (!token) return;
+    await apiCall(`/inspections/${id}/send-report`, { method: 'POST', token });
+  }, [token]);
 
   const exportCsvUrl = useCallback((mode: 'summary' | 'detailed', scope: 'mine' | 'all') => {
     return `${API_BASE}/inspections/export?mode=${mode}&scope=${scope}`;
@@ -239,7 +256,8 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
       value={{
         inspections, allInspections, pendingCount, isOnline, loading,
         refresh, refreshAll, saveInspection, getById, syncQueue,
-        approveInspection, rejectInspection, deleteInspection, exportCsvUrl,
+        approveInspection, rejectInspection, updateInspection, updateVehicleRecord, updateShippingTicket, sendManualReport, exportCsvUrl,
+        token
       }}
     >
       {children}

@@ -10,7 +10,7 @@ export default function AppLayout() {
   const { token, loading, user } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const isAdmin = user?.email === 'd.trujillo@brancoindustries.com';
+  const isAdmin = user?.role === 'admin' || user?.email === 'd.trujillo@brancoindustries.com' || user?.email === 'd4r005@gmail.com';
   const isSupervisor = user?.role === 'supervisor' || isAdmin;
 
   useEffect(() => {
@@ -82,9 +82,9 @@ export default function AppLayout() {
       <Tabs.Screen
         name="supervisor"
         options={{
-          title: 'Panel',
+          title: isAdmin ? 'Maestro' : 'Panel',
           href: isSupervisor ? '/(app)/supervisor' : null,
-          tabBarIcon: ({ color, size }) => <Ionicons name="shield-checkmark" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name={isAdmin ? "shield-half" : "shield-checkmark"} size={size} color={color} />,
         }}
       />
       <Tabs.Screen
