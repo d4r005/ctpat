@@ -1,13 +1,23 @@
 import React, { forwardRef, useImperativeHandle, useRef } from 'react';
-import { Platform, View } from 'react-native';
+import { Platform, View, Text } from 'react-native';
 
-let NativeSignature: any;
+// Dynamic imports to avoid loading incompatible modules on different platforms
 let WebSignature: any;
+let NativeSignature: any;
 
 if (Platform.OS === 'web') {
-  WebSignature = require('react-signature-canvas').default;
+  try {
+    WebSignature = require('react-signature-canvas');
+    if (WebSignature.default) WebSignature = WebSignature.default;
+  } catch (e) {
+    console.error('Error loading web signature canvas', e);
+  }
 } else {
-  NativeSignature = require('react-native-signature-canvas').default;
+  try {
+    NativeSignature = require('react-native-signature-canvas').default;
+  } catch (e) {
+    console.error('Error loading native signature canvas', e);
+  }
 }
 
 interface SignaturePadProps {
@@ -31,7 +41,6 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
           const base64 = webRef.current.getTrimmedCanvas().toDataURL('image/png');
           props.onOK(base64);
         } else {
-          // If empty, just call onOK with empty string or handle as needed
           props.onOK('');
         }
       } else {
@@ -48,8 +57,10 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
   }));
 
   if (Platform.OS === 'web') {
+    if (!WebSignature) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Error loading Signature Canvas</Text></View>;
+
     return (
-      <View style={{ flex: 1, backgroundColor: '#FFF', minHeight: 280 }}>
+      <View style={{ flex: 1, backgroundColor: '#FFF', minHeight: 280, borderStyle: 'dashed', borderWidth: 1, borderColor: '#CCC' }}>
         <WebSignature
           ref={webRef}
           canvasProps={{
@@ -59,6 +70,8 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
       </View>
     );
   }
+
+  if (!NativeSignature) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Native Signature not available</Text></View>;
 
   return (
     <NativeSignature

@@ -1,16 +1,14 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, TextInput, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useInspections } from '@/src/context/InspectionContext';
+import { useAuth } from '@/src/context/AuthContext';
 import { apiCall } from '@/src/api/client';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import ProcessTracker from '@/src/components/ProcessTracker';
-
-type Filter = 'todos' | 'bueno' | 'malo';
-
 import MainHeader from '@/src/components/MainHeader';
 
 type Filter = 'todos' | 'bueno' | 'malo';
@@ -157,31 +155,49 @@ export default function Historico() {
 
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F8F9FA' },
-  brandHeader: { backgroundColor: colors.brandPrimary, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', paddingBottom: spacing.xl },
-  brandLogo: { color: '#FFF', fontSize: 28, fontWeight: '900', letterSpacing: 2 },
-  brandSubtitle: { color: '#FFF', fontSize: 10, opacity: 0.8, marginTop: 2 },
-  userContainer: { alignItems: 'center' },
-  avatarCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FFF' },
-  avatarText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
-  onlineIndicator: { position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: colors.success, borderWidth: 2, borderColor: colors.brandPrimary },
-  onlineStatusText: { color: colors.success, fontSize: 8, fontWeight: '900', marginTop: 4 },
+  safe: { flex: 1, backgroundColor: colors.surface },
   container: { padding: spacing.md },
-  searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 12, borderRadius: 8, marginTop: -15, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
-  searchInput: { flex: 1, height: 44, color: colors.onSurface, fontSize: 14 },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceSecondary,
+    paddingHorizontal: 12,
+    borderWidth: 2,
+    borderColor: colors.borderStrong,
+    marginTop: -20,
+    marginHorizontal: spacing.sm,
+  },
+  searchInput: { flex: 1, height: 48, color: colors.onSurface, fontSize: 14, fontWeight: '700' },
   chipsRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  chip: { borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, paddingVertical: 6, flexShrink: 0, backgroundColor: '#FFF' },
+  chip: { borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, paddingVertical: 6, flexShrink: 0, backgroundColor: colors.surfaceSecondary },
   chipActive: { backgroundColor: colors.brandPrimary },
   chipText: { fontWeight: '900', fontSize: 11, color: colors.onSurface, letterSpacing: 1 },
   chipTextActive: { color: colors.onBrandPrimary },
-  sectionTitle: { fontSize: 11, fontWeight: '900', color: colors.onSurface, letterSpacing: 1, marginBottom: spacing.md, marginLeft: 4, marginTop: spacing.xl },
-  activityCard: { backgroundColor: '#FFF', borderRadius: 12, padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', elevation: 1 },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: colors.onSurfaceTertiary,
+    letterSpacing: 1.5,
+    marginBottom: spacing.md,
+    marginLeft: 4,
+    marginTop: spacing.xl,
+    textTransform: 'uppercase',
+  },
+  activityCard: {
+    backgroundColor: colors.surfaceSecondary,
+    borderWidth: 2,
+    borderColor: colors.borderStrong,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   cardTitleText: { fontSize: 16, fontWeight: '900', color: colors.onSurface },
   cardSubText: { fontSize: 13, color: colors.muted, marginTop: 2 },
   cardMetaText: { fontSize: 10, color: colors.muted, marginTop: 4 },
-  statusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: 4 },
+  statusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 4 },
   statusBadgeText: { color: '#FFF', fontWeight: '900', fontSize: 10, letterSpacing: 1 },
-  pendingChip: { backgroundColor: colors.info, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: 4, marginBottom: 4 },
+  pendingChip: { backgroundColor: colors.info, paddingHorizontal: spacing.sm, paddingVertical: 2, marginBottom: 4 },
   pendingChipText: { color: '#FFF', fontWeight: '900', fontSize: 9, letterSpacing: 1 },
   emptyBox: { alignItems: 'center', padding: spacing.xxxl, marginTop: spacing.xl },
   emptyText: { fontWeight: '700', color: colors.muted, marginTop: spacing.md },

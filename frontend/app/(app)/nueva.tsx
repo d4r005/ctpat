@@ -15,6 +15,7 @@ import { getInspectionPoints } from '@/src/constants/inspectionPoints';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import BarcodeScanner from '@/src/components/BarcodeScanner';
 import { apiCall } from '@/src/api/client';
+import MainHeader from '@/src/components/MainHeader';
 
 const TOTAL_STEPS = 4;
 
@@ -210,12 +211,7 @@ export default function Nueva() {
   if (showTypeSelector) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <View style={styles.selectorHeader}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} />
-          </Pressable>
-          <Text style={styles.selectorTitle}>{t('nueva_inspeccion')}</Text>
-        </View>
+        <MainHeader showBack title="NAF" subtitle={t('nueva_inspeccion').toUpperCase()} />
 
         <ScrollView contentContainerStyle={styles.selectorContent} keyboardShouldPersistTaps="handled">
           {pendingInYard.length > 0 && (
@@ -268,10 +264,12 @@ export default function Nueva() {
             style={[styles.typeCard, { backgroundColor: colors.brandPrimary }]}
             onPress={() => { setSelectedType('19_puntos'); setShowTypeSelector(false); }}
           >
-            <Ionicons name="car-sport" size={48} color="#FFF" />
+            <View style={styles.iconCircle}>
+              <Ionicons name="car-sport" size={32} color="#FFF" />
+            </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.typeTitle}>{t('inspeccion_19_puntos')}</Text>
-              <Text style={styles.typeSub}>{t('tractor_camion')}</Text>
+              <Text style={styles.typeTitle}>{t('inspeccion_19_puntos').toUpperCase()}</Text>
+              <Text style={styles.typeSub}>{t('tractor_camion').toUpperCase()}</Text>
             </View>
             <Ionicons name="chevron-forward" size={24} color="#FFF" />
           </Pressable>
@@ -280,10 +278,12 @@ export default function Nueva() {
             style={[styles.typeCard, { backgroundColor: colors.info }]}
             onPress={() => { setSelectedType('9_puntos_contenedor'); setShowTypeSelector(false); }}
           >
-            <Ionicons name="cube" size={48} color="#FFF" />
+            <View style={styles.iconCircle}>
+              <Ionicons name="cube" size={32} color="#FFF" />
+            </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.typeTitle}>{t('inspeccion_9_puntos')}</Text>
-              <Text style={styles.typeSub}>{t('contenedor_maritimo')}</Text>
+              <Text style={styles.typeTitle}>{t('inspeccion_9_puntos').toUpperCase()}</Text>
+              <Text style={styles.typeSub}>{t('contenedor_maritimo').toUpperCase()}</Text>
             </View>
             <Ionicons name="chevron-forward" size={24} color="#FFF" />
           </Pressable>
@@ -676,7 +676,23 @@ const styles = StyleSheet.create({
   },
   pendingPlates: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface },
   pendingSub: { fontSize: 11, color: colors.muted, marginTop: 2 },
-  typeCard: { flexDirection: 'row', alignItems: 'center', padding: spacing.xl, gap: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong, marginBottom: spacing.md },
+  typeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    gap: spacing.lg,
+    borderWidth: 2,
+    borderColor: colors.borderStrong,
+    marginBottom: spacing.md,
+    minHeight: 100,
+  },
+  iconCircle: {
+    width: 64,
+    height: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
   typeTitle: { color: '#FFF', fontWeight: '900', fontSize: 18, letterSpacing: 1 },
   typeSub: { color: '#FFF', opacity: 0.8, fontSize: 12, marginTop: 2 },
 });

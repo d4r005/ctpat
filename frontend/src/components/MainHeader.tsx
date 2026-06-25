@@ -1,23 +1,34 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { colors, spacing } from '../constants/theme';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 interface MainHeaderProps {
   title?: string;
   subtitle?: string;
+  showBack?: boolean;
 }
 
-const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle }) => {
+const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack }) => {
   const { user } = useAuth();
+  const router = useRouter();
 
   return (
     <View style={styles.brandHeader}>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.brandLogo}>{title || 'NAF'}</Text>
-        <Text style={styles.brandSubtitle}>
-          {subtitle || 'Sistema de Registro e Inspección de Unidades de Carga'}
-        </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+        {showBack && (
+          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={24} color="#FFF" />
+          </Pressable>
+        )}
+        <View style={{ flex: 1 }}>
+          <Text style={styles.brandLogo}>{title || 'NAF'}</Text>
+          <Text style={styles.brandSubtitle}>
+            {subtitle || 'Sistema de Registro e Inspección de Unidades de Carga'}
+          </Text>
+        </View>
       </View>
       <View style={styles.userContainer}>
         <View style={styles.avatarCircle}>
@@ -38,12 +49,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: spacing.xl,
   },
+  backBtn: {
+    marginRight: spacing.md,
+    padding: 4,
+  },
   brandLogo: {
     color: '#FFF',
     fontSize: 28,
     fontWeight: '900',
     letterSpacing: 2,
   },
+// ... rest of styles
   brandSubtitle: {
     color: '#FFF',
     fontSize: 10,
