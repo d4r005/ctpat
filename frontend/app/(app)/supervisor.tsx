@@ -23,13 +23,10 @@ export default function Supervisor() {
   const { user, token, loading: authLoading } = useAuth();
   const userEmail = user?.email?.toLowerCase().trim() || '';
 
-  // ACCESO TOTAL PARA TI Y EL SOPORTE
-  const isMaster = userEmail.includes('d.trujillo') || userEmail.includes('d4r005') || user?.role === 'admin';
-  const isSupervisor = user?.role === 'supervisor' || isMaster;
-
   const router = useRouter();
   const { allInspections, refreshAll, loading, exportCsvUrl, sendManualReport } = useInspections();
   const { t } = useTranslation();
+  // ... rest of state
   // ... rest of state
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterApprov>('todos');
@@ -189,9 +186,10 @@ export default function Supervisor() {
     }
   };
 
-  // ACCESO MAESTRO PARA EL USUARIO d.trujillo
-  const isMaster = userEmail.includes('d.trujillo') || userEmail.includes('d4r005');
-  const isAllowed = isSupervisor || isMaster;
+  // ACCESO MAESTRO TOTAL
+  const isMaster = userEmail.includes('d.trujillo') || userEmail.includes('d4r005') || user?.role === 'admin';
+  const isSupervisor = user?.role === 'supervisor' || isMaster;
+  const isAdmin = isMaster; // Para efectos de visualización de títulos
 
   if (authLoading) {
     return (
@@ -201,13 +199,17 @@ export default function Supervisor() {
     );
   }
 
-  if (!isAllowed) {
+  if (!isSupervisor) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
           <Ionicons name="lock-closed" size={48} color={colors.muted} />
           <Text style={styles.lockText}>{t('acceso_restringido')}</Text>
           <Text style={{ color: colors.muted, fontSize: 10, marginTop: 10 }}>USUARIO: {userEmail}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
         </View>
       </SafeAreaView>
     );
