@@ -225,17 +225,23 @@ export default function Nueva() {
                     setPlacas(r.entry.placas_unidad || '');
                     setTrailer(r.entry.numero_caja || '');
                     setSelloAlta(r.entry.sello_entrada || '');
-                    // Forzamos a que sea 19 puntos por defecto para camiones de caseta, o pedimos elegir?
-                    // Por ahora los mandamos a elegir el tipo pero con los datos ya cargados
                     router.setParams({ record_id: r.id });
-                    Alert.alert(
-                      "Iniciar Inspección",
-                      `¿Qué tipo de inspección realizarás para la unidad ${r.entry.placas_unidad}?`,
-                      [
-                        { text: "19 PUNTOS", onPress: () => { setSelectedType('19_puntos'); setShowTypeSelector(false); } },
-                        { text: "9 PUNTOS", onPress: () => { setSelectedType('9_puntos_contenedor'); setShowTypeSelector(false); } }
-                      ]
-                    );
+
+                    if (Platform.OS === 'web') {
+                      const is9p = window.confirm("¿Deseas realizar inspección de 9 PUNTOS (CONTENEDOR)? \n\n(Aceptar = 9 Puntos / Cancelar = 19 Puntos)");
+                      setSelectedType(is9p ? '9_puntos_contenedor' : '19_puntos');
+                      setShowTypeSelector(false);
+                    } else {
+                      Alert.alert(
+                        "Iniciar Inspección",
+                        `¿Qué tipo de inspección realizarás para la unidad ${r.entry.placas_unidad}?`,
+                        [
+                          { text: "19 PUNTOS", onPress: () => { setSelectedType('19_puntos'); setShowTypeSelector(false); } },
+                          { text: "9 PUNTOS", onPress: () => { setSelectedType('9_puntos_contenedor'); setShowTypeSelector(false); } },
+                          { text: "CANCELAR", style: 'cancel' }
+                        ]
+                      );
+                    }
                   }}
                 >
                   <View style={{ flex: 1 }}>
