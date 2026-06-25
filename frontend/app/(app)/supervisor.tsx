@@ -23,17 +23,32 @@ export default function Supervisor() {
   const { user, token } = useAuth();
   const isAdmin = ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
   const router = useRouter();
-  const { allInspections, refreshAll, loading, exportCsvUrl } = useInspections();
+  const { allInspections, refreshAll, loading, exportCsvUrl, sendManualReport } = useInspections();
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterApprov>('todos');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [reportLoading, setReportLoading] = useState<string | null>(null);
-  const { width } = useWindowDimensions();
-  const isWide = width >= 900;
+  const [emailLoading, setEmailLoading] = useState<string | null>(null);
+  const [allRecords, setAllRecords] = useState<any[]>([]);
+  const [allTickets, setAllTickets] = useState<any[]>([]);
+
+  const fetchExtraData = async () => {
+    if (!token || !isAdmin) return;
+    try {
+      const [r, t] = await Promise.all([
+        apiCall<any[]>('/vehicle-records', { token }),
+        apiCall<any[]>('/shipping-tickets', { token })
+      ]);
+      setAllRecords(r);
+      setAllTickets(t);
+    } catch (e) { console.error("Error fetching extra data", e); }
+  };
 
   useEffect(() => {
+    if (isAdmin) fetchExtraData();
+  }, [token, isAdmin]);
     (async () => {
       try {
         const raw = await AsyncStorage.getItem('naf_supervisor_filter');
@@ -116,22 +131,50 @@ export default function Supervisor() {
   const generateReport = async (inspection: Inspection, lang: 'es' | 'zh') => {
     setReportLoading(inspection.id);
     try {
-      const records = await apiCall<any[]>('/vehicle-records', { token });
-      const caseta = records.find(r => r.inspection_id === inspection.id || r.entry.placas_unidad === inspection.placas_unidad);
-      const tickets = await apiCall<any[]>('/shipping-tickets', { token });
-      const embarque = tickets.find(t => t.placas_unidad === inspection.placas_unidad);
+      // Optimizamos: Buscar solo registros relacionados en lugar de traer todo si es posible
+      // Por ahora mantenemos la lógica pero con mejor manejo de errores
+      const [records, tickets] = await Promise.all([
+        apiCall<any[]>('/vehicle-records', { token }),
+        apiCall<any[]>('/shipping-tickets', { token })
+      ]);
+
+      const caseta = records.find(r => r.inspection_id === inspection.id || (r.entry.placas_unidad === inspection.placas_unidad && Math.abs(new Date(r.created_at).getTime() - new Date(inspection.created_at).getTime()) < 86400000));
+      const embarque = tickets.find(t => t.placas_unidad === inspection.placas_unidad && Math.abs(new Date(t.created_at).getTime() - new Date(inspection.created_at).getTime()) < 86400000);
 
       const html = generateConsolidatedReportHtml({ inspection, caseta, embarque }, lang);
       const { uri } = await Print.printToFileAsync({ html, base64: false });
 
-      await Sharing.shareAsync(uri, {
-        mimeType: 'application/pdf',
-        dialogTitle: lang === 'zh' ? '分享报告' : 'Compartir Reporte NAF'
-      });
+      if (Platform.OS === 'web') {
+          // En web, Print.printToFileAsync puede no funcionar igual, pero en Expo suele disparar la impresión
+          alert('Reporte generado. Use la función de impresión del navegador para guardar como PDF.');
+      } else {
+          await Sharing.shareAsync(uri, {
+            mimeType: 'application/pdf',
+            dialogTitle: lang === 'zh' ? '分享报告' : 'Compartir Reporte NAF'
+          });
+      }
     } catch (e: any) {
+      console.error(e);
       alert(e.message || 'Error al generar reporte');
     } finally {
       setReportLoading(null);
+    }
+  };
+
+  const handleSendEmail = async (inspectionId: string) => {
+    setEmailLoading(inspectionId);
+    try {
+      // El backend ahora espera un objeto opcional con recipient
+      await apiCall(`/inspections/${inspectionId}/send-report`, {
+        method: 'POST',
+        token,
+        body: { recipient: 'd.trujillo@brancoindustries.com' } // Destinatario oficial solicitado
+      });
+      alert('Reporte consolidado enviado por correo exitosamente');
+    } catch (e: any) {
+      alert(e.message || 'Error al enviar correo');
+    } finally {
+      setEmailLoading(null);
     }
   };
 
@@ -181,6 +224,34 @@ export default function Supervisor() {
             </>
           )}
         </View>
+
+        {isAdmin && (
+          <View style={styles.masterPanel}>
+            <Text style={styles.masterTitle}>PANEL MAESTRO (ADMIN) — GENERAR NUEVOS</Text>
+            <View style={styles.masterActions}>
+              <Pressable style={styles.masterBtn} onPress={() => router.push('/caseta/nuevo')}>
+                <Ionicons name="car" size={14} color={colors.onSurface} />
+                <Text style={styles.masterBtnText}>NUEVA ENTRADA</Text>
+              </Pressable>
+              <Pressable style={styles.masterBtn} onPress={() => router.push('/(app)/nueva')}>
+                <Ionicons name="clipboard" size={14} color={colors.onSurface} />
+                <Text style={styles.masterBtnText}>INSPECCIÓN 19P</Text>
+              </Pressable>
+              <Pressable style={styles.masterBtn} onPress={() => router.push('/(app)/nueva?type=9_puntos_contenedor')}>
+                <Ionicons name="cube" size={14} color={colors.onSurface} />
+                <Text style={styles.masterBtnText}>INSPECCIÓN 9P</Text>
+              </Pressable>
+              <Pressable style={styles.masterBtn} onPress={() => router.push('/embarque/nuevo')}>
+                <Ionicons name="document-text" size={14} color={colors.onSurface} />
+                <Text style={styles.masterBtnText}>TICKET EMBARQUE</Text>
+              </Pressable>
+              <Pressable style={[styles.masterBtn, { backgroundColor: colors.success + '22' }]} onPress={() => router.push('/(app)/caseta')}>
+                <Ionicons name="exit" size={14} color={colors.success} />
+                <Text style={[styles.masterBtnText, { color: colors.success }]}>REGISTRAR SALIDA</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
 
         <View style={styles.dateRow}>
           <View style={{ flex: 1 }}>
@@ -270,9 +341,63 @@ export default function Supervisor() {
                     <Ionicons name="mail" size={14} color={colors.onInfo} />
                     <Text style={[styles.reportBtnText, { color: colors.onInfo }]}>{t('chino_caps')} (REPORT)</Text>
                   </Pressable>
+                  <Pressable
+                    style={[styles.reportBtn, { backgroundColor: colors.success }, emailLoading === item.id && { opacity: 0.5 }]}
+                    onPress={() => handleSendEmail(item.id)}
+                    disabled={!!emailLoading}
+                  >
+                    {emailLoading === item.id ? (
+                      <ActivityIndicator size={12} color={colors.onSuccess} />
+                    ) : (
+                      <>
+                        <Ionicons name="send" size={14} color={colors.onSuccess} />
+                        <Text style={[styles.reportBtnText, { color: colors.onSuccess }]}>ENVIAR EMAIL</Text>
+                      </>
+                    )}
+                  </Pressable>
                 </View>
               </View>
-              <View style={{ alignItems: 'flex-end', gap: 4 }}>
+              <View style={{ alignItems: 'flex-end', gap: 8 }}>
+                {isAdmin && (
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    {/* Botón para editar Entrada/Salida relacionada */}
+                    {allRecords.find(r => r.inspection_id === item.id || r.entry.placas_unidad === item.placas_unidad) && (
+                      <Pressable
+                        onPress={() => {
+                          const r = allRecords.find(rec => rec.inspection_id === item.id || rec.entry.placas_unidad === item.placas_unidad);
+                          if (r) router.push(`/caseta/${r.id}`);
+                        }}
+                        style={{ padding: 4 }}
+                        title="Editar Caseta"
+                      >
+                        <Ionicons name="car-sport-outline" size={20} color={colors.info} />
+                      </Pressable>
+                    )}
+
+                    {/* Botón para editar Ticket de Embarque relacionado */}
+                    {allTickets.find(t => t.placas_unidad === item.placas_unidad) && (
+                      <Pressable
+                        onPress={() => {
+                          const t = allTickets.find(tick => tick.placas_unidad === item.placas_unidad);
+                          // Asumiendo que hay una ruta para editar ticket, si no existe la creamos o mandamos al detalle
+                          if (t) router.push(`/embarque/${t.id}`);
+                        }}
+                        style={{ padding: 4 }}
+                        title="Editar Embarque"
+                      >
+                        <Ionicons name="cube-outline" size={20} color={colors.brandSecondary} />
+                      </Pressable>
+                    )}
+
+                    <Pressable
+                      onPress={() => router.push(`/inspection/${item.id}?edit=true`)}
+                      style={{ padding: 4 }}
+                      title="Editar Inspección"
+                    >
+                      <Ionicons name="create-outline" size={20} color={colors.brandPrimary} />
+                    </Pressable>
+                  </View>
+                )}
                 <View style={[styles.statusChip, { backgroundColor: item.status_general === 'bueno' ? colors.success : colors.error }]}>
                   <Text style={styles.statusChipText}>{item.status_general === 'bueno' ? t('bueno') : t('falla')}</Text>
                 </View>
@@ -354,4 +479,9 @@ const styles = StyleSheet.create({
   reportBtnText: { color: colors.onBrandSecondary, fontWeight: '900', fontSize: 10, letterSpacing: 0.5 },
   statusChip: { paddingHorizontal: spacing.sm, paddingVertical: 4 },
   statusChipText: { color: '#FFF', fontWeight: '900', fontSize: 9, letterSpacing: 1 },
+  masterPanel: { marginTop: spacing.md, padding: spacing.md, backgroundColor: colors.brandTertiary, borderWidth: 2, borderColor: colors.brandPrimary },
+  masterTitle: { fontSize: 10, fontWeight: '900', color: colors.onBrandTertiary, letterSpacing: 1, marginBottom: spacing.sm },
+  masterActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  masterBtn: { backgroundColor: colors.surface, paddingHorizontal: spacing.sm, paddingVertical: 6, borderWidth: 1, borderColor: colors.borderStrong, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  masterBtnText: { fontSize: 9, fontWeight: '900', color: colors.onSurface },
 });

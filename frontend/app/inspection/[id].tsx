@@ -11,12 +11,14 @@ import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
 export default function InspectionDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, edit } = useLocalSearchParams<{ id: string, edit?: string }>();
   const router = useRouter();
-  const { getById, approveInspection, rejectInspection } = useInspections();
+  const { getById, approveInspection, rejectInspection, updateInspection } = useInspections();
   const { user } = useAuth();
   const [insp, setInsp] = useState<Inspection | undefined>(undefined);
   const [generating, setGenerating] = useState(false);
+  const [isEditing, setIsEditing] = useState(edit === 'true');
+  const [editData, setEditData] = useState<Partial<Inspection>>({});
   const [approvalNote, setApprovalNote] = useState('');
   const [approvalName, setApprovalName] = useState(user?.name || '');
   const [approvalSignature, setApprovalSignature] = useState('');
@@ -28,8 +30,21 @@ export default function InspectionDetail() {
     if (id) {
       const data = getById(id);
       setInsp(data);
+      if (data) setEditData(data);
     }
   }, [id, getById]);
+
+  const handleSaveEdit = async () => {
+    if (!id) return;
+    setActing(true);
+    try {
+      await updateInspection(id, editData);
+      setInsp(getById(id));
+      setIsEditing(false);
+      alert('Cambios guardados correctamente');
+    } catch (e: any) { alert(e.message); }
+    finally { setActing(false); }
+  };
 
   const handleApprove = async () => {
     if (!id) return;
@@ -177,8 +192,14 @@ export default function InspectionDetail() {
         <Pressable onPress={() => router.back()} testID="detail-back">
           <Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} />
         </Pressable>
-        <Text style={styles.topTitle}>Inspección</Text>
-        <View style={{ width: 24 }} />
+        <Text style={styles.topTitle}>{isEditing ? 'Editar Inspección' : 'Inspección'}</Text>
+        {isEditing ? (
+          <Pressable onPress={handleSaveEdit} disabled={acting}>
+            {acting ? <ActivityIndicator size={20} color="#FFF" /> : <Ionicons name="save" size={24} color="#FFF" />}
+          </Pressable>
+        ) : (
+          <View style={{ width: 24 }} />
+        )}
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -254,11 +275,11 @@ export default function InspectionDetail() {
         )}
 
         <Section title="DATOS GENERALES">
-          <Row label="Compañía" value={insp.compania_transportista} />
-          <Row label="Placas" value={insp.placas_unidad} />
-          <Row label="Tráiler" value={insp.numero_trailer} />
-          <Row label="Precinto" value={insp.numero_precinto} />
-          <Row label="Sello Alta Seg." value={insp.sello_alta_seguridad} />
+          <Row label="Compañía" value={insp.compania_transportista} isEdit={isEditing} onEdit={(v) => setEditData({...editData, compania_transportista: v})} />
+          <Row label="Placas" value={insp.placas_unidad} isEdit={isEditing} onEdit={(v) => setEditData({...editData, placas_unidad: v})} />
+          <Row label="Tráiler" value={insp.numero_trailer} isEdit={isEditing} onEdit={(v) => setEditData({...editData, numero_trailer: v})} />
+          <Row label="Precinto" value={insp.numero_precinto} isEdit={isEditing} onEdit={(v) => setEditData({...editData, numero_precinto: v})} />
+          <Row label="Sello Alta Seg." value={insp.sello_alta_seguridad} isEdit={isEditing} onEdit={(v) => setEditData({...editData, sello_alta_seguridad: v})} />
           <Row label="Sello Verificado" value={insp.sello_verificado ? 'SÍ' : 'NO'} />
           <Row label="Fecha y Hora" value={new Date(insp.fecha_hora).toLocaleString('es-MX')} />
         </Section>
@@ -383,11 +404,19 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, isEdit, onEdit }: { label: string; value: string; isEdit?: boolean; onEdit?: (v: string) => void }) {
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue}>{value}</Text>
+      {isEdit && onEdit ? (
+        <TextInput
+          style={[styles.rowValue, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 4 }]}
+          value={value}
+          onChangeText={onEdit}
+        />
+      ) : (
+        <Text style={styles.rowValue}>{value}</Text>
+      )}
     </View>
   );
 }

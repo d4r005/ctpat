@@ -39,14 +39,30 @@ export default function CasetaDetail() {
     } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
   };
 
+  const [editEntry, setEditEntry] = useState(false);
+  const [entryForm, setEntryForm] = useState<any>(null);
+
+  const isAdmin = ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(useAuth().user?.email || '');
+
   const load = async () => {
     setLoading(true);
     try {
       const data = await apiCall<any>(`/vehicle-records/${id}`, { token });
       setRec(data);
+      setEntryForm(data.entry);
       if (data.exit) setExitData(data.exit);
     } catch (e: any) { alert(e.message); }
     finally { setLoading(false); }
+  };
+
+  const handleUpdateEntry = async () => {
+    setSaving(true);
+    try {
+      await apiCall(`/vehicle-records/${id}`, { method: 'PUT', body: { entry: entryForm }, token });
+      setEditEntry(false);
+      await load();
+    } catch (e: any) { alert(e.message); }
+    finally { setSaving(false); }
   };
 
   useEffect(() => { if (id) load(); }, [id, token]);
@@ -99,17 +115,42 @@ export default function CasetaDetail() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}>
-        <Section title="ENTRADA — DATOS DEL VEHÍCULO">
-          <Row label="Placas" value={e.placas_unidad} />
-          <Row label="Chofer" value={e.chofer_nombre} />
-          <Row label="Licencia" value={e.licencia_conductor} />
-          <Row label="Compañía" value={e.compania_transporte} />
-          <Row label="# Tractor" value={e.numero_tractor} />
-          <Row label="Caja / Tráiler" value={`${e.compania_caja} · ${e.numero_caja}`} />
-          <Row label="Sello entrada" value={e.sello_entrada} />
-          <Row label="Cortina" value={e.cortina_asignada} />
-          <Row label="Guardia caseta" value={e.guardia_caseta_nombre} />
-          <Row label="Fecha entrada" value={new Date(e.fecha_entrada).toLocaleString('es-MX')} />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
+          <Text style={[styles.secTitle, { flex: 1, marginBottom: 0 }]}>ENTRADA — DATOS DEL VEHÍCULO</Text>
+          {isAdmin && !rec.exit && (
+            <Pressable
+              onPress={() => editEntry ? handleUpdateEntry() : setEditEntry(true)}
+              style={{ backgroundColor: editEntry ? colors.success : colors.brandSecondary, paddingHorizontal: 12, paddingVertical: 6, marginLeft: 8 }}
+            >
+              <Text style={{ color: '#FFF', fontWeight: '900', fontSize: 10 }}>{editEntry ? 'GUARDAR' : 'EDITAR'}</Text>
+            </Pressable>
+          )}
+        </View>
+
+        <Section>
+          {editEntry ? (
+            <View style={{ padding: spacing.sm }}>
+              <EditField label="PLACAS" v={entryForm.placas_unidad} on={(t: string) => setEntryForm({...entryForm, placas_unidad: t})} />
+              <EditField label="CHOFER" v={entryForm.chofer_nombre} on={(t: string) => setEntryForm({...entryForm, chofer_nombre: t})} />
+              <EditField label="COMPAÑÍA" v={entryForm.compania_transporte} on={(t: string) => setEntryForm({...entryForm, compania_transporte: t})} />
+              <EditField label="TRAILER" v={entryForm.numero_caja} on={(t: string) => setEntryForm({...entryForm, numero_caja: t})} />
+              <EditField label="SELLO" v={entryForm.sello_entrada} on={(t: string) => setEntryForm({...entryForm, sello_entrada: t})} />
+              <EditField label="CORTINA" v={entryForm.cortina_asignada} on={(t: string) => setEntryForm({...entryForm, cortina_asignada: t})} />
+            </View>
+          ) : (
+            <>
+              <Row label="Placas" value={e.placas_unidad} />
+              <Row label="Chofer" value={e.chofer_nombre} />
+              <Row label="Licencia" value={e.licencia_conductor} />
+              <Row label="Compañía" value={e.compania_transporte} />
+              <Row label="# Tractor" value={e.numero_tractor} />
+              <Row label="Caja / Tráiler" value={`${e.compania_caja} · ${e.numero_caja}`} />
+              <Row label="Sello entrada" value={e.sello_entrada} />
+              <Row label="Cortina" value={e.cortina_asignada} />
+              <Row label="Guardia caseta" value={e.guardia_caseta_nombre} />
+              <Row label="Fecha entrada" value={new Date(e.fecha_entrada).toLocaleString('es-MX')} />
+            </>
+          )}
         </Section>
 
         <Section title="CARGA">
@@ -256,7 +297,7 @@ export default function CasetaDetail() {
 function Section({ title, children }: any) {
   return (
     <View style={{ marginBottom: spacing.lg }}>
-      <Text style={styles.secTitle}>{title}</Text>
+      {title && <Text style={styles.secTitle}>{title}</Text>}
       <View style={styles.secBody}>{children}</View>
     </View>
   );
@@ -266,6 +307,14 @@ function Row({ label, value }: { label: string; value: any }) {
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
       <Text style={styles.rowValue}>{value || '-'}</Text>
+    </View>
+  );
+}
+function EditField({ label, v, on, tid, kb }: any) {
+  return (
+    <View style={{ marginBottom: spacing.sm }}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput testID={tid} style={styles.exitInput} value={v} onChangeText={on} keyboardType={kb || 'default'} placeholderTextColor={colors.muted} />
     </View>
   );
 }

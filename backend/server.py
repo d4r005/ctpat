@@ -705,6 +705,92 @@ async def get_inspection(inspection_id: str, current_user: Dict[str, Any] = Depe
     return _serialize_inspection(doc)
 
 
+@api_router.put("/inspections/{inspection_id}", response_model=Inspection)
+async def update_inspection(
+    inspection_id: str, body: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(require_supervisor),
+):
+    doc = await db.inspections.find_one({"id": inspection_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Inspección no encontrada")
+
+    # Update only allowed fields
+    update_data = {k: v for k, v in body.items() if k in [
+        "compania_transportista", "placas_unidad", "numero_trailer",
+        "numero_precinto", "sello_alta_seguridad", "sello_verificado",
+        "actividad_sospechosa", "inspector_nombre", "verificador_nombre",
+        "points", "status_general"
+    ]}
+
+    if "points" in update_data:
+        update_data["status_general"] = "malo" if any(p.get("estado") == "malo" for p in update_data["points"]) else "bueno"
+
+    await db.inspections.update_one({"id": inspection_id}, {"$set": update_data})
+    updated_doc = await db.inspections.find_one({"id": inspection_id}, {"_id": 0})
+
+    # Sync to AppSheet
+    try:
+        await sync_to_appsheet("Inspecciones", updated_doc)
+    except Exception as e:
+        logger.error(f"Error syncing update to AppSheet: {e}")
+
+    return _serialize_inspection(updated_doc)
+
+
+@api_router.post("/inspections/{inspection_id}/send-report")
+async def manual_send_report(
+    inspection_id: str,
+    body: Optional[Dict[str, str]] = None,
+    current_user: Dict[str, Any] = Depends(require_supervisor),
+):
+    # This manually triggers the consolidated report for the unity related to this inspection
+    recipient = body.get("recipient") if body else None
+    insp = await db.inspections.find_one({"id": inspection_id})
+    if not insp:
+        raise HTTPException(status_code=404, detail="Inspección no encontrada")
+
+    placas = insp.get("placas_unidad", "").strip()
+    # Look for the vehicle record that corresponds to this inspection
+    record = await db.vehicle_records.find_one({"inspection_id": inspection_id})
+    if not record and placas:
+        record = await db.vehicle_records.find_one(
+            {"entry.placas_unidad": placas},
+            sort=[("created_at", -1)]
+        )
+
+    if not record:
+        raise HTTPException(status_code=404, detail="No se encontró registro de caseta vinculado para generar reporte consolidado")
+
+    try:
+        # Trigger the existing report logic
+        success = await _trigger_automatic_report(record["id"], recipient)
+        if success:
+            return {"ok": True, "message": f"Reporte enviado exitosamente a {recipient or 'destinatario predeterminado'}"}
+        else:
+            raise HTTPException(status_code=500, detail="El servidor SMTP no está configurado o falló el envío")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al enviar reporte: {str(e)}")
+
+
+@api_router.post("/vehicle-records/{rec_id}/send-report")
+async def manual_send_record_report(
+    rec_id: str,
+    body: Optional[Dict[str, str]] = None,
+    current_user: Dict[str, Any] = Depends(require_supervisor),
+):
+    recipient = body.get("recipient") if body else None
+    try:
+        success = await _trigger_automatic_report(rec_id, recipient)
+        if success:
+            return {"ok": True, "message": "Reporte enviado exitosamente"}
+        else:
+            raise HTTPException(status_code=500, detail="Error al enviar reporte")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @api_router.post("/inspections/{inspection_id}/approve", response_model=Inspection)
 async def approve_inspection(
     inspection_id: str, body: ApprovalBody,
@@ -943,6 +1029,33 @@ async def get_vehicle_record(rec_id: str, current_user: Dict[str, Any] = Depends
     return VehicleRecord(**doc)
 
 
+@api_router.put("/vehicle-records/{rec_id}", response_model=VehicleRecord)
+async def update_vehicle_record(
+    rec_id: str, body: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(require_supervisor),
+):
+    doc = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+
+    # Update only allowed fields
+    update_data = {}
+    if "entry" in body: update_data["entry"] = body["entry"]
+    if "exit" in body: update_data["exit"] = body["exit"]
+    if "status" in body: update_data["status"] = body["status"]
+    if "inspection_id" in body: update_data["inspection_id"] = body["inspection_id"]
+
+    await db.vehicle_records.update_one({"id": rec_id}, {"$set": update_data})
+    updated_doc = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
+
+    # Sync to AppSheet
+    try:
+        await sync_to_appsheet("Caseta", updated_doc)
+    except: pass
+
+    return VehicleRecord(**updated_doc)
+
+
 @api_router.patch("/vehicle-records/{rec_id}/exit", response_model=VehicleRecord)
 async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[str, Any] = Depends(get_current_user)):
     doc = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
@@ -970,12 +1083,12 @@ async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[
     return VehicleRecord(**doc)
 
 
-async def _trigger_automatic_report(rec_id: str):
+async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[str] = None):
     logger.info(f"Generando reporte consolidado para ID: {rec_id}")
     record = await db.vehicle_records.find_one({"id": rec_id})
     if not record:
         logger.error(f"Reporte cancelado: No existe el registro {rec_id}")
-        return
+        return False
 
     placas = record["entry"].get("placas_unidad", "").strip()
 
@@ -993,23 +1106,35 @@ async def _trigger_automatic_report(rec_id: str):
 
     # Buscar ticket de embarque
     fecha_inicio = record["created_at"]
+    # If no exit yet, use current time as limit
     fecha_fin = record.get("exit", {}).get("fecha_salida") or datetime.now(timezone.utc).isoformat()
+
+    # Expand search a bit to be sure
+    start_dt = datetime.fromisoformat(fecha_inicio.replace('Z', '+00:00')) - timedelta(hours=1)
+    end_dt = datetime.fromisoformat(fecha_fin.replace('Z', '+00:00')) + timedelta(hours=1)
+
     ticket = await db.shipping_tickets.find_one({
         "placas_unidad": placas,
-        "created_at": {"$gte": fecha_inicio, "$lte": fecha_fin}
+        "created_at": {"$gte": start_dt.isoformat(), "$lte": end_dt.isoformat()}
     })
 
     logger.info(f"Datos encontrados - Inspección: {'SI' if inspection else 'NO'}, Ticket: {'SI' if ticket else 'NO'}")
 
     subject = f"REPORTE CONSOLIDADO SRIUC - UNIDAD: {placas}"
-    recipient = os.environ.get("REPORT_RECIPIENT", "d4r005@gmail.com")
+    recipient = recipient_override or os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com")
+
+    # Si el estado general de la inspección es malo, marcarlo fuerte en el correo
+    color_header = "#0A2540"
+    if inspection and inspection.get("status_general") == "malo":
+        color_header = "#dc2626" # Rojo si hay falla
 
     html = f"""
     <html>
         <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; line-height: 1.6; max-width: 800px; margin: auto; border: 1px solid #eee; padding: 20px;">
-            <div style="background-color: #0A2540; padding: 20px; text-align: center; color: white;">
+            <div style="background-color: {color_header}; padding: 20px; text-align: center; color: white;">
                 <h1 style="margin: 0;">Reporte Consolidado de Unidad</h1>
                 <p style="margin: 5px 0 0 0; opacity: 0.8;">Sistema de Registro e Inspección (SRIUC)</p>
+                {f'<p style="background: white; color: {color_header}; display: inline-block; padding: 2px 10px; font-weight: bold; margin-top: 10px;">¡ALERTA: FALLA DETECTADA!</p>' if inspection and inspection.get("status_general") == "malo" else ''}
             </div>
 
             <div style="padding: 20px;">
@@ -1019,7 +1144,7 @@ async def _trigger_automatic_report(rec_id: str):
                     <tr><td style="padding: 8px; font-weight: bold;">Conductor:</td><td style="padding: 8px;">{record['entry']['chofer_nombre']}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold;">Compañía:</td><td style="padding: 8px;">{record['entry'].get('compania_transporte', 'N/A')}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold;">Fecha Entrada:</td><td style="padding: 8px;">{record['entry'].get('fecha_entrada', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold; color: #16A34A;">Fecha Salida:</td><td style="padding: 8px; color: #16A34A; font-weight: bold;">{record['exit'].get('fecha_salida', 'N/A') if record.get('exit') else 'No registrada'}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold; color: #16A34A;">Fecha Salida:</td><td style="padding: 8px; color: #16A34A; font-weight: bold;">{record['exit'].get('fecha_salida', 'N/A') if record.get('exit') else 'No registrada (En Patio)'}</td></tr>
                     {f'''
                     <tr><td style="padding: 8px; font-weight: bold;">Sello VVTT (Salida):</td><td style="padding: 8px; text-transform: uppercase;">{record['exit'].get('sello_vvtt_estado', 'N/A')}</td></tr>
                     ''' if record.get('exit') else ''}
@@ -1027,7 +1152,7 @@ async def _trigger_automatic_report(rec_id: str):
 
                 <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">2. Inspección C-TPAT (19 Puntos)</h2>
                 {f'''
-                <div style="background-color: {"#f0fdf4" if inspection.get("status_general") == "bueno" else "#fef2f2"}; padding: 15px; border-radius: 5px;">
+                <div style="background-color: {"#f0fdf4" if inspection.get("status_general") == "bueno" else "#fef2f2"}; padding: 15px; border-radius: 5px; border-left: 5px solid {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">
                     <p style="margin: 0;">Estado General: <b style="color: {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">{inspection.get('status_general', 'N/A').upper()}</b></p>
                     <p style="margin: 5px 0 0 0;">Inspector: {inspection.get('inspector_nombre', 'N/A')}</p>
                     <p style="margin: 5px 0 0 0;">Aprobación: <b>{inspection.get('approval_status', 'pendiente').upper()}</b></p>
@@ -1054,7 +1179,12 @@ async def _trigger_automatic_report(rec_id: str):
     </html>
     """
 
-    await send_automatic_report(subject, recipient, html)
+    try:
+        await send_automatic_report(subject, recipient, html)
+        return True
+    except Exception as e:
+        logger.error(f"Fallo al enviar reporte automático: {e}")
+        return False
 
 
 @api_router.patch("/vehicle-records/{rec_id}/link-inspection")
@@ -1168,6 +1298,29 @@ async def get_ticket(ticket_id: str, current_user: Dict[str, Any] = Depends(get_
     if not doc:
         raise HTTPException(status_code=404, detail="Ticket no encontrado")
     return ShippingTicket(**doc)
+
+
+@api_router.put("/shipping-tickets/{ticket_id}", response_model=ShippingTicket)
+async def update_shipping_ticket(
+    ticket_id: str, body: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(require_supervisor),
+):
+    doc = await db.shipping_tickets.find_one({"id": ticket_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ticket no encontrado")
+
+    # Update doc with provided body fields (excluding id and user_id)
+    update_data = {k: v for k, v in body.items() if k not in ["id", "user_id", "created_at"]}
+
+    await db.shipping_tickets.update_one({"id": ticket_id}, {"$set": update_data})
+    updated_doc = await db.shipping_tickets.find_one({"id": ticket_id}, {"_id": 0})
+
+    # Sync to AppSheet
+    try:
+        await sync_to_appsheet("Embarque", updated_doc)
+    except: pass
+
+    return ShippingTicket(**updated_doc)
 
 
 # ========== Analytics (admin only) ==========

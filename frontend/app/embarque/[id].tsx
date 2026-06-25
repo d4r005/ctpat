@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,13 +10,35 @@ import { colors, spacing, typography } from '@/src/constants/theme';
 export default function EmbarqueDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [t, setT] = useState<any>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [form, setForm] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+
+  const isAdmin = ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+
+  const load = async () => {
+    try {
+      const data = await apiCall<any>(`/shipping-tickets/${id}`, { token });
+      setT(data);
+      setForm(data);
+    } catch (e: any) { alert(e.message); }
+  };
 
   useEffect(() => {
-    if (!id) return;
-    apiCall<any>(`/shipping-tickets/${id}`, { token }).then(setT).catch((e) => alert(e.message));
+    if (id) load();
   }, [id, token]);
+
+  const handleUpdate = async () => {
+    setSaving(true);
+    try {
+      await apiCall(`/shipping-tickets/${id}`, { method: 'PUT', body: form, token });
+      setEditMode(false);
+      await load();
+    } catch (e: any) { alert(e.message); }
+    finally { setSaving(false); }
+  };
 
   if (!t) return <SafeAreaView style={styles.safe}><View style={styles.center}><ActivityIndicator color={colors.brandPrimary} /></View></SafeAreaView>;
 
@@ -25,24 +47,50 @@ export default function EmbarqueDetail() {
       <View style={styles.topBar}>
         <Pressable onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} /></Pressable>
         <Text style={styles.topTitle}>Ticket Embarque</Text>
-        <View style={{ width: 24 }} />
+        {isAdmin && (
+          <Pressable onPress={() => editMode ? handleUpdate() : setEditMode(true)} style={styles.editBtn}>
+            {saving ? <ActivityIndicator size={16} color="#FFF" /> : <Text style={styles.editBtnText}>{editMode ? 'GUARDAR' : 'EDITAR'}</Text>}
+          </Pressable>
+        )}
       </View>
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}>
         <Section title="ALMACÉN">
-          <Row k="Almacenista" v={t.almacenista} />
-          <Row k="Área" v={t.area} />
-          <Row k="Sellos" v={t.sellos} />
-          <Row k="Fecha" v={new Date(t.fecha).toLocaleString('es-MX')} />
+          {editMode ? (
+            <View style={{ padding: spacing.sm }}>
+              <EditField label="ALMACENISTA" v={form.almacenista} on={(v: string) => setForm({...form, almacenista: v})} />
+              <EditField label="ÁREA" v={form.area} on={(v: string) => setForm({...form, area: v})} />
+              <EditField label="SELLOS" v={form.sellos} on={(v: string) => setForm({...form, sellos: v})} />
+            </View>
+          ) : (
+            <>
+              <Row k="Almacenista" v={t.almacenista} />
+              <Row k="Área" v={t.area} />
+              <Row k="Sellos" v={t.sellos} />
+              <Row k="Fecha" v={new Date(t.fecha).toLocaleString('es-MX')} />
+            </>
+          )}
         </Section>
         <Section title="MATERIAL / TRANSPORTE">
-          <Row k="Cliente" v={t.cliente} />
-          <Row k="Operador" v={t.operador} />
-          <Row k="Línea transporte" v={t.linea_transporte} />
-          <Row k="# Económico" v={t.numero_economico} />
-          <Row k="Placas unidad" v={t.placas_unidad} />
-          <Row k="# Caja" v={t.numero_caja} />
-          <Row k="Placas caja" v={t.placas_caja} />
+          {editMode ? (
+            <View style={{ padding: spacing.sm }}>
+              <EditField label="CLIENTE" v={form.cliente} on={(v: string) => setForm({...form, cliente: v})} />
+              <EditField label="PLACAS UNIDAD" v={form.placas_unidad} on={(v: string) => setForm({...form, placas_unidad: v})} />
+              <EditField label="# CAJA" v={form.numero_caja} on={(v: string) => setForm({...form, numero_caja: v})} />
+              <EditField label="# SELLO" v={form.numero_sello} on={(v: string) => setForm({...form, numero_sello: v})} />
+            </View>
+          ) : (
+            <>
+              <Row k="Cliente" v={t.cliente} />
+              <Row k="Operador" v={t.operador} />
+              <Row k="Línea transporte" v={t.linea_transporte} />
+              <Row k="# Económico" v={t.numero_economico} />
+              <Row k="Placas unidad" v={t.placas_unidad} />
+              <Row k="# Caja" v={t.numero_caja} />
+              <Row k="Placas caja" v={t.placas_caja} />
+            </>
+          )}
         </Section>
+        {/* ... rest of the sections could also be editable if needed, but these are the main ones */}
         <Section title="TIEMPOS Y CARGA">
           <Row k="Hora llegada" v={t.hora_llegada} />
           <Row k="Apertura cortina" v={t.hora_apertura_cortina} />
@@ -71,16 +119,27 @@ function Section({ title, children }: any) {
 function Row({ k, v }: any) {
   return <View style={styles.row}><Text style={styles.rowK}>{k}</Text><Text style={styles.rowV}>{v || '-'}</Text></View>;
 }
+function EditField({ label, v, on }: any) {
+  return (
+    <View style={{ marginBottom: spacing.sm }}>
+      <Text style={{ fontSize: 10, fontWeight: '900', color: colors.muted, marginBottom: 4 }}>{label}</Text>
+      <TextInput style={styles.editInput} value={v} onChangeText={on} placeholderTextColor={colors.muted} />
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   topBar: { backgroundColor: colors.brandPrimary, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   topTitle: { color: colors.onBrandPrimary, fontWeight: '900', fontSize: typography.sizes.base, letterSpacing: 1 },
+  editBtn: { backgroundColor: colors.brandSecondary, paddingHorizontal: 12, paddingVertical: 6 },
+  editBtnText: { color: '#FFF', fontWeight: '900', fontSize: 11 },
   secTitle: { backgroundColor: colors.brandPrimary, color: colors.onBrandPrimary, padding: spacing.sm, fontWeight: '900', letterSpacing: 1, fontSize: 12 },
   secBody: { borderWidth: 2, borderColor: colors.borderStrong, borderTopWidth: 0, backgroundColor: colors.surfaceSecondary },
   row: { flexDirection: 'row', padding: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider },
   rowK: { width: 140, fontWeight: '700', color: colors.onSurfaceTertiary, fontSize: typography.sizes.sm },
   rowV: { flex: 1, color: colors.onSurface, fontWeight: '700', fontSize: typography.sizes.sm },
   firmaTxt: { color: colors.success, fontWeight: '900', padding: spacing.sm, letterSpacing: 1 },
+  editInput: { borderWidth: 1, borderColor: colors.borderStrong, padding: 8, backgroundColor: '#FFF', color: colors.onSurface, fontSize: 14 },
 });
