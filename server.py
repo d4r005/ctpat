@@ -1726,12 +1726,16 @@ async def analytics(
     }
 
 
+@api_router.get("/health")
+async def health():
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+
 app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Esto permite que Cloudflare, Vercel o cualquier origen se conecte
     allow_methods=["*"],
     allow_headers=["*"],
 )
