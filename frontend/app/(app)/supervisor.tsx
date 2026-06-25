@@ -210,14 +210,6 @@ export default function Supervisor() {
       </SafeAreaView>
     );
   }
-        </View>
-      </SafeAreaView>
-    );
-  }
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']} testID="supervisor-screen">
