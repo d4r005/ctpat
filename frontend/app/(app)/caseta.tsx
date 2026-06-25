@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
+import ProcessTracker from '@/src/components/ProcessTracker';
 
 interface VehicleRecord {
   id: string;
@@ -121,6 +122,13 @@ export default function Caseta() {
         }
         renderItem={({ item }) => {
           const st = STATUS_LABEL[item.status] || STATUS_LABEL.entrada;
+          const steps = {
+            entry: true,
+            inspection: !!item.inspection_id,
+            shipping: !!item.has_shipping_ticket,
+            exit: item.status === 'salida'
+          };
+
           return (
             <Pressable
               testID={`caseta-record-${item.id}`}
@@ -130,7 +138,9 @@ export default function Caseta() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowTitle}>{item.entry.placas_unidad}</Text>
                 <Text style={styles.rowSub}>{item.entry.chofer_nombre} · {item.entry.compania_transporte || '-'}</Text>
-                <Text style={styles.rowMeta}>{t('trailer')}: {item.entry.numero_caja || '-'} · {t('sello')}: {item.entry.sello_entrada || '-'}</Text>
+                <View style={{ marginVertical: 4 }}>
+                  <ProcessTracker steps={steps} compact />
+                </View>
                 <Text style={styles.rowDate}>{new Date(item.entry.fecha_entrada || item.created_at).toLocaleString()}</Text>
               </View>
               <View style={[styles.statusChip, { backgroundColor: st.color }]}>

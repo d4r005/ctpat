@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextInput, Image, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,123 +13,101 @@ export default function EmbarqueDetail() {
   const router = useRouter();
   const { token, user } = useAuth();
   const [t, setT] = useState<any>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [form, setForm] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+
+  const isAdmin = ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+
+  const load = async () => {
+    try {
+      const data = await apiCall<any>(`/shipping-tickets/${id}`, { token });
+      setT(data);
+      setForm(data);
+    } catch (e: any) { alert(e.message); }
+  };
 
   useEffect(() => {
-    if (!id) return;
-    apiCall<any>(`/shipping-tickets/${id}`, { token }).then(setT).catch((e) => alert(e.message));
+    if (id) load();
   }, [id, token]);
 
-  const handleDelete = async () => {
-    const confirmed = Platform.OS === 'web'
-      ? window.confirm('¿Estás seguro de que deseas eliminar este ticket de embarque? Esta acción no se puede deshacer.')
-      : await new Promise(resolve => {
-          Alert.alert(
-            "Eliminar Ticket",
-            "¿Estás seguro de que deseas eliminar este ticket de embarque?",
-            [
-              { text: "Cancelar", style: "cancel", onPress: () => resolve(false) },
-              { text: "Eliminar", style: "destructive", onPress: () => resolve(true) }
-            ]
-          );
-        });
-
-    if (!confirmed) return;
-
-    setDeleting(true);
+  const handleUpdate = async () => {
+    setSaving(true);
     try {
-      await apiCall(`/shipping-tickets/${id}`, { method: 'DELETE', token });
-      router.back();
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setDeleting(false);
-    }
+      await apiCall(`/shipping-tickets/${id}`, { method: 'PUT', body: form, token });
+      setEditMode(false);
+      await load();
+    } catch (e: any) { alert(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const pickPhoto = async (field: string) => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
+      const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+      if (!r.canceled && r.assets[0]?.base64) {
+        setForm({ ...form, [field]: `data:image/jpeg;base64,${r.assets[0].base64}` });
+      }
+    } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
   };
 
   if (!t) return <SafeAreaView style={styles.safe}><View style={styles.center}><ActivityIndicator color={colors.brandPrimary} /></View></SafeAreaView>;
 
-  const isAdmin = user?.role === 'admin';
-
-  const load = async () => {
-    if (!id) return;
-    try {
-      const data = await apiCall<any>(`/shipping-tickets/${id}`, { token });
-      setT(data);
-    } catch (e: any) { alert(e.message); }
-  };
-
-  useEffect(() => { load(); }, [id, token]);
-
-  const adminUpdatePhoto = async (field: string) => {
-    try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) return;
-      const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
-      if (r.canceled || !r.assets[0]?.base64) return;
-
-      const photo_data = `data:image/jpeg;base64,${r.assets[0].base64}`;
-      await apiCall(`/admin/shipping-tickets/${id}/photo`, {
-        method: 'PATCH',
-        body: { field_path: field, photo_data },
-        token
-      });
-      load();
-    } catch (e: any) { alert(e.message); }
-  };
-
-  const adminDeletePhoto = async (field: string) => {
-    if (!window.confirm('¿Eliminar esta foto permanentemente?')) return;
-    try {
-      await apiCall(`/admin/shipping-tickets/${id}/photo`, {
-        method: 'PATCH',
-        body: { field_path: field, photo_data: '' },
-        token
-      });
-      load();
-    } catch (e: any) { alert(e.message); }
-  };
-
-  const AdminPhotoActions = ({ field, hasPhoto }: { field: string, hasPhoto: boolean }) => {
-    if (!isAdmin) return null;
-    return (
-      <View style={hasPhoto ? styles.adminPhotoOverlay : styles.adminAddPhotoContainer}>
-        <Pressable onPress={() => adminUpdatePhoto(field)} style={hasPhoto ? styles.adminPhotoBtn : styles.adminAddBtn}>
-          <Ionicons name={hasPhoto ? "pencil" : "add-circle"} size={hasPhoto ? 14 : 20} color="#FFF" />
-          {!hasPhoto && <Text style={styles.adminAddText}>AGREGAR</Text>}
-        </Pressable>
-        {hasPhoto && (
-          <Pressable onPress={() => adminDeletePhoto(field)} style={[styles.adminPhotoBtn, { backgroundColor: colors.error }]}>
-            <Ionicons name="trash" size={14} color="#FFF" />
-          </Pressable>
-        )}
-      </View>
-    );
-  };
-
   return (
     <SafeAreaView style={styles.safe} edges={['top']} testID="embarque-detail">
       <View style={styles.topBar}>
-        <Pressable onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} /></Pressable>
+        <Pressable
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/(app)/supervisor')}
+          style={{ padding: 10, marginLeft: -10 }}
+        >
+          <Ionicons name="arrow-back" size={28} color={colors.onBrandPrimary} />
+        </Pressable>
         <Text style={styles.topTitle}>Ticket Embarque</Text>
-        <View style={{ width: 24 }} />
+        {isAdmin && (
+          <Pressable onPress={() => editMode ? handleUpdate() : setEditMode(true)} style={styles.editBtn}>
+            {saving ? <ActivityIndicator size={16} color="#FFF" /> : <Text style={styles.editBtnText}>{editMode ? 'GUARDAR' : 'EDITAR'}</Text>}
+          </Pressable>
+        )}
       </View>
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}>
         <Section title="ALMACÉN">
-          <Row k="Almacenista" v={t.almacenista} />
-          <Row k="Área" v={t.area} />
-          <Row k="Sellos" v={t.sellos} />
-          <Row k="Fecha" v={new Date(t.fecha).toLocaleString('es-MX')} />
+          {editMode ? (
+            <View style={{ padding: spacing.sm }}>
+              <EditField label="ALMACENISTA" v={form.almacenista} on={(v: string) => setForm({...form, almacenista: v})} />
+              <EditField label="ÁREA" v={form.area} on={(v: string) => setForm({...form, area: v})} />
+              <EditField label="SELLOS" v={form.sellos} on={(v: string) => setForm({...form, sellos: v})} />
+            </View>
+          ) : (
+            <>
+              <Row k="Almacenista" v={t.almacenista} />
+              <Row k="Área" v={t.area} />
+              <Row k="Sellos" v={t.sellos} />
+              <Row k="Fecha" v={new Date(t.fecha).toLocaleString('es-MX')} />
+            </>
+          )}
         </Section>
         <Section title="MATERIAL / TRANSPORTE">
-          <Row k="Cliente" v={t.cliente} />
-          <Row k="Operador" v={t.operador} />
-          <Row k="Línea transporte" v={t.linea_transporte} />
-          <Row k="# Económico" v={t.numero_economico} />
-          <Row k="Placas unidad" v={t.placas_unidad} />
-          <Row k="# Caja" v={t.numero_caja} />
-          <Row k="Placas caja" v={t.placas_caja} />
+          {editMode ? (
+            <View style={{ padding: spacing.sm }}>
+              <EditField label="CLIENTE" v={form.cliente} on={(v: string) => setForm({...form, cliente: v})} />
+              <EditField label="PLACAS UNIDAD" v={form.placas_unidad} on={(v: string) => setForm({...form, placas_unidad: v})} />
+              <EditField label="# CAJA" v={form.numero_caja} on={(v: string) => setForm({...form, numero_caja: v})} />
+              <EditField label="# SELLO" v={form.numero_sello} on={(v: string) => setForm({...form, numero_sello: v})} />
+            </View>
+          ) : (
+            <>
+              <Row k="Cliente" v={t.cliente} />
+              <Row k="Operador" v={t.operador} />
+              <Row k="Línea transporte" v={t.linea_transporte} />
+              <Row k="# Económico" v={t.numero_economico} />
+              <Row k="Placas unidad" v={t.placas_unidad} />
+              <Row k="# Caja" v={t.numero_caja} />
+              <Row k="Placas caja" v={t.placas_caja} />
+            </>
+          )}
         </Section>
+        {/* ... rest of the sections could also be editable if needed, but these are the main ones */}
         <Section title="TIEMPOS Y CARGA">
           <Row k="Hora llegada" v={t.hora_llegada} />
           <Row k="Apertura cortina" v={t.hora_apertura_cortina} />
@@ -138,78 +116,51 @@ export default function EmbarqueDetail() {
           <Row k="# Pallets" v={t.numero_pallets} />
           <Row k="# Sello" v={t.numero_sello} />
         </Section>
+
+        <Section title="FOTOGRAFÍAS DE CARGA">
+          <View style={styles.photoGrid}>
+            <PhotoBox
+              label="INICIO CARGA"
+              uri={editMode ? form.foto_inicio_carga : t.foto_inicio_carga}
+              onPress={() => pickPhoto('foto_inicio_carga')}
+              onRemove={() => setForm({...form, foto_inicio_carga: ''})}
+              isEdit={editMode}
+            />
+            <PhotoBox
+              label="MEDIA CARGA"
+              uri={editMode ? form.foto_media_carga : t.foto_media_carga}
+              onPress={() => pickPhoto('foto_media_carga')}
+              onRemove={() => setForm({...form, foto_media_carga: ''})}
+              isEdit={editMode}
+            />
+            <PhotoBox
+              label="FINAL CARGA"
+              uri={editMode ? form.foto_final_carga : t.foto_final_carga}
+              onPress={() => pickPhoto('foto_final_carga')}
+              onRemove={() => setForm({...form, foto_final_carga: ''})}
+              isEdit={editMode}
+            />
+          </View>
+        </Section>
         <Section title="OBSERVACIONES Y DAÑOS">
           <Row k="Observaciones" v={t.observaciones || '-'} />
           <Row k="Daño en caja" v={t.daño_caja || '-'} />
         </Section>
-        <Section title="EVIDENCIA DE CARGA">
-          <View style={styles.photoGrid}>
-            <View style={styles.photoItem}>
-              <Text style={styles.photoLabel}>INICIO CARGA</Text>
-              {t.foto_inicio_carga ? (
-                <View>
-                  <Image source={{ uri: t.foto_inicio_carga }} style={styles.photoImg} />
-                  <AdminPhotoActions field="foto_inicio_carga" hasPhoto={true} />
-                </View>
-              ) : (
-                <>
-                  <Text style={styles.noPhoto}>Sin foto</Text>
-                  <AdminPhotoActions field="foto_inicio_carga" hasPhoto={false} />
-                </>
-              )}
-            </View>
-            <View style={styles.photoItem}>
-              <Text style={styles.photoLabel}>MEDIA CARGA</Text>
-              {t.foto_media_carga ? (
-                <View>
-                  <Image source={{ uri: t.foto_media_carga }} style={styles.photoImg} />
-                  <AdminPhotoActions field="foto_media_carga" hasPhoto={true} />
-                </View>
-              ) : (
-                <>
-                  <Text style={styles.noPhoto}>Sin foto</Text>
-                  <AdminPhotoActions field="foto_media_carga" hasPhoto={false} />
-                </>
-              )}
-            </View>
-            <View style={styles.photoItem}>
-              <Text style={styles.photoLabel}>FINAL CARGA</Text>
-              {t.foto_final_carga ? (
-                <View>
-                  <Image source={{ uri: t.foto_final_carga }} style={styles.photoImg} />
-                  <AdminPhotoActions field="foto_final_carga" hasPhoto={true} />
-                </View>
-              ) : (
-                <>
-                  <Text style={styles.noPhoto}>Sin foto</Text>
-                  <AdminPhotoActions field="foto_final_carga" hasPhoto={false} />
-                </>
-              )}
-            </View>
-          </View>
-        </Section>
         <Section title="FIRMAS">
           <Row k="Guardia" v={t.nombre_guardia} />
-          {t.firma_almacenista ? <Text style={styles.firmaTxt}>✓ Firma almacenista capturada</Text> : null}
-          {t.firma_guardia ? <Text style={styles.firmaTxt}>✓ Firma guardia capturada</Text> : null}
+          {t.firma_almacenista ? (
+            <View style={{ padding: spacing.sm, alignItems: 'center' }}>
+              <Image source={{ uri: t.firma_almacenista }} style={{ width: '80%', height: 80, resizeMode: 'contain', backgroundColor: '#fff' }} />
+              <Text style={[styles.firmaTxt, { fontSize: 10, paddingTop: 2 }]}>FIRMA ALMACENISTA: {t.almacenista}</Text>
+            </View>
+          ) : null}
+          {t.firma_guardia ? (
+            <View style={{ padding: spacing.sm, alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.divider }}>
+              <Image source={{ uri: t.firma_guardia }} style={{ width: '80%', height: 80, resizeMode: 'contain', backgroundColor: '#fff' }} />
+              <Text style={[styles.firmaTxt, { fontSize: 10, paddingTop: 2 }]}>FIRMA GUARDIA: {t.nombre_guardia}</Text>
+            </View>
+          ) : null}
         </Section>
-
-        {isAdmin && (
-          <Pressable
-            style={[styles.deleteBtn, deleting && { opacity: 0.5 }]}
-            onPress={handleDelete}
-            disabled={deleting}
-          >
-            {deleting ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <>
-                <Ionicons name="trash" size={20} color="#FFF" />
-                <Text style={styles.deleteBtnText}>ELIMINAR TICKET (Solo Admin)</Text>
-              </>
-            )}
-          </Pressable>
-        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -222,50 +173,60 @@ function Row({ k, v }: any) {
   return <View style={styles.row}><Text style={styles.rowK}>{k}</Text><Text style={styles.rowV}>{v || '-'}</Text></View>;
 }
 
+function PhotoBox({ label, uri, onPress, onRemove, isEdit }: any) {
+  return (
+    <View style={styles.photoItem}>
+      <Text style={styles.photoLabel}>{label}</Text>
+      {uri ? (
+        <View>
+          <Image source={{ uri }} style={styles.photoImg} />
+          {isEdit && (
+            <Pressable onPress={onRemove} style={{ position: 'absolute', top: 5, right: 5, backgroundColor: '#FFF', borderRadius: 12 }}>
+              <Ionicons name="close-circle" size={24} color={colors.error} />
+            </Pressable>
+          )}
+        </View>
+      ) : (
+        <Pressable
+          onPress={onPress}
+          style={[styles.photoImg, { borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface }]}
+          disabled={!isEdit}
+        >
+          <Ionicons name="camera" size={32} color={isEdit ? colors.brandPrimary : colors.border} />
+          <Text style={{ fontSize: 9, color: isEdit ? colors.brandPrimary : colors.border, fontWeight: '900', marginTop: 4 }}>
+            {isEdit ? 'AGREGAR FOTO' : 'SIN FOTO'}
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+function EditField({ label, v, on }: any) {
+  return (
+    <View style={{ marginBottom: spacing.sm }}>
+      <Text style={{ fontSize: 10, fontWeight: '900', color: colors.muted, marginBottom: 4 }}>{label}</Text>
+      <TextInput style={styles.editInput} value={v} onChangeText={on} placeholderTextColor={colors.muted} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   topBar: { backgroundColor: colors.brandPrimary, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   topTitle: { color: colors.onBrandPrimary, fontWeight: '900', fontSize: typography.sizes.base, letterSpacing: 1 },
+  editBtn: { backgroundColor: colors.brandSecondary, paddingHorizontal: 12, paddingVertical: 6 },
+  editBtnText: { color: '#FFF', fontWeight: '900', fontSize: 11 },
   secTitle: { backgroundColor: colors.brandPrimary, color: colors.onBrandPrimary, padding: spacing.sm, fontWeight: '900', letterSpacing: 1, fontSize: 12 },
   secBody: { borderWidth: 2, borderColor: colors.borderStrong, borderTopWidth: 0, backgroundColor: colors.surfaceSecondary },
   row: { flexDirection: 'row', padding: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider },
   rowK: { width: 140, fontWeight: '700', color: colors.onSurfaceTertiary, fontSize: typography.sizes.sm },
   rowV: { flex: 1, color: colors.onSurface, fontWeight: '700', fontSize: typography.sizes.sm },
   firmaTxt: { color: colors.success, fontWeight: '900', padding: spacing.sm, letterSpacing: 1 },
-  deleteBtn: {
-    backgroundColor: colors.error, padding: spacing.lg, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.xl, minHeight: 52,
-  },
-  deleteBtnText: { color: '#FFF', fontWeight: '900', letterSpacing: 1, fontSize: typography.sizes.sm },
+  editInput: { borderWidth: 1, borderColor: colors.borderStrong, padding: 8, backgroundColor: '#FFF', color: colors.onSurface, fontSize: 14 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: spacing.sm, gap: spacing.sm, justifyContent: 'space-between' },
-  photoItem: { width: '31%', marginBottom: spacing.sm },
-  photoLabel: { fontSize: 8, fontWeight: '900', color: colors.muted, marginBottom: 4, letterSpacing: 0.5 },
-  photoImg: { width: '100%', height: 100, resizeMode: 'cover', borderWidth: 2, borderColor: colors.borderStrong },
-  noPhoto: { fontSize: 8, color: colors.muted, fontStyle: 'italic' },
-  adminPhotoOverlay: {
-    position: 'absolute', top: 2, right: 2, flexDirection: 'row', gap: 2,
-  },
-  adminPhotoBtn: {
-    width: 24, height: 24, borderRadius: 12, backgroundColor: colors.brandPrimary,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3,
-  },
-  adminAddPhotoContainer: {
-    marginTop: 5,
-  },
-  adminAddBtn: {
-    backgroundColor: colors.brandPrimary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 6,
-    borderRadius: 4,
-    gap: 4,
-    justifyContent: 'center',
-  },
-  adminAddText: {
-    color: '#FFF',
-    fontSize: 8,
-    fontWeight: '900',
-  },
+  photoItem: { width: '48%', marginBottom: spacing.sm },
+  photoLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, marginBottom: 4, letterSpacing: 0.5 },
+  photoImg: { width: '100%', height: 120, resizeMode: 'cover', borderWidth: 2, borderColor: colors.borderStrong },
 });
