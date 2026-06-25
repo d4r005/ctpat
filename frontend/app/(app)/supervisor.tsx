@@ -189,7 +189,7 @@ export default function Supervisor() {
     }
   };
 
-  // SI ES TU CORREO, FORZAMOS EL PASO SÍ O SÍ
+  // ACCESO MAESTRO PARA EL USUARIO d.trujillo
   const isMaster = userEmail.includes('d.trujillo') || userEmail.includes('d4r005');
   const isAllowed = isSupervisor || isMaster;
 
@@ -201,13 +201,17 @@ export default function Supervisor() {
     );
   }
 
-  if (!isSupervisor) {
+  if (!isAllowed) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
           <Ionicons name="lock-closed" size={48} color={colors.muted} />
           <Text style={styles.lockText}>{t('acceso_restringido')}</Text>
           <Text style={{ color: colors.muted, fontSize: 10, marginTop: 10 }}>USUARIO: {userEmail}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
         </View>
       </SafeAreaView>
     );
