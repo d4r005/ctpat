@@ -336,7 +336,7 @@ function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail }: a
 
   const steps = {
     entry: true,
-    inspection: !!item.inspection_id,
+    inspection: !!item.inspection_id || item.status === 'inspeccionado',
     shipping: !!item.has_shipping_ticket,
     exit: item.status === 'salida'
   };
@@ -344,9 +344,11 @@ function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail }: a
   return (
     <View style={styles.row}>
       <View style={{ flex: 1 }}>
-        <Text style={styles.rowTitle}>{e.placas_unidad} · {e.chofer_nombre}</Text>
-        <Text style={styles.rowSub}>{e.compania_transporte}</Text>
-        <ProcessTracker steps={steps} compact />
+        <Text style={styles.rowTitle}>{e.placas_unidad}</Text>
+        <Text style={styles.rowSub}>{e.chofer_nombre} · {e.compania_transporte}</Text>
+        <View style={{ marginVertical: 4 }}>
+          <ProcessTracker steps={steps} compact />
+        </View>
         <View style={styles.btnRow}>
           <Pressable onPress={onEdit} style={styles.actionBtn}>
             <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
@@ -361,6 +363,7 @@ function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail }: a
             <Text style={styles.actionText}>CORREO ELECTRÓNICO</Text>
           </Pressable>
         </View>
+        <Text style={styles.rowDate}>{new Date(e.fecha_entrada || item.created_at).toLocaleString()}</Text>
       </View>
       <View style={[styles.statusChip, { backgroundColor: statusColor }]}>
         <Text style={styles.statusChipText}>{item.status.toUpperCase()}</Text>
@@ -376,7 +379,7 @@ function InspectionRow({ item, onEdit, t, records = [], tickets = [] }: any) {
   const steps = {
     entry: !!relatedRecord,
     inspection: true,
-    shipping: !!tickets.some((t: any) => t.placas_unidad === item.placas_unidad),
+    shipping: !!tickets.some((tick: any) => tick.placas_unidad === item.placas_unidad),
     exit: relatedRecord?.status === 'salida'
   };
 
@@ -385,11 +388,14 @@ function InspectionRow({ item, onEdit, t, records = [], tickets = [] }: any) {
       <View style={{ flex: 1 }}>
         <Text style={styles.rowTitle}>{item.placas_unidad} · {item.numero_trailer}</Text>
         <Text style={styles.rowSub}>{item.inspector_nombre}</Text>
-        <ProcessTracker steps={steps} compact />
+        <View style={{ marginVertical: 4 }}>
+          <ProcessTracker steps={steps} compact />
+        </View>
         <Pressable onPress={onEdit} style={[styles.actionBtn, { marginTop: 8 }]}>
           <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
           <Text style={styles.actionText}>EDITAR INSPECCIÓN</Text>
         </Pressable>
+        <Text style={styles.rowDate}>{new Date(item.created_at).toLocaleString()}</Text>
       </View>
       <View style={{ alignItems: 'flex-end', gap: 4 }}>
         <View style={[styles.statusChip, { backgroundColor: item.status_general === 'bueno' ? colors.success : colors.error }]}>
@@ -421,11 +427,14 @@ function TicketRow({ item, onEdit, records = [] }: any) {
       <View style={{ flex: 1 }}>
         <Text style={styles.rowTitle}>{item.placas_unidad} · {item.cliente}</Text>
         <Text style={styles.rowSub}>{item.almacenista}</Text>
-        <ProcessTracker steps={steps} compact />
+        <View style={{ marginVertical: 4 }}>
+          <ProcessTracker steps={steps} compact />
+        </View>
         <Pressable onPress={onEdit} style={[styles.actionBtn, { marginTop: 8 }]}>
           <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
           <Text style={styles.actionText}>EDITAR TICKET</Text>
         </Pressable>
+        <Text style={styles.rowDate}>{new Date(item.created_at).toLocaleString()}</Text>
       </View>
     </View>
   );

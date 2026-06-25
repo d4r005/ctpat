@@ -138,7 +138,9 @@ export default function Caseta() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowTitle}>{item.entry.placas_unidad}</Text>
                 <Text style={styles.rowSub}>{item.entry.chofer_nombre} · {item.entry.compania_transporte || '-'}</Text>
-                <ProcessTracker steps={steps} compact />
+                <View style={{ marginVertical: 4 }}>
+                  <ProcessTracker steps={steps} compact />
+                </View>
                 <Text style={styles.rowDate}>{new Date(item.entry.fecha_entrada || item.created_at).toLocaleString()}</Text>
               </View>
               <View style={[styles.statusChip, { backgroundColor: st.color }]}>
