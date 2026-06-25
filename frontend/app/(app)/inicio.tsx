@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl, Platform, FlatList } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl, Platform, FlatList, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -36,205 +36,133 @@ export default function Inicio() {
       ]);
 
       const newActivities = Array.isArray(actData) ? actData : [];
-
-      // Conteo de pendientes para las notificaciones del panel
       setPendingYardCount(yardData.filter((r: any) => !r.inspection_id && r.status === 'entrada').length);
       setPendingApprovCount(allInspections.filter(i => i.approval_status === 'pendiente').length);
 
-      // Lógica de notificación (Sonido/Vibración) si hay actividad nueva
       if (!isInitial && newActivities.length > 0) {
         const latest = newActivities[0];
         if (latest.id !== lastActivityId) {
           setLastActivityId(latest.id);
-          // Vibración
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          // El sonido usualmente requiere expo-av, pero la vibración táctil
-          // es inmediata para el usuario en el panel maestro.
         }
       } else if (isInitial && newActivities.length > 0) {
         setLastActivityId(newActivities[0].id);
       }
-
       setActivities(newActivities);
     } catch (e) {
-      console.error('Error fetching activities:', e);
       setActivities([]);
     } finally {
       if (isInitial) setLoadingActivities(false);
     }
-  }, [token, lastActivityId]);
+  }, [token, lastActivityId, allInspections]);
 
   const refreshAll = async () => {
-    await Promise.all([
-      refreshInspections(),
-      refreshNotifications(),
-      loadActivities(true)
-    ]);
+    await Promise.all([refreshInspections(), refreshNotifications(), loadActivities(true)]);
   };
 
   useEffect(() => {
     loadActivities(true);
-    const interval = setInterval(() => loadActivities(false), 8000); // Polling cada 8 segundos para "tiempo real"
+    const interval = setInterval(() => loadActivities(false), 10000);
     return () => clearInterval(interval);
   }, [loadActivities]);
 
   const todayStr = new Date().toLocaleDateString('en-CA');
   const source = allInspections.length > 0 ? allInspections : inspections;
-  const todayInspections = source.filter((i) => {
-    const createdDate = new Date(i.created_at).toLocaleDateString('en-CA');
-    return createdDate === todayStr;
-  });
+  const todayInspections = source.filter((i) => new Date(i.created_at).toLocaleDateString('en-CA') === todayStr);
 
   const totalBuenas = (todayInspections || []).filter((i) => i.status_general === 'bueno').length;
   const totalMalas = (todayInspections || []).filter((i) => i.status_general === 'malo').length;
 
   const getActivityIcon = (type: string): any => {
     switch (type) {
-      case 'inspection': return 'clipboard-outline';
-      case 'caseta': return 'car-outline';
-      case 'embarque': return 'cube-outline';
-      default: return 'radio-button-on-outline';
+      case 'inspection': return 'clipboard';
+      case 'caseta': return 'car-sport';
+      case 'embarque': return 'cube';
+      default: return 'radio-button-on';
     }
   };
 
   const formatTime = (dateStr: string) => {
     try {
       const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return '';
       return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch {
-      return '';
-    }
+    } catch { return ''; }
   };
 
   const navigateToActivity = (activity: any) => {
-    if (activity.type === 'inspection') {
-      router.push(`/inspection/${activity.id}`);
-    } else if (activity.type === 'caseta') {
-      router.push(`/caseta/${activity.id}`);
-    } else if (activity.type === 'embarque') {
-      router.push(`/embarque/${activity.id}`);
-    }
+    const routes: any = { inspection: `/inspection/${activity.id}`, caseta: `/caseta/${activity.id}`, embarque: `/embarque/${activity.id}` };
+    if (routes[activity.type]) router.push(routes[activity.type]);
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="inicio-screen">
-      {!isOnline && (
-        <View style={styles.offlineBanner} testID="offline-banner">
-          <Ionicons name="cloud-offline" size={16} color={colors.onWarning} />
-          <Text style={styles.offlineText}>{t('modo_offline')}</Text>
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <View style={styles.brandHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.brandLogo}>NAF</Text>
+          <Text style={styles.brandSubtitle}>Sistema de Registro e Inspección de Unidades de Carga</Text>
         </View>
-      )}
-      {pendingCount > 0 && (
-        <View style={styles.pendingBanner} testID="pending-banner">
-          <Ionicons name="cloud-upload" size={16} color={colors.onInfo} />
-          <Text style={styles.pendingText}>{pendingCount} {t('pendientes_sincronizar').toLowerCase()}</Text>
+        <View style={styles.userContainer}>
+          <View style={styles.avatarCircle}>
+            <Text style={styles.avatarText}>{user?.name?.charAt(0).toUpperCase() || 'D'}</Text>
+            <View style={styles.onlineIndicator} />
+          </View>
+          <Text style={styles.onlineStatusText}>● ON LINE</Text>
         </View>
-      )}
+      </View>
 
       <ScrollView
         contentContainerStyle={styles.container}
         refreshControl={<RefreshControl refreshing={inspectionsLoading || loadingActivities} onRefresh={refreshAll} tintColor={colors.brandPrimary} />}
       >
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.hello}>{t('hola')}, {user?.name?.split(' ')[0] || t('usuario')}</Text>
-          </View>
-          <Pressable testID="inicio-bell-btn" style={styles.bellBtn} onPress={() => setShowNotifs(true)}>
-            <Ionicons name="notifications" size={24} color={colors.onSurface} />
-            {unreadCount > 0 && (
-              <View style={styles.badge} testID="inicio-bell-badge">
-                <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-              </View>
-            )}
-          </Pressable>
-        </View>
-
-        {(pendingYardCount > 0 || pendingApprovCount > 0) && (
-          <View style={styles.alertBox}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.sm }}>
-              <Ionicons name="warning" size={20} color={colors.warning} />
-              <Text style={styles.alertTitle}>ATENCIÓN: PROCESOS PENDIENTES</Text>
-            </View>
-            <View style={{ flexDirection: 'row', gap: spacing.md }}>
-              {pendingYardCount > 0 && (
-                <Pressable
-                  style={[styles.alertItem, { backgroundColor: colors.warning + '15', borderColor: colors.warning }]}
-                  onPress={() => router.push('/(app)/nueva')}
-                >
-                  <Text style={styles.alertCount}>{pendingYardCount}</Text>
-                  <Text style={styles.alertText}>Por Inspeccionar</Text>
-                </Pressable>
-              )}
-              {pendingApprovCount > 0 && (
-                <Pressable
-                  style={[styles.alertItem, { backgroundColor: colors.info + '15', borderColor: colors.info }]}
-                  onPress={() => router.push('/(app)/supervisor')}
-                >
-                  <Text style={styles.alertCount}>{pendingApprovCount}</Text>
-                  <Text style={styles.alertText}>Por Aprobar</Text>
-                </Pressable>
-              )}
-            </View>
-          </View>
-        )}
-
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{todayInspections.length}</Text>
-            <Text style={styles.statLabel}>{t('hoy')}</Text>
+            <Text style={styles.statLabel}>HOY</Text>
           </View>
-          <View style={[styles.statCard, { borderLeftWidth: 0 }]}>
+          <View style={[styles.statCard, { borderLeftWidth: 1, borderLeftColor: colors.border }]}>
             <Text style={[styles.statValue, { color: colors.success }]}>{totalBuenas}</Text>
-            <Text style={styles.statLabel}>{t('aprobada')}</Text>
+            <Text style={styles.statLabel}>APROBADA</Text>
           </View>
-          <View style={[styles.statCard, { borderLeftWidth: 0 }]}>
+          <View style={[styles.statCard, { borderLeftWidth: 1, borderLeftColor: colors.border }]}>
             <Text style={[styles.statValue, { color: colors.error }]}>{totalMalas}</Text>
-            <Text style={styles.statLabel}>{t('con_fallas')}</Text>
+            <Text style={styles.statLabel}>CON FALLAS</Text>
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>{t('actividad_reciente', 'ACTIVIDAD RECIENTE')} ({t('tiempo_real')})</Text>
-        <FlatList
-          data={activities}
-          keyExtractor={(a) => `${a.type}-${a.id}`}
-          renderItem={({ item: a }) => (
-            <Pressable
-              testID={`inicio-activity-${a.id}`}
-              style={styles.listItem}
-              onPress={() => navigateToActivity(a)}
-            >
-              <View style={[styles.typeIconBox, { backgroundColor: a.type === 'inspection' ? colors.brandPrimary : a.type === 'caseta' ? colors.success : colors.info }]}>
-                <Ionicons name={getActivityIcon(a.type) as any} size={20} color="#FFF" />
-              </View>
-              <View style={{ flex: 1, marginLeft: spacing.md }}>
-                <Text style={styles.listTitle}>{a.title}</Text>
-                <Text style={styles.listSub}>{a.subtitle}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 8 }}>
-                  <Text style={styles.listTime}>{formatTime(a.created_at)}</Text>
-                  <Text style={{ fontSize: 10, color: colors.muted }}>• {a.user_name}</Text>
-                </View>
-              </View>
-              {a.type === 'inspection' && (
-                <View style={[styles.statusChip, { backgroundColor: a.status === 'bueno' ? colors.success : colors.error }]}>
-                  <Text style={styles.statusChipText}>{a.status === 'bueno' ? t('bueno') : t('con_falla')}</Text>
-                </View>
-              )}
-            </Pressable>
-          )}
-          ListEmptyComponent={
-            <View style={styles.emptyBox} testID="inicio-empty">
-              <Ionicons name="flash-outline" size={48} color={colors.muted} />
-              <Text style={styles.emptyText}>{t('no_hay_actividad', 'No hay actividad reciente')}</Text>
-              <Text style={styles.emptySub}>{t('nuevas_apareceran_aqui')}</Text>
+        <Text style={styles.sectionTitle}>ACTIVIDAD RECIENTE (TIEMPO REAL)</Text>
+
+        {activities.slice(0, 8).map((a) => (
+          <Pressable key={`${a.type}-${a.id}`} style={styles.activityCard} onPress={() => navigateToActivity(a)}>
+            <View style={[styles.iconCircle, { backgroundColor: a.status === 'malo' || a.type === 'rechazada' ? colors.error : (a.type === 'caseta' ? colors.success : colors.info) }]}>
+              <Ionicons name={getActivityIcon(a.type)} size={20} color="#FFF" />
             </View>
-          }
-          scrollEnabled={false} // Since it's inside a ScrollView
-          initialNumToRender={10}
-          maxToRenderPerBatch={10}
-          windowSize={5}
-          removeClippedSubviews={true}
-        />
+            <View style={{ flex: 1, marginLeft: spacing.md }}>
+              <Text style={styles.cardTitleText}>{a.title}</Text>
+              <Text style={styles.cardSubText}>{a.subtitle}</Text>
+              <Text style={styles.cardMetaText}>{formatTime(a.created_at)} • {a.user_name}</Text>
+            </View>
+            {a.status === 'malo' && <View style={styles.miniStatusBadgeError}><Text style={styles.miniStatusText}>CON FALLA</Text></View>}
+            {a.status === 'bueno' && a.type === 'inspection' && <View style={styles.miniStatusBadgeSuccess}><Text style={styles.miniStatusText}>BUENO</Text></View>}
+          </Pressable>
+        ))}
+
+        <View style={styles.processHeader}>
+          <Text style={styles.processTitle}>Flujo de Proceso</Text>
+          <Ionicons name="chevron-up" size={20} color={colors.onSurface} />
+        </View>
+
+        <View style={styles.timelineContainer}>
+          <View style={styles.timelineLine} />
+          {activities.slice(0, 6).map((a) => (
+            <View key={`timeline-${a.id}`} style={styles.timelineItem}>
+              <View style={[styles.timelineDot, { backgroundColor: a.status === 'malo' ? colors.error : colors.success }]} />
+              <View style={{ flex: 1, marginLeft: spacing.lg, paddingBottom: spacing.lg }}>
+                <Text style={styles.timelineTitle}>{a.title}</Text>
+                <Text style={styles.timelineMeta}>{formatTime(a.created_at)} • {a.user_name}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
       </ScrollView>
 
       <NotificationsPanel visible={showNotifs} onClose={() => setShowNotifs(false)} />
@@ -243,75 +171,37 @@ export default function Inicio() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.surface },
-  offlineBanner: {
-    backgroundColor: colors.warning, padding: spacing.sm, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
-  },
-  offlineText: { color: colors.onWarning, fontWeight: '900', fontSize: 12, letterSpacing: 0.5 },
-  pendingBanner: {
-    backgroundColor: colors.info, padding: spacing.sm, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
-  },
-  pendingText: { color: colors.onInfo, fontWeight: '700', fontSize: 12 },
-  container: { padding: spacing.lg, paddingBottom: spacing.xxxl },
-  header: { marginBottom: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  bellBtn: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary, position: 'relative' },
-  badge: { position: 'absolute', top: -6, right: -6, backgroundColor: colors.error, minWidth: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: colors.surface },
-  badgeText: { color: '#FFF', fontWeight: '900', fontSize: 11 },
-  hello: { fontSize: typography.sizes.xxl, fontWeight: '900', color: colors.onSurface },
-  headerSub: { fontSize: typography.sizes.base, color: colors.muted, marginTop: 2 },
-  alertBox: {
-    backgroundColor: colors.surfaceSecondary,
-    borderWidth: 2,
-    borderColor: colors.borderStrong,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  alertTitle: { fontSize: 11, fontWeight: '900', color: colors.onSurface, letterSpacing: 1 },
-  alertItem: {
-    flex: 1,
-    borderWidth: 1,
-    padding: spacing.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  alertCount: { fontSize: 18, fontWeight: '900', color: colors.onSurface },
-  alertText: { fontSize: 10, fontWeight: '700', color: colors.muted, marginTop: 2 },
-  statsRow: {
-    flexDirection: 'row', borderWidth: 2, borderColor: colors.borderStrong,
-    backgroundColor: colors.surfaceSecondary, marginBottom: spacing.lg,
-  },
-  statCard: {
-    flex: 1, padding: spacing.md, alignItems: 'center', borderLeftWidth: 2,
-    borderLeftColor: colors.borderStrong,
-  },
-  statValue: { fontSize: 28, fontWeight: '900', color: colors.onSurface },
-  statLabel: { fontSize: 10, fontWeight: '700', color: colors.muted, letterSpacing: 1, marginTop: 2 },
-  fabBlock: {
-    backgroundColor: colors.brandSecondary, padding: spacing.lg,
-    flexDirection: 'row', alignItems: 'center', marginBottom: spacing.xl, minHeight: 80,
-  },
-  fabTitle: { color: colors.onBrandSecondary, fontWeight: '900', fontSize: typography.sizes.lg, letterSpacing: 1 },
-  fabSub: { color: colors.onBrandSecondary, fontSize: typography.sizes.sm, opacity: 0.8, marginTop: 2 },
-  sectionTitle: {
-    fontSize: typography.sizes.sm, fontWeight: '900', color: colors.onSurfaceTertiary,
-    letterSpacing: 1.5, marginBottom: spacing.md,
-  },
-  emptyBox: {
-    borderWidth: 2, borderColor: colors.border, borderStyle: 'dashed',
-    padding: spacing.xl, alignItems: 'center',
-  },
-  emptyText: { fontWeight: '700', color: colors.onSurfaceTertiary, marginTop: spacing.md },
-  emptySub: { color: colors.muted, fontSize: typography.sizes.sm, marginTop: 4 },
-  listItem: {
-    backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong,
-    padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center',
-  },
-  listTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface },
-  typeIconBox: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  listSub: { color: colors.muted, fontSize: typography.sizes.sm, marginTop: 2 },
-  listTime: { color: colors.onSurfaceTertiary, fontSize: typography.sizes.sm, marginTop: 4 },
-  statusChip: { paddingHorizontal: spacing.sm, paddingVertical: 4 },
-  statusChipText: { color: '#FFF', fontWeight: '900', fontSize: 10, letterSpacing: 1 },
+  safe: { flex: 1, backgroundColor: '#F8F9FA' },
+  brandHeader: { backgroundColor: colors.brandPrimary, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', paddingBottom: spacing.xl },
+  brandLogo: { color: '#FFF', fontSize: 28, fontWeight: '900', letterSpacing: 2 },
+  brandSubtitle: { color: '#FFF', fontSize: 10, opacity: 0.8, marginTop: 2 },
+  userContainer: { alignItems: 'center' },
+  avatarCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FFF' },
+  avatarText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
+  onlineIndicator: { position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, borderRadius: 6, backgroundColor: colors.success, borderWidth: 2, borderColor: colors.brandPrimary },
+  onlineStatusText: { color: colors.success, fontSize: 8, fontWeight: '900', marginTop: 4 },
+  container: { padding: spacing.md },
+  statsRow: { flexDirection: 'row', backgroundColor: '#FFF', borderRadius: 12, padding: spacing.md, marginBottom: spacing.lg, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+  statCard: { flex: 1, alignItems: 'center' },
+  statValue: { fontSize: 24, fontWeight: '900', color: colors.onSurface },
+  statLabel: { fontSize: 9, fontWeight: '700', color: colors.muted, marginTop: 4 },
+  sectionTitle: { fontSize: 11, fontWeight: '900', color: colors.onSurface, letterSpacing: 1, marginBottom: spacing.md, marginLeft: 4 },
+  activityCard: { backgroundColor: '#FFF', borderRadius: 12, padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', elevation: 1 },
+  iconCircle: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  cardTitleText: { fontSize: 14, fontWeight: '900', color: colors.onSurface },
+  cardSubText: { fontSize: 12, color: colors.muted, marginTop: 2 },
+  cardMetaText: { fontSize: 10, color: colors.muted, marginTop: 4 },
+  miniStatusBadgeError: { backgroundColor: colors.error, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  miniStatusBadgeSuccess: { backgroundColor: colors.success, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  miniStatusText: { color: '#FFF', fontSize: 8, fontWeight: '900' },
+  processHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.lg, marginBottom: spacing.md, paddingHorizontal: 4 },
+  processTitle: { fontSize: 16, fontWeight: '900', color: colors.onSurface },
+  timelineContainer: { paddingLeft: 10 },
+  timelineLine: { position: 'absolute', left: 14, top: 10, bottom: 20, width: 2, backgroundColor: colors.border },
+  timelineItem: { flexDirection: 'row', alignItems: 'flex-start' },
+  timelineDot: { width: 10, height: 10, borderRadius: 5, marginTop: 6, zIndex: 1 },
+  timelineTitle: { fontSize: 13, fontWeight: '700', color: colors.onSurface },
+  timelineMeta: { fontSize: 11, color: colors.muted, marginTop: 2 },
+  offlineBanner: { backgroundColor: colors.warning, padding: 4, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 },
+  offlineText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
 });
