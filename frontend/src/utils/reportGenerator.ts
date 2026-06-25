@@ -96,6 +96,7 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${p.pallets}</b></td><td style="padding:8px;border:1px solid #ddd;">${embarque.numero_pallets}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${p.seal}</b></td><td style="padding:8px;border:1px solid #ddd;">${embarque.numero_sello}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>Almacenista / 仓管员</b></td><td style="padding:8px;border:1px solid #ddd;">${embarque.almacenista}</td></tr>
+      <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>Guardia / 警卫</b></td><td style="padding:8px;border:1px solid #ddd;">${embarque.nombre_guardia || '-'}</td></tr>
     </table>
     <div style="margin-top: 10px; display: flex; gap: 20px;">
       ${embarque.firma_almacenista ? `<div><p style="font-size:8px; margin:0; color:#666;">FIRMA ALMACENISTA / 仓管员签字:</p><img src="${embarque.firma_almacenista}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>` : ''}
@@ -151,8 +152,21 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
         <span class="status-badge ${inspection.approval_status === 'aprobada' ? 'bg-success' : inspection.approval_status === 'rechazada' ? 'bg-error' : 'bg-warning'}">${approvalStatusLabel}</span>
       </td>
     </tr>
-    <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.inspector}</b></td><td style="padding:6px;border:1px solid #ddd;">${inspection.inspector_nombre}</td></tr>
-    ${inspection.approved_by_name ? `<tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.supervisor}</b></td><td style="padding:6px;border:1px solid #ddd;">${inspection.approved_by_name}</td></tr>` : ''}
+    <tr>
+      <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.inspector}</b></td>
+      <td style="padding:6px;border:1px solid #ddd;">
+        ${inspection.inspector_nombre}<br/>
+        ${inspection.inspector_firma ? `<img src="${inspection.inspector_firma}" style="height:45px; margin-top:5px; border-bottom:1px solid #0A2540;" />` : ''}
+      </td>
+    </tr>
+    ${inspection.approved_by_name ? `
+    <tr>
+      <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.supervisor}</b></td>
+      <td style="padding:6px;border:1px solid #ddd;">
+        ${inspection.approved_by_name}<br/>
+        ${inspection.approved_by_signature ? `<img src="${inspection.approved_by_signature}" style="height:45px; margin-top:5px; border-bottom:1px solid #0A2540;" />` : ''}
+      </td>
+    </tr>` : ''}
   </table>
 
   <table style="width:100%;border-collapse:collapse;">
@@ -164,11 +178,6 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
     </tr>
     ${inspectionRows}
   </table>
-
-  <div style="margin-top: 15px; display: flex; gap: 20px;">
-    ${inspection.inspector_firma ? `<div><p style="font-size:8px; margin:0; color:#666;">FIRMA INSPECTOR / 检查员签字:</p><img src="${inspection.inspector_firma}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>` : ''}
-    ${inspection.approved_by_signature ? `<div><p style="font-size:8px; margin:0; color:#666;">FIRMA AUTORIZACIÓN / 授权签字 (Supervisor):</p><img src="${inspection.approved_by_signature}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>` : ''}
-  </div>
 
   <div class="section-title">${p.sectionShipping}</div>
   ${shippingHtml}
