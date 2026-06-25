@@ -274,8 +274,8 @@ async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(securit
     return user
 
 async def require_supervisor(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-    if user.get("role") != "supervisor" and not is_admin(user):
-        raise HTTPException(status_code=403, detail="Solo supervisores pueden realizar esta acción")
+    if user.get("role") not in ["supervisor", "admin"] and not is_admin(user):
+        raise HTTPException(status_code=403, detail="Solo supervisores o administradores pueden realizar esta acción")
     return user
 
 async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
@@ -393,10 +393,10 @@ async def register(body: UserRegister):
     if existing:
         raise HTTPException(status_code=400, detail="El correo ya está registrado")
 
-    # First user or specific emails become supervisor automatically
+    # First user or specific emails become admin automatically
     total_users = await db.users.count_documents({})
     is_admin_email = body.email.lower() in ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"]
-    role = "supervisor" if (total_users == 0 or is_admin_email) else "inspector"
+    role = "admin" if (total_users == 0 or is_admin_email) else "inspector"
 
     user_id = str(uuid.uuid4())
     user_doc = {
@@ -424,10 +424,10 @@ async def login(body: UserLogin):
     if not user.get("active", True):
         raise HTTPException(status_code=403, detail="Cuenta desactivada")
 
-    # Auto-upgrade specific emails to supervisor if it isn't already
-    if body.email.lower() in ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"] and user.get("role") != "supervisor":
-        await db.users.update_one({"id": user["id"]}, {"$set": {"role": "supervisor"}})
-        user["role"] = "supervisor"
+    # Auto-upgrade specific emails to admin if it isn't already
+    if body.email.lower() in ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"] and user.get("role") != "admin":
+        await db.users.update_one({"id": user["id"]}, {"$set": {"role": "admin"}})
+        user["role"] = "admin"
 
     token = create_token(user["id"])
     return TokenResponse(
