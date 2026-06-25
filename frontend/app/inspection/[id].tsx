@@ -329,7 +329,7 @@ export default function InspectionDetail() {
                 }}
               >
                 <Text style={{ color: colors.brandPrimary, fontWeight: '900', fontSize: 13 }}>
-                  {(editData.inspection_type || insp.inspection_type).replace('_', ' ').toUpperCase()}
+                  {((editData.inspection_type || insp.inspection_type) || '19_puntos').replace('_', ' ').toUpperCase()}
                 </Text>
                 <Ionicons name="swap-horizontal" size={18} color={colors.brandPrimary} />
               </Pressable>
@@ -528,6 +528,12 @@ const styles = StyleSheet.create({
   pointNum: { width: 28, fontWeight: '900', color: colors.muted },
   pointName: { color: colors.onSurface, fontWeight: '700', fontSize: typography.sizes.sm },
   pointComment: { color: colors.error, fontSize: typography.sizes.sm, marginTop: 4 },
+  modalOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(9,9,11,0.85)', justifyContent: 'center', padding: spacing.lg, zIndex: 100,
+  },
+  rowInspector: { color: colors.onSurfaceTertiary, fontSize: typography.sizes.sm, marginTop: 4 },
+
   pointPhoto: { width: '100%', height: 180, marginTop: 8, borderWidth: 2, borderColor: colors.error, resizeMode: 'cover' },
   pointChip: { paddingHorizontal: spacing.sm, paddingVertical: 4, marginLeft: spacing.sm },
   pointChipText: { color: '#FFF', fontWeight: '900', fontSize: 10, letterSpacing: 1 },

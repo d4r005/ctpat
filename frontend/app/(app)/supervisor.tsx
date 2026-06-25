@@ -119,8 +119,6 @@ export default function Supervisor() {
         embarque: fullTicket || ticket
       }, 'es');
 
-      const html = generateConsolidatedReportHtml({ inspection: insp, caseta: record, embarque: ticket }, 'es');
-
       if (Platform.OS === 'web') {
         // En web, abrimos una ventana nueva y escribimos el HTML para evitar capturar el panel
         const win = window.open('', '_blank');
@@ -503,6 +501,8 @@ const styles = StyleSheet.create({
   row: { backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center' },
   rowTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface },
   rowSub: { color: colors.muted, fontSize: typography.sizes.sm, marginTop: 2 },
+  rowInspector: { color: colors.onSurfaceTertiary, fontSize: typography.sizes.sm, marginTop: 4 },
+  rowDate: { color: colors.muted, fontSize: typography.sizes.sm, marginTop: 4 },
   btnRow: { flexDirection: 'row', gap: spacing.md, marginTop: 10 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   actionText: { fontWeight: '900', fontSize: 9, color: colors.brandPrimary, letterSpacing: 0.5 },
