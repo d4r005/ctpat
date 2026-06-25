@@ -19,7 +19,7 @@ export default function InspectionDetail() {
   const { user } = useAuth();
   const [insp, setInsp] = useState<Inspection | undefined>(undefined);
   const [generating, setGenerating] = useState(false);
-  const [isEditing, setIsEditing] = useState(edit === 'true');
+  const [isEditing, setIsEditing] = useState(edit === 'true' && isAdmin);
   const [editData, setEditData] = useState<Partial<Inspection>>({});
   const [approvalNote, setApprovalNote] = useState('');
   const [approvalName, setApprovalName] = useState(user?.name || '');
@@ -28,6 +28,8 @@ export default function InspectionDetail() {
   const [acting, setActing] = useState(false);
   const isSupervisor = user?.role === 'supervisor';
   const isAdmin = user?.role === 'admin' || user?.email?.toLowerCase().includes('d.trujillo') || user?.email?.toLowerCase().includes('d4r005');
+
+  const canEdit = isAdmin; // Solo administrador puede editar/modificar/borrar
 
   useEffect(() => {
     if (id) {
@@ -234,13 +236,22 @@ export default function InspectionDetail() {
           <Ionicons name="arrow-back" size={28} color={colors.onBrandPrimary} />
         </Pressable>
         <Text style={styles.topTitle}>{isEditing ? 'Editar Inspección' : 'Inspección'}</Text>
-        {isEditing ? (
-          <Pressable onPress={handleSaveEdit} disabled={acting}>
-            {acting ? <ActivityIndicator size={20} color="#FFF" /> : <Ionicons name="save" size={24} color="#FFF" />}
-          </Pressable>
-        ) : (
-          <View style={{ width: 24 }} />
-        )}
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          {canEdit && !isEditing && (
+            <Pressable onPress={() => setIsEditing(true)}>
+              <Ionicons name="create-outline" size={24} color="#FFF" />
+            </Pressable>
+          )}
+          {isEditing ? (
+            <Pressable onPress={handleSaveEdit} disabled={acting}>
+              {acting ? <ActivityIndicator size={20} color="#FFF" /> : <Ionicons name="save" size={24} color="#FFF" />}
+            </Pressable>
+          ) : (
+            <Pressable onPress={handlePrintPdf} disabled={generating}>
+              {generating ? <ActivityIndicator size={20} color="#FFF" /> : <Ionicons name="download" size={24} color="#FFF" />}
+            </Pressable>
+          )}
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
