@@ -52,14 +52,26 @@ export default function EmbarqueNuevo() {
       if (fromCamera) {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
-        const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true, allowsEditing: false });
+        const r = await ImagePicker.launchCameraAsync({
+          mediaTypes: 'images',
+          quality: 0.3, // Optimizado (antes 0.5)
+          base64: true,
+          allowsEditing: false,
+          width: 800
+        });
         if (!r.canceled && r.assets[0]?.base64) {
           set(field, `data:image/jpeg;base64,${r.assets[0].base64}`);
         }
       } else {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) { alert('Se necesita acceso a la galería'); return; }
-        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.5, base64: true, allowsEditing: false });
+        const r = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: 'images',
+          quality: 0.3, // Optimizado (antes 0.5)
+          base64: true,
+          allowsEditing: false,
+          width: 800
+        });
         if (!r.canceled && r.assets[0]?.base64) {
           set(field, `data:image/jpeg;base64,${r.assets[0].base64}`);
         }
@@ -100,7 +112,12 @@ export default function EmbarqueNuevo() {
         ]
       );
     } catch (e: any) {
-      alert(e.message);
+      console.error('Error saving shipping ticket:', e);
+      let errorMsg = e.message || 'Error desconocido';
+      if (errorMsg === 'Failed to fetch') {
+        errorMsg = 'Error de conexión con el servidor. Posiblemente las fotos son muy pesadas. Intenta de nuevo.';
+      }
+      alert(`Ocurrió un problema: ${errorMsg}`);
     } finally {
       setSaving(false);
     }

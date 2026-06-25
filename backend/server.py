@@ -305,6 +305,8 @@ def flatten_dict(d, parent_key='', sep='_'):
             items.append((new_key, v))
     return dict(items)
 
+import asyncio
+
 async def sync_to_google_sheets(process_type: str, data: Dict[str, Any]):
     """
     Envía los datos a Google Sheets para seguimiento en tiempo real.
@@ -314,65 +316,69 @@ async def sync_to_google_sheets(process_type: str, data: Dict[str, Any]):
     if not webhook_url:
         return
 
-    try:
-        # Preparar payload unificado para seguimiento
-        payload = {
-            "proceso": process_type.upper(),
-            "fecha_servidor": datetime.now(timezone.utc).isoformat(),
-            "placas": "",
-            "chofer": "",
-            "compania": "",
-            "trailer": "",
-            "estado_inspeccion": "",
-            "aprobacion": "",
-            "cliente": "",
-            "pallets": "",
-            "inspector": "",
-            "supervisor": "",
-            "id_vinculo": data.get("id", "")
-        }
+    def send_request():
+        try:
+            # Preparar payload unificado para seguimiento
+            payload = {
+                "proceso": process_type.upper(),
+                "fecha_servidor": datetime.now(timezone.utc).isoformat(),
+                "placas": "",
+                "chofer": "",
+                "compania": "",
+                "trailer": "",
+                "estado_inspeccion": "",
+                "aprobacion": "",
+                "cliente": "",
+                "pallets": "",
+                "inspector": "",
+                "supervisor": "",
+                "id_vinculo": data.get("id", "")
+            }
 
-        # Extraer datos específicos según el proceso
-        if process_type == 'entrada':
-            entry = data.get("entry", {})
-            payload.update({
-                "placas": entry.get("placas_unidad"),
-                "chofer": entry.get("chofer_nombre"),
-                "compania": entry.get("compania_transporte"),
-                "trailer": entry.get("numero_caja"),
-                "inspector": data.get("user_id") # Guardia que recibe
-            })
-        elif process_type == 'inspeccion':
-            payload.update({
-                "placas": data.get("placas_unidad"),
-                "compania": data.get("compania_transportista"),
-                "trailer": data.get("numero_trailer"),
-                "estado_inspeccion": data.get("status_general"),
-                "aprobacion": data.get("approval_status"),
-                "inspector": data.get("inspector_nombre"),
-                "supervisor": data.get("approved_by_name")
-            })
-        elif process_type == 'embarque':
-            payload.update({
-                "placas": data.get("placas_unidad"),
-                "cliente": data.get("cliente"),
-                "pallets": data.get("numero_pallets"),
-                "chofer": data.get("operador"),
-                "inspector": data.get("almacenista")
-            })
-        elif process_type == 'salida':
-            entry = data.get("entry", {})
-            exit = data.get("exit", {})
-            payload.update({
-                "placas": entry.get("placas_unidad"),
-                "chofer": entry.get("chofer_nombre"),
-                "trailer": exit.get("numero_caja_salida") or entry.get("numero_caja"),
-                "inspector": exit.get("guardia_salida_nombre")
-            })
+            # Extraer datos específicos según el proceso
+            if process_type == 'entrada':
+                entry = data.get("entry", {})
+                payload.update({
+                    "placas": entry.get("placas_unidad"),
+                    "chofer": entry.get("chofer_nombre"),
+                    "compania": entry.get("compania_transporte"),
+                    "trailer": entry.get("numero_caja"),
+                    "inspector": data.get("user_id") # Guardia que recibe
+                })
+            elif process_type == 'inspeccion':
+                payload.update({
+                    "placas": data.get("placas_unidad"),
+                    "compania": data.get("compania_transportista"),
+                    "trailer": data.get("numero_trailer"),
+                    "estado_inspeccion": data.get("status_general"),
+                    "aprobacion": data.get("approval_status"),
+                    "inspector": data.get("inspector_nombre"),
+                    "supervisor": data.get("approved_by_name")
+                })
+            elif process_type == 'embarque':
+                payload.update({
+                    "placas": data.get("placas_unidad"),
+                    "cliente": data.get("cliente"),
+                    "pallets": data.get("numero_pallets"),
+                    "chofer": data.get("operador"),
+                    "inspector": data.get("almacenista")
+                })
+            elif process_type == 'salida':
+                entry = data.get("entry", {})
+                exit = data.get("exit", {})
+                payload.update({
+                    "placas": entry.get("placas_unidad"),
+                    "chofer": entry.get("chofer_nombre"),
+                    "trailer": exit.get("numero_caja_salida") or entry.get("numero_caja"),
+                    "inspector": exit.get("guardia_salida_nombre")
+                })
 
-        requests.post(webhook_url, json=payload, timeout=5)
-    except Exception as e:
-        logger.error(f"Error en sincronización Excel: {e}")
+            requests.post(webhook_url, json=payload, timeout=5)
+        except Exception as e:
+            logger.error(f"Error en sincronización Excel (Sync): {e}")
+
+    # Ejecutar en un hilo separado para no bloquear la respuesta principal del servidor
+    asyncio.create_task(asyncio.to_thread(send_request))
 
     # Convert everything to string for AppSheet compatibility if it's not a basic type
     for k, v in flattened.items():
