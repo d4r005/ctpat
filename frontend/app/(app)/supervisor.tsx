@@ -20,12 +20,17 @@ import { generateConsolidatedReportHtml } from '@/src/utils/reportGenerator';
 type FilterApprov = 'todos' | 'pendiente' | 'aprobada' | 'rechazada';
 
 export default function Supervisor() {
-  const { user, token } = useAuth();
-  const isAdmin = user?.role === 'admin' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
-  const isSupervisor = user?.role === 'supervisor' || isAdmin;
+  const { user, token, loading: authLoading } = useAuth();
+  const userEmail = user?.email?.toLowerCase().trim() || '';
+
+  // ACCESO TOTAL PARA TI Y EL SOPORTE
+  const isMaster = userEmail.includes('d.trujillo') || userEmail.includes('d4r005') || user?.role === 'admin';
+  const isSupervisor = user?.role === 'supervisor' || isMaster;
+
   const router = useRouter();
   const { allInspections, refreshAll, loading, exportCsvUrl, sendManualReport } = useInspections();
   const { t } = useTranslation();
+  // ... rest of state
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterApprov>('todos');
   const [dateFrom, setDateFrom] = useState('');
@@ -184,12 +189,25 @@ export default function Supervisor() {
     }
   };
 
+  // SI ES TU CORREO, FORZAMOS EL PASO SÍ O SÍ
+  const isMaster = userEmail.includes('d.trujillo') || userEmail.includes('d4r005');
+  const isAllowed = isSupervisor || isMaster;
+
+  if (authLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator color={colors.brandPrimary} />
+      </View>
+    );
+  }
+
   if (!isSupervisor) {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
           <Ionicons name="lock-closed" size={48} color={colors.muted} />
           <Text style={styles.lockText}>{t('acceso_restringido')}</Text>
+          <Text style={{ color: colors.muted, fontSize: 10, marginTop: 10 }}>USUARIO: {userEmail}</Text>
         </View>
       </SafeAreaView>
     );
@@ -198,7 +216,7 @@ export default function Supervisor() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']} testID="supervisor-screen">
       <View style={styles.header}>
-        <Text style={styles.title}>{isAdmin ? t('panel_maestro') : t('panel_supervisor')}</Text>
+        <Text style={styles.title}>{t('panel_supervisor')}</Text>
 
         <View style={styles.statsRow}>
           <StatBlock label={t('total')} value={stats.total} />
@@ -221,7 +239,7 @@ export default function Supervisor() {
             <>
               <Pressable testID="supervisor-analitica-btn" style={[styles.exportBtn, { backgroundColor: colors.success }]} onPress={() => router.push('/analitica')}>
                 <Ionicons name="stats-chart" size={16} color={colors.onSuccess} />
-                <Text style={[styles.exportText, { color: colors.onSuccess }]}>{t('kpis')}</Text>
+                <Text style={[styles.exportText, { color: colors.onSuccess }]}>{t('kpis_full')}</Text>
               </Pressable>
               <Pressable testID="supervisor-users-btn" style={[styles.exportBtn, { backgroundColor: colors.brandSecondary }]} onPress={() => router.push('/usuarios')}>
                 <Ionicons name="people" size={16} color={colors.onBrandSecondary} />
@@ -233,7 +251,7 @@ export default function Supervisor() {
 
         {isSupervisor && (
           <View style={styles.masterPanel}>
-            <Text style={styles.masterTitle}>PANEL MAESTRO (ADMIN)</Text>
+            <Text style={styles.masterTitle}>{t('panel_maestro')}</Text>
             <View style={styles.masterActions}>
               <Pressable style={styles.masterBtn} onPress={() => router.push('/caseta/nuevo')}>
                 <Ionicons name="car" size={14} color={colors.onSurface} />
@@ -249,11 +267,11 @@ export default function Supervisor() {
               </Pressable>
               <Pressable style={styles.masterBtn} onPress={() => router.push('/embarque/nuevo')}>
                 <Ionicons name="document-text" size={14} color={colors.onSurface} />
-                <Text style={styles.masterBtnText}>TICKET EMBARQUE</Text>
+                <Text style={styles.masterBtnText}>{t('embarque_boletos')}</Text>
               </Pressable>
               <Pressable style={[styles.masterBtn, { backgroundColor: colors.success + '22' }]} onPress={() => router.push('/caseta')}>
                 <Ionicons name="exit" size={14} color={colors.success} />
-                <Text style={[styles.masterBtnText, { color: colors.success }]}>REGISTRAR SALIDA</Text>
+                <Text style={[styles.masterBtnText, { color: colors.success }]}>{t('registrador_salida')}</Text>
               </Pressable>
             </View>
           </View>
