@@ -27,6 +27,7 @@ export default function CasetaDetail() {
     guardia_salida_nombre: '',
   });
   const [saving, setSaving] = useState(false);
+  const [ticket, setTicket] = useState<any>(null);
 
   const [editEntry, setEditEntry] = useState(false);
   const [entryForm, setEntryForm] = useState<any>({});
@@ -54,12 +55,43 @@ export default function CasetaDetail() {
       if (data) {
         setRec(data);
         setEntryForm(data.entry || {});
-        if (data.exit) setExitData(data.exit);
+        if (data.exit) {
+          setExitData(data.exit);
+        }
+
+        // Buscar ticket de embarque para prellenado
+        try {
+          const tickets = await apiCall<any[]>('/shipping-tickets', { token });
+          const myTicket = tickets.find(t =>
+            t.placas_unidad === data.entry.placas_unidad &&
+            new Date(t.created_at).getTime() >= new Date(data.created_at).getTime()
+          );
+          if (myTicket) setTicket(myTicket);
+        } catch {}
       }
     } catch (e: any) {
       console.error(e);
       alert("Error al cargar datos");
     } finally { setLoading(false); }
+  };
+
+  const openExitForm = () => {
+    // Prellenado de datos extendido desde Ticket de Embarque
+    setExitData({
+      ...exitData,
+      numero_tractor_salida: rec.entry.numero_tractor || '',
+      numero_caja_salida: rec.entry.numero_caja || '',
+      destino: rec.entry.destino || ticket?.observaciones?.replace('Destino: ', '') || '',
+      pallets: ticket?.numero_pallets || '',
+      sello_salida: ticket?.numero_sello || '',
+      condicion_salida: rec.entry.condicion_carga === 'descarga' ? 'vacio' : 'carga_cliente',
+      guardia_salida_nombre: user?.name || '',
+      // Nuevos datos prellenados desde Tiempos y Carga del Ticket
+      hora_apertura_cortina: ticket?.hora_apertura_cortina || '',
+      hora_cierre_cortina: ticket?.hora_cierre_cortina || '',
+      cortina_salida: ticket?.area || '',
+    });
+    setShowExit(true);
   };
 
   const handleRemoveExitPhoto = async (field: string) => {
@@ -270,7 +302,7 @@ export default function CasetaDetail() {
             <Row label="Guardia salida" value={x.guardia_salida_nombre} />
           </Section>
         ) : (
-          <Pressable testID="caseta-open-exit" style={[styles.bigBtn, { backgroundColor: colors.success }]} onPress={() => setShowExit(true)}>
+          <Pressable testID="caseta-open-exit" style={[styles.bigBtn, { backgroundColor: colors.success }]} onPress={openExitForm}>
             <Ionicons name="exit" size={24} color={colors.onSuccess} />
             <Text style={styles.bigBtnText}>REGISTRAR SALIDA</Text>
           </Pressable>
