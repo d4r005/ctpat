@@ -38,6 +38,15 @@ export default function InspectionDetail() {
 
   const handleSaveEdit = async () => {
     if (!id) return;
+
+    // Validación: Si hay puntos con falla, la foto es obligatoria
+    const points = editData.points || insp?.points || [];
+    const missingPhoto = points.find(p => p.estado === 'malo' && !p.photo);
+    if (missingPhoto) {
+      alert(`El punto ${missingPhoto.number} tiene falla. La foto es obligatoria.`);
+      return;
+    }
+
     setActing(true);
     try {
       await updateInspection(id, editData);
@@ -323,6 +332,12 @@ export default function InspectionDetail() {
                 <Text style={styles.pointName}>{p.name}</Text>
                 {p.comentarios ? <Text style={styles.pointComment}>{p.comentarios}</Text> : null}
 
+                {isEditing && p.estado === 'malo' && !p.photo && (
+                  <Text style={{ color: colors.error, fontSize: 10, fontWeight: '900', marginTop: 4 }}>
+                    ⚠ FOTO OBLIGATORIA POR FALLA
+                  </Text>
+                )}
+
                 <View style={{ marginTop: 8 }}>
                   {p.photo ? (
                     <View>
@@ -333,7 +348,7 @@ export default function InspectionDetail() {
                         </Pressable>
                       )}
                     </View>
-                  ) : isEditing ? (
+                  ) : (isEditing && p.estado === 'malo') ? (
                     <Pressable
                       onPress={() => pickPointPhoto(idx)}
                       style={[styles.pointPhoto, { borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface }]}

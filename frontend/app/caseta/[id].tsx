@@ -38,7 +38,15 @@ export default function CasetaDetail() {
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
-      const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+
+      // En web launchCameraAsync puede fallar, usamos launchImageLibraryAsync como fallback
+      let r;
+      if (Platform.OS === 'web') {
+        r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+      } else {
+        r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+      }
+
       if (!r.canceled && r.assets[0]?.base64) {
         const dataUrl = `data:image/jpeg;base64,${r.assets[0].base64}`;
         if (type === 'entry') setEntryForm((prev: any) => ({ ...prev, [field]: dataUrl }));
@@ -246,21 +254,33 @@ export default function CasetaDetail() {
               label="FRENTE UNIDAD"
               uri={entryForm?.foto_frente_unidad}
               onPress={() => editEntry && pickPhoto('entry', 'foto_frente_unidad')}
-              onRemove={() => editEntry && setEntryForm({...entryForm, foto_frente_unidad: ''})}
+              onRemove={() => {
+                if (confirm('¿Borrar esta foto?')) {
+                  setEntryForm({...entryForm, foto_frente_unidad: ''});
+                }
+              }}
               isEdit={editEntry}
             />
             <PhotoBox
               label="ATRÁS CAJA"
               uri={entryForm?.foto_atras_caja}
               onPress={() => editEntry && pickPhoto('entry', 'foto_atras_caja')}
-              onRemove={() => editEntry && setEntryForm({...entryForm, foto_atras_caja: ''})}
+              onRemove={() => {
+                if (confirm('¿Borrar esta foto?')) {
+                  setEntryForm({...entryForm, foto_atras_caja: ''});
+                }
+              }}
               isEdit={editEntry}
             />
             <PhotoBox
               label="ID CHOFER"
               uri={entryForm?.foto_id_chofer}
               onPress={() => editEntry && pickPhoto('entry', 'foto_id_chofer')}
-              onRemove={() => editEntry && setEntryForm({...entryForm, foto_id_chofer: ''})}
+              onRemove={() => {
+                if (confirm('¿Borrar esta foto?')) {
+                  setEntryForm({...entryForm, foto_id_chofer: ''});
+                }
+              }}
               isEdit={editEntry}
             />
           </View>
@@ -295,7 +315,7 @@ export default function CasetaDetail() {
             <View style={styles.photoGrid}>
               <PhotoBox
                 label="SELLO VVTT"
-                uri={x.sello_vvtt_foto}
+                uri={exitData.sello_vvtt_foto || x.sello_vvtt_foto}
                 onPress={() => isAdmin && pickPhoto('exit', 'sello_vvtt_foto')}
                 onRemove={() => isAdmin && handleRemoveExitPhoto('sello_vvtt_foto')}
                 isEdit={isAdmin}

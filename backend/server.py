@@ -206,6 +206,13 @@ def add_watermark(base64_str: str) -> str:
         if img.mode != 'RGB':
             img = img.convert('RGB')
 
+        # Redimensionar si es muy grande para ahorrar espacio en el correo
+        max_width = 800
+        if img.width > max_width:
+            ratio = max_width / float(img.width)
+            new_height = int(float(img.height) * ratio)
+            img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
+
         draw = ImageDraw.Draw(img)
 
         # Configurar texto
@@ -788,10 +795,9 @@ async def manual_send_report(
         if success:
             return {"ok": True, "message": f"Reporte enviado exitosamente a {recipient or 'destinatario predeterminado'}"}
         else:
-            raise HTTPException(status_code=500, detail="El servidor SMTP no está configurado o falló el envío")
-    except HTTPException:
-        raise
+            raise HTTPException(status_code=500, detail="Error: Fallo en SMTP o mensaje demasiado grande.")
     except Exception as e:
+        logger.error(f"Manual inspection report error: {e}")
         raise HTTPException(status_code=500, detail=f"Error al enviar reporte: {str(e)}")
 
 
@@ -807,7 +813,10 @@ async def manual_send_record_report(
         if success:
             return {"ok": True, "message": "Reporte enviado exitosamente"}
         else:
-            raise HTTPException(status_code=500, detail="Error al enviar reporte")
+            raise HTTPException(status_code=500, detail="Error: El servidor SMTP rechazó la conexión o el mensaje es demasiado grande.")
+    except Exception as e:
+        logger.error(f"Manual report error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error al enviar reporte: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

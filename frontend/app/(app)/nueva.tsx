@@ -114,7 +114,15 @@ export default function Nueva() {
 
   const canNext = () => {
     if (step === 0) return compania.trim() && placas.trim() && trailer.trim() && (precintoNA || precinto.trim());
-    if (step === 1) return points.every((p) => p.estado !== '');
+    if (step === 1) {
+      // Todos los puntos deben tener estado
+      // Si el estado es "malo", la foto es OBLIGATORIA
+      return points.every((p) => {
+        if (p.estado === '') return false;
+        if (p.estado === 'malo' && !p.photo) return false;
+        return true;
+      });
+    }
     if (step === 2) return true;
     if (step === 3) return inspectorNombre.trim() && inspectorFirma;
     return false;
@@ -356,7 +364,7 @@ export default function Nueva() {
                     <Pressable
                       testID={`nueva-point-${p.number}-bueno`}
                       style={[styles.toggleBtn, p.estado === 'bueno' && styles.toggleBuenoOn, p.estado === 'na' && { opacity: 0.3 }]}
-                      onPress={() => p.estado !== 'na' && updatePoint(idx, { estado: 'bueno' })}
+                      onPress={() => p.estado !== 'na' && updatePoint(idx, { estado: 'bueno', comentarios: '', photo: '' })}
                       disabled={p.estado === 'na'}
                     >
                       <Ionicons name="checkmark-circle" size={20} color={p.estado === 'bueno' ? colors.onSuccess : colors.muted} />
@@ -388,6 +396,13 @@ export default function Nueva() {
                         placeholderTextColor={colors.muted}
                         multiline
                       />
+                      {!p.photo && (
+                        <View style={{ backgroundColor: colors.error + '11', padding: 8, marginTop: 8, borderWidth: 1, borderColor: colors.error }}>
+                          <Text style={{ color: colors.error, fontSize: 10, fontWeight: '900', textAlign: 'center' }}>
+                            ⚠ LA FOTO ES OBLIGATORIA CUANDO HAY FALLA
+                          </Text>
+                        </View>
+                      )}
                       <View style={styles.photoRow}>
                         {p.photo ? (
                           <View style={styles.photoPreviewWrap}>

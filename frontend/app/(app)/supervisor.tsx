@@ -107,19 +107,12 @@ export default function Supervisor() {
       }
 
       const html = generateConsolidatedReportHtml({ inspection: insp, caseta: record, embarque: ticket }, 'es');
-      const { uri } = await Print.printToFileAsync({ html, base64: false });
 
       if (Platform.OS === 'web') {
-        // En web disparamos la previsualización/impresión directa
-        const win = window.open("", "_blank");
-        if (win) {
-            win.document.write(html);
-            win.document.close();
-            setTimeout(() => win.print(), 500);
-        } else {
-            alert('El bloqueador de ventanas impidió abrir el reporte. Por favor permita ventanas emergentes.');
-        }
+        // En web usamos printAsync que es más robusto para generar el PDF/Impresión
+        await Print.printAsync({ html });
       } else {
+        const { uri } = await Print.printToFileAsync({ html, base64: false });
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Reporte Consolidado' });
       }
     } catch (e: any) {
@@ -132,14 +125,15 @@ export default function Supervisor() {
   const handleSendEmail = async (recordId: string) => {
     setEmailLoading(recordId);
     try {
-      await apiCall(`/vehicle-records/${recordId}/send-report`, {
+      const res = await apiCall(`/vehicle-records/${recordId}/send-report`, {
         method: 'POST',
         token,
-        body: { } // El backend usará el destinatario por defecto configurado en .env
+        body: { }
       });
-      alert('Reporte enviado exitosamente');
+      alert(res.message || 'Reporte enviado exitosamente');
     } catch (e: any) {
-      alert(e.message || 'Error al enviar correo');
+      const msg = e.message || 'Error al enviar correo';
+      alert(msg.includes('500') ? `Error del Servidor (500): Posiblemente el reporte es muy pesado para el correo o hay un problema con Gmail.` : msg);
     } finally {
       setEmailLoading(null);
     }
