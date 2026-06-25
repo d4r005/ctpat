@@ -109,8 +109,18 @@ export default function Supervisor() {
       const html = generateConsolidatedReportHtml({ inspection: insp, caseta: record, embarque: ticket }, 'es');
 
       if (Platform.OS === 'web') {
-        // En web usamos printAsync que es más robusto para generar el PDF/Impresión
-        await Print.printAsync({ html });
+        // En web, abrimos una ventana nueva y escribimos el HTML para evitar capturar el panel
+        const win = window.open('', '_blank');
+        if (win) {
+          win.document.write(html);
+          win.document.close();
+          // Esperar un momento a que las imágenes (base64) se rendericen
+          setTimeout(() => {
+            win.print();
+          }, 800);
+        } else {
+          alert('El bloqueador de ventanas impidió abrir el reporte.');
+        }
       } else {
         const { uri } = await Print.printToFileAsync({ html, base64: false });
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Reporte Consolidado' });

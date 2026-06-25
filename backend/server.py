@@ -206,33 +206,25 @@ def add_watermark(base64_str: str) -> str:
         if img.mode != 'RGB':
             img = img.convert('RGB')
 
-        # Redimensionar si es muy grande para ahorrar espacio en el correo
-        max_width = 800
+        # Redimensionar agresivamente para asegurar que el correo sea ligero (Gmail límite 25MB)
+        max_width = 600
         if img.width > max_width:
             ratio = max_width / float(img.width)
             new_height = int(float(img.height) * ratio)
             img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
 
         draw = ImageDraw.Draw(img)
-
-        # Configurar texto
-        # Usamos horario local o el de la CDMX si es posible, por ahora UTC formateado
+        # ... (texto marca de agua)
         now = datetime.now(timezone.utc).astimezone().strftime('%d/%m/%Y %H:%M')
         text = f"PLANTA NAF | {now}"
-
         width, height = img.size
+        font_height = max(20, int(height / 25))
+        draw.rectangle([0, height - font_height - 15, width, height], fill=(0, 0, 0))
+        draw.text((15, height - font_height - 5), text, fill=(255, 255, 255))
 
-        # Dibujar un fondo semi-transparente para legibilidad
-        # Rectángulo negro en la parte inferior
-        font_height = max(24, int(height / 25))
-        draw.rectangle([0, height - font_height - 20, width, height], fill=(0, 0, 0))
-
-        # Escribir el texto (Pillow default font es pequeño, pero seguro)
-        draw.text((20, height - font_height - 5), text, fill=(255, 255, 255))
-
-        # Re-codificar a JPEG
+        # Re-codificar a JPEG con calidad media para optimizar peso
         buffered = io.BytesIO()
-        img.save(buffered, format="JPEG", quality=80)
+        img.save(buffered, format="JPEG", quality=50, optimize=True)
         new_base64 = base64.b64encode(buffered.getvalue()).decode()
         return f"{header},{new_base64}"
     except Exception as e:
@@ -795,10 +787,13 @@ async def manual_send_report(
         if success:
             return {"ok": True, "message": f"Reporte enviado exitosamente a {recipient or 'destinatario predeterminado'}"}
         else:
-            raise HTTPException(status_code=500, detail="Error: Fallo en SMTP o mensaje demasiado grande.")
+            # Si success es False, es que send_automatic_report falló (SMTP configurado pero falló el envío)
+            raise HTTPException(status_code=500, detail="Error: Fallo en el servidor de correo (SMTP). Posiblemente el reporte es muy pesado.")
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Manual inspection report error: {e}")
-        raise HTTPException(status_code=500, detail=f"Error al enviar reporte: {str(e)}")
+        logger.error(f"Manual report error: {e}")
+        raise HTTPException(status_code=500, detail=f"Fallo técnico al enviar: {str(e)}")
 
 
 @api_router.post("/vehicle-records/{rec_id}/send-report")
@@ -813,10 +808,12 @@ async def manual_send_record_report(
         if success:
             return {"ok": True, "message": "Reporte enviado exitosamente"}
         else:
-            raise HTTPException(status_code=500, detail="Error: El servidor SMTP rechazó la conexión o el mensaje es demasiado grande.")
+            raise HTTPException(status_code=500, detail="Error: Fallo en el servidor de correo (SMTP). Posiblemente el reporte es muy pesado.")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Manual report error: {e}")
-        raise HTTPException(status_code=500, detail=f"Error al enviar reporte: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Fallo técnico al enviar: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -966,7 +963,7 @@ async def send_automatic_report(subject: str, recipient: str, body_html: str):
             password=smtp_pass,
             use_tls=(smtp_port == 465),
             start_tls=(smtp_port == 587),
-            timeout=15,
+            timeout=60,
         )
         logger.info(f"Reporte enviado exitosamente a {recipient}")
         return True
