@@ -18,6 +18,7 @@ import jwt as pyjwt
 import aiosmtplib
 import requests
 import base64
+import re
 from PIL import Image, ImageDraw
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -181,6 +182,7 @@ class VehicleRecord(BaseModel):
     entry: VehicleEntry
     exit: Optional[VehicleExit] = None
     inspection_id: Optional[str] = None
+    has_shipping_ticket: bool = False
     created_at: str
 
 
@@ -204,26 +206,25 @@ def add_watermark(base64_str: str) -> str:
         if img.mode != 'RGB':
             img = img.convert('RGB')
 
-        draw = ImageDraw.Draw(img)
+        # Redimensionar agresivamente para asegurar que el correo sea ligero (Gmail límite 25MB)
+        max_width = 600
+        if img.width > max_width:
+            ratio = max_width / float(img.width)
+            new_height = int(float(img.height) * ratio)
+            img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
 
-        # Configurar texto
-        # Usamos horario local o el de la CDMX si es posible, por ahora UTC formateado
+        draw = ImageDraw.Draw(img)
+        # ... (texto marca de agua)
         now = datetime.now(timezone.utc).astimezone().strftime('%d/%m/%Y %H:%M')
         text = f"PLANTA NAF | {now}"
-
         width, height = img.size
+        font_height = max(20, int(height / 25))
+        draw.rectangle([0, height - font_height - 15, width, height], fill=(0, 0, 0))
+        draw.text((15, height - font_height - 5), text, fill=(255, 255, 255))
 
-        # Dibujar un fondo semi-transparente para legibilidad
-        # Rectángulo negro en la parte inferior
-        font_height = max(24, int(height / 25))
-        draw.rectangle([0, height - font_height - 20, width, height], fill=(0, 0, 0))
-
-        # Escribir el texto (Pillow default font es pequeño, pero seguro)
-        draw.text((20, height - font_height - 5), text, fill=(255, 255, 255))
-
-        # Re-codificar a JPEG
+        # Re-codificar a JPEG con calidad media para optimizar peso
         buffered = io.BytesIO()
-        img.save(buffered, format="JPEG", quality=80)
+        img.save(buffered, format="JPEG", quality=50, optimize=True)
         new_base64 = base64.b64encode(buffered.getvalue()).decode()
         return f"{header},{new_base64}"
     except Exception as e:
@@ -248,7 +249,7 @@ def create_token(user_id: str) -> str:
     return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 def is_admin(user: Dict[str, Any]) -> bool:
-    admins = ["d.trujillo@brancoindustries.com"]
+    admins = ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"]
     return user.get("email") in admins or user.get("role") == "admin"
 
 async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
@@ -271,16 +272,11 @@ async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(securit
     # Ensure backward compatibility
     user.setdefault("role", "inspector")
     user.setdefault("active", True)
-
-    # Force admin role for the main email
-    if user.get("email") == "d.trujillo@brancoindustries.com":
-        user["role"] = "admin"
-
     return user
 
 async def require_supervisor(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
-    if user.get("role") != "supervisor" and not is_admin(user):
-        raise HTTPException(status_code=403, detail="Solo supervisores pueden realizar esta acción")
+    if user.get("role") not in ["supervisor", "admin"] and not is_admin(user):
+        raise HTTPException(status_code=403, detail="Solo supervisores o administradores pueden realizar esta acción")
     return user
 
 async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
@@ -327,7 +323,7 @@ async def sync_to_appsheet(table_name: str, data: Dict[str, Any]):
     # Aplicar marca de agua a fotos conocidas en Caseta y otras tablas
     photo_fields = [
         "entry_foto_frente_unidad", "entry_foto_atras_caja", "entry_foto_id_chofer",
-        "exit_sello_vvtt_foto", "plano_carga",
+        "exit_sello_vvtt_foto",
         "foto_inicio_carga", "foto_media_carga", "foto_final_carga"
     ]
     for field in photo_fields:
@@ -398,10 +394,10 @@ async def register(body: UserRegister):
     if existing:
         raise HTTPException(status_code=400, detail="El correo ya está registrado")
 
-    # First user or specific emails become supervisor automatically
+    # First user or specific emails become admin automatically
     total_users = await db.users.count_documents({})
     is_admin_email = body.email.lower() in ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"]
-    role = "supervisor" if (total_users == 0 or is_admin_email) else "inspector"
+    role = "admin" if (total_users == 0 or is_admin_email) else "inspector"
 
     user_id = str(uuid.uuid4())
     user_doc = {
@@ -429,15 +425,10 @@ async def login(body: UserLogin):
     if not user.get("active", True):
         raise HTTPException(status_code=403, detail="Cuenta desactivada")
 
-    # Auto-upgrade specific emails to admin and cleanup typos
-    if body.email.lower() == "d.trujillo@brancoindustries.com":
-        if user.get("role") != "admin":
-            await db.users.update_one({"id": user["id"]}, {"$set": {"role": "admin"}})
-            user["role"] = "admin"
-
-        # Cleanup users with common typos in this specific email
-        typos = ["d.trujillo##brancoindustries.com", "d.trujillo@brancoindustries.comd"]
-        await db.users.delete_many({"email": {"$in": typos}})
+    # Auto-upgrade specific emails to admin if it isn't already
+    if body.email.lower() in ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"] and user.get("role") != "admin":
+        await db.users.update_one({"id": user["id"]}, {"$set": {"role": "admin"}})
+        user["role"] = "admin"
 
     token = create_token(user["id"])
     return TokenResponse(
@@ -501,8 +492,6 @@ async def update_user(user_id: str, body: Dict[str, Any], current_user: Dict[str
     if "name" in body: update_data["name"] = body["name"]
     if "role" in body: update_data["role"] = body["role"]
     if "active" in body: update_data["active"] = body["active"]
-    if "password" in body and body["password"]:
-        update_data["password_hash"] = hash_password(body["password"])
 
     if not update_data:
         raise HTTPException(status_code=400, detail="No hay datos para actualizar")
@@ -519,7 +508,7 @@ async def create_inspector(body: UserRegister, current_user: Dict[str, Any] = De
     if existing:
         raise HTTPException(status_code=400, detail="El correo ya está registrado")
     user_id = str(uuid.uuid4())
-    role = body.role if body.role in ("inspector", "supervisor", "admin") else "inspector"
+    role = body.role if body.role in ("inspector", "supervisor") else "inspector"
     doc = {
         "id": user_id, "email": body.email.lower(), "name": body.name,
         "role": role, "active": True,
@@ -602,29 +591,13 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
     }
     await db.inspections.insert_one(doc)
 
-    # VINCULACIÓN AUTOMÁTICA: Buscar registro de caseta en patio para estas placas
-    try:
-        placas = body.placas_unidad.strip().upper()
-        record = await db.vehicle_records.find_one(
-            {"entry.placas_unidad": {"$regex": f"^{placas}$", "$options": "i"}, "status": "entrada"},
-            sort=[("created_at", -1)]
-        )
-        if record:
-            await db.vehicle_records.update_one(
-                {"id": record["id"]},
-                {"$set": {"inspection_id": insp_id, "status": "inspeccionado"}}
-            )
-            logger.info(f"Inspección {insp_id} vinculada automáticamente a Caseta {record['id']}")
-    except Exception as e:
-        logger.error(f"Error en vinculación automática de inspección: {e}")
-
-    # Notificar a inspectores, supervisores y admin
-    status_emoji = "✅" if doc["status_general"] == "bueno" else "❌"
-    await notify_roles(
-        ["inspector", "supervisor", "admin"],
-        f"Inspección Realizada {status_emoji}",
-        f"Nueva inspección de {body.inspection_type.replace('_', ' ')} para placas {body.placas_unidad}. Resultado: {doc['status_general'].upper()}.",
-        inspection_id=insp_id
+    # Log Activity
+    await _log_activity(
+        "inspection", insp_id,
+        f"Nueva Inspección: {body.placas_unidad}",
+        f"Realizada por {body.inspector_nombre}",
+        current_user["name"],
+        status_general
     )
 
     # Sync to AppSheet
@@ -645,8 +618,8 @@ async def list_inspections(
 ):
     filt: Dict[str, Any] = {}
     if scope == "all":
-        if current_user.get("role") not in ["supervisor", "admin"]:
-            raise HTTPException(status_code=403, detail="No tienes permisos para ver todas las inspecciones")
+        if current_user.get("role") not in ["supervisor", "admin"] and not is_admin(current_user):
+            raise HTTPException(status_code=403, detail="Solo supervisores o administradores pueden ver todas las inspecciones")
         if inspector_id:
             filt["user_id"] = inspector_id
     else:
@@ -660,8 +633,7 @@ async def list_inspections(
             date_filt["$lte"] = date_to + "T23:59:59.999999"
         filt["created_at"] = date_filt
 
-    limit = 1000 if scope == "all" else 300
-    docs = await db.inspections.find(filt, {"_id": 0, "client_uuid": 0}).sort("created_at", -1).to_list(limit)
+    docs = await db.inspections.find(filt, {"_id": 0, "client_uuid": 0}).sort("created_at", -1).to_list(2000)
     return [_serialize_inspection(d) for d in docs]
 
 
@@ -675,8 +647,8 @@ async def export_csv(
 ):
     filt: Dict[str, Any] = {}
     if scope == "all":
-        if current_user.get("role") not in ["supervisor", "admin"]:
-            raise HTTPException(status_code=403, detail="No tienes permisos para ver todas las inspecciones")
+        if current_user.get("role") != "supervisor":
+            raise HTTPException(status_code=403, detail="Solo supervisores")
     else:
         filt["user_id"] = current_user["id"]
 
@@ -743,6 +715,109 @@ async def get_inspection(inspection_id: str, current_user: Dict[str, Any] = Depe
     return _serialize_inspection(doc)
 
 
+@api_router.put("/inspections/{inspection_id}", response_model=Inspection)
+async def update_inspection(
+    inspection_id: str, body: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(require_supervisor),
+):
+    doc = await db.inspections.find_one({"id": inspection_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Inspección no encontrada")
+
+    # Update only allowed fields
+    update_data = {k: v for k, v in body.items() if k in [
+        "compania_transportista", "placas_unidad", "numero_trailer",
+        "numero_precinto", "sello_alta_seguridad", "sello_verificado",
+        "actividad_sospechosa", "inspector_nombre", "verificador_nombre",
+        "points", "status_general", "inspection_type"
+    ]}
+
+    if "points" in update_data:
+        update_data["status_general"] = "malo" if any(p.get("estado") == "malo" for p in update_data["points"]) else "bueno"
+
+    await db.inspections.update_one({"id": inspection_id}, {"$set": update_data})
+    updated_doc = await db.inspections.find_one({"id": inspection_id}, {"_id": 0})
+
+    # Sync to AppSheet
+    try:
+        await sync_to_appsheet("Inspecciones", updated_doc)
+    except Exception as e:
+        logger.error(f"Error syncing update to AppSheet: {e}")
+
+    return _serialize_inspection(updated_doc)
+
+
+@api_router.post("/inspections/{inspection_id}/send-report")
+async def manual_send_report(
+    inspection_id: str,
+    body: Optional[Dict[str, str]] = None,
+    current_user: Dict[str, Any] = Depends(require_supervisor),
+):
+    # This manually triggers the consolidated report for the unity related to this inspection
+    recipient = body.get("recipient") if body else None
+    insp = await db.inspections.find_one({"id": inspection_id})
+    if not insp:
+        raise HTTPException(status_code=404, detail="Inspección no encontrada")
+
+    placas = insp.get("placas_unidad", "").strip()
+    # Look for the vehicle record that corresponds to this inspection
+    record = await db.vehicle_records.find_one({"inspection_id": inspection_id})
+    if not record and placas:
+        # Intento exacto
+        record = await db.vehicle_records.find_one(
+            {"entry.placas_unidad": placas},
+            sort=[("created_at", -1)]
+        )
+        if not record:
+            # Intento flexible
+            norm_placas = re.sub(r'[^a-zA-Z0-9]', '', placas)
+            if norm_placas:
+                flex_regex = ".*".join(list(norm_placas))
+                record = await db.vehicle_records.find_one(
+                    {"entry.placas_unidad": {"$regex": flex_regex, "$options": "i"}},
+                    sort=[("created_at", -1)]
+                )
+
+    if not record:
+        raise HTTPException(status_code=404, detail="No se encontró registro de caseta vinculado para generar reporte consolidado")
+
+    try:
+        # Trigger the existing report logic
+        success = await _trigger_automatic_report(record["id"], recipient)
+        if success:
+            return {"ok": True, "message": f"Reporte enviado exitosamente a {recipient or 'destinatario predeterminado'}"}
+        else:
+            # Si success es False, es que send_automatic_report falló (SMTP configurado pero falló el envío)
+            raise HTTPException(status_code=500, detail="Error: Fallo en el servidor de correo (SMTP). Posiblemente el reporte es muy pesado.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Manual report error: {e}")
+        raise HTTPException(status_code=500, detail=f"Fallo técnico al enviar: {str(e)}")
+
+
+@api_router.post("/vehicle-records/{rec_id}/send-report")
+async def manual_send_record_report(
+    rec_id: str,
+    body: Optional[Dict[str, str]] = None,
+    current_user: Dict[str, Any] = Depends(require_supervisor),
+):
+    recipient = body.get("recipient") if body else None
+    try:
+        success = await _trigger_automatic_report(rec_id, recipient)
+        if success:
+            return {"ok": True, "message": "Reporte enviado exitosamente"}
+        else:
+            raise HTTPException(status_code=500, detail="Error: Fallo en el servidor de correo (SMTP). Posiblemente el reporte es muy pesado.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Manual report error: {e}")
+        raise HTTPException(status_code=500, detail=f"Fallo técnico al enviar: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @api_router.post("/inspections/{inspection_id}/approve", response_model=Inspection)
 async def approve_inspection(
     inspection_id: str, body: ApprovalBody,
@@ -761,12 +836,19 @@ async def approve_inspection(
     await db.inspections.update_one({"id": inspection_id}, {"$set": update})
     doc.update(update)
 
-    # Notificar a todos los roles
-    await notify_roles(
-        ["inspector", "supervisor", "admin"],
-        "Inspección Aprobada ⭐",
-        f"La inspección de {doc.get('placas_unidad','')} fue APROBADA por {current_user['name']}.",
-        inspection_id=inspection_id
+    await _log_activity(
+        "inspection", inspection_id,
+        f"Inspección Aprobada: {doc.get('placas_unidad')}",
+        f"Aprobada por {body.name or current_user['name']}",
+        current_user["name"],
+        "bueno"
+    )
+
+    await _create_notification(
+        user_id=doc["user_id"],
+        title="Inspección aprobada",
+        message=f"Tu inspección {doc.get('placas_unidad','')} fue APROBADA por {current_user['name']}." + (f" Nota: {body.note}" if body.note else ""),
+        inspection_id=inspection_id,
     )
 
     # Sync update to AppSheet
@@ -795,12 +877,19 @@ async def reject_inspection(
     await db.inspections.update_one({"id": inspection_id}, {"$set": update})
     doc.update(update)
 
-    # Notificar a todos los roles
-    await notify_roles(
-        ["inspector", "supervisor", "admin"],
-        "Inspección Rechazada ❗",
-        f"La inspección de {doc.get('placas_unidad','')} fue RECHAZADA por {current_user['name']}." + (f" Motivo: {body.note}" if body.note else ""),
-        inspection_id=inspection_id
+    await _log_activity(
+        "inspection", inspection_id,
+        f"Inspección Aprobada: {doc.get('placas_unidad')}",
+        f"Aprobada por {body.name or current_user['name']}",
+        current_user["name"],
+        "bueno"
+    )
+
+    await _create_notification(
+        user_id=doc["user_id"],
+        title="Inspección rechazada",
+        message=f"Tu inspección {doc.get('placas_unidad','')} fue RECHAZADA por {current_user['name']}." + (f" Motivo: {body.note}" if body.note else ""),
+        inspection_id=inspection_id,
     )
 
     # Sync update to AppSheet
@@ -809,14 +898,6 @@ async def reject_inspection(
     except: pass
 
     return _serialize_inspection(doc)
-
-
-@api_router.delete("/inspections/{inspection_id}")
-async def delete_inspection(inspection_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
-    res = await db.inspections.delete_one({"id": inspection_id})
-    if res.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Inspección no encontrada")
-    return {"ok": True}
 
 
 # ========== Notifications ==========
@@ -842,11 +923,18 @@ async def _create_notification(user_id: str, title: str, message: str, inspectio
     }
     await db.notifications.insert_one(doc)
 
-async def notify_roles(roles: List[str], title: str, message: str, inspection_id: Optional[str] = None):
-    """Crea notificaciones para todos los usuarios con los roles especificados."""
-    users = await db.users.find({"role": {"$in": roles}}, {"id": 1}).to_list(1000)
-    for u in users:
-        await _create_notification(u["id"], title, message, inspection_id)
+async def _log_activity(type: str, item_id: str, title: str, subtitle: str, user_name: str, status: str = ""):
+    """Registra actividad para el panel de inicio"""
+    doc = {
+        "id": item_id,
+        "type": type, # inspection | caseta | embarque
+        "title": title,
+        "subtitle": subtitle,
+        "user_name": user_name,
+        "status": status,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.activities.insert_one(doc)
 
 
 # ========== Email Utility ==========
@@ -857,8 +945,8 @@ async def send_automatic_report(subject: str, recipient: str, body_html: str):
     smtp_pass = os.environ.get("SMTP_PASS")
 
     if not all([smtp_host, smtp_user, smtp_pass]):
-        print("SMTP not configured. Skipping email.")
-        return
+        logger.error("SMTP not configured. Skipping email.")
+        return False
 
     message = MIMEMultipart()
     message["From"] = smtp_user
@@ -875,11 +963,13 @@ async def send_automatic_report(subject: str, recipient: str, body_html: str):
             password=smtp_pass,
             use_tls=(smtp_port == 465),
             start_tls=(smtp_port == 587),
-            timeout=15,
+            timeout=60,
         )
         logger.info(f"Reporte enviado exitosamente a {recipient}")
+        return True
     except Exception as e:
         logger.error(f"Error al enviar correo a {recipient}: {e}")
+        return False
 
 
 @api_router.get("/notifications", response_model=List[Notification])
@@ -888,6 +978,17 @@ async def list_notifications(current_user: Dict[str, Any] = Depends(get_current_
         {"user_id": current_user["id"]}, {"_id": 0}
     ).sort("created_at", -1).to_list(200)
     return [Notification(**d) for d in docs]
+
+@api_router.get("/activities")
+async def list_activities(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Lista actividad reciente global (para supervisores) o propia"""
+    filt = {}
+    # Supervisores ven todo el movimiento de la planta
+    if current_user.get("role") not in ["supervisor", "admin"] and not is_admin(current_user):
+        filt["user_name"] = current_user["name"]
+
+    docs = await db.activities.find(filt, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return docs
 
 
 @api_router.post("/test-appsheet")
@@ -906,7 +1007,7 @@ async def test_appsheet(current_user: Dict[str, Any] = Depends(require_admin)):
 @api_router.post("/test-email")
 async def test_email(current_user: Dict[str, Any] = Depends(require_admin)):
     """Ruta para probar la configuración SMTP"""
-    recipient = os.environ.get("REPORT_RECIPIENT", "d4r005@gmail.com")
+    recipient = os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com")
     subject = "🧪 Prueba de Conexión SMTP - SRIUC"
     html = f"""
     <html>
@@ -925,7 +1026,104 @@ async def test_email(current_user: Dict[str, Any] = Depends(require_admin)):
         await send_automatic_report(subject, recipient, html)
         return {"message": f"Correo de prueba enviado exitosamente a {recipient}"}
     except Exception as e:
+        logger.error(f"Error en test-email: {e}")
         raise HTTPException(status_code=500, detail=f"Error al enviar correo: {str(e)}")
+
+# ========== ADMIN MASTER PANEL ROUTES ==========
+
+@api_router.patch("/inspections/{inspection_id}/admin-update")
+async def admin_update_inspection(
+    inspection_id: str, body: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(require_admin)
+):
+    # Permite modificar cualquier campo de la inspección
+    if "_id" in body: del body["_id"]
+    res = await db.inspections.update_one({"id": inspection_id}, {"$set": body})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Inspección no encontrada")
+    return {"ok": True, "updated_fields": list(body.keys())}
+
+@api_router.patch("/vehicle-records/{rec_id}/admin-update")
+async def admin_update_vehicle_record(
+    rec_id: str, body: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(require_admin)
+):
+    if "_id" in body: del body["_id"]
+    res = await db.vehicle_records.update_one({"id": rec_id}, {"$set": body})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    return {"ok": True}
+
+@api_router.patch("/shipping-tickets/{ticket_id}/admin-update")
+async def admin_update_shipping_ticket(
+    ticket_id: str, body: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(require_admin)
+):
+    if "_id" in body: del body["_id"]
+    res = await db.shipping_tickets.update_one({"id": ticket_id}, {"$set": body})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Ticket no encontrado")
+    return {"ok": True}
+
+@api_router.post("/vehicle-records/{rec_id}/resend-report")
+async def resend_consolidated_report(rec_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
+    """Dispara manualmente el envío del reporte consolidado"""
+    try:
+        await _trigger_automatic_report(rec_id)
+        return {"ok": True, "message": "Reporte enviado a cola de correo"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/reports/consolidated-export")
+async def export_consolidated_csv(current_user: Dict[str, Any] = Depends(require_admin)):
+    """Exporta un CSV uniendo Caseta, Inspección y Embarque"""
+    records = await db.vehicle_records.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+
+    # Headers
+    writer.writerow([
+        "ID Registro", "Status", "Fecha Entrada", "Fecha Salida", "Placas", "Chofer", "Compañia",
+        "Inspeccion ID", "Inspeccion Tipo", "Inspeccion Status", "Fallas",
+        "Ticket Embarque", "Cliente", "Pallets", "Sellos"
+    ])
+
+    for r in records:
+        # Buscar inspección vinculada
+        placas = r["entry"].get("placas_unidad", "")
+        insp = None
+        if r.get("inspection_id"):
+            insp = await db.inspections.find_one({"id": r["inspection_id"]})
+        if not insp:
+            insp = await db.inspections.find_one({"placas_unidad": placas}, sort=[("created_at", -1)])
+
+        # Buscar ticket
+        ticket = await db.shipping_tickets.find_one({
+            "placas_unidad": placas,
+            "created_at": {"$gte": r["created_at"]}
+        })
+
+        fallas = sum(1 for p in insp.get("points", [])) if insp and "points" in insp else 0
+
+        writer.writerow([
+            r["id"], r.get("status"), r["entry"].get("fecha_entrada"), r.get("exit", {}).get("fecha_salida", "N/A"),
+            placas, r["entry"].get("chofer_nombre"), r["entry"].get("compania_transporte"),
+            insp.get("id", "N/A") if insp else "N/A",
+            insp.get("inspection_type", "N/A") if insp else "N/A",
+            insp.get("status_general", "N/A") if insp else "N/A",
+            fallas,
+            ticket.get("id", "N/A") if ticket else "N/A",
+            ticket.get("cliente", "N/A") if ticket else "N/A",
+            ticket.get("numero_pallets", "N/A") if ticket else "N/A",
+            ticket.get("sellos", "N/A") if ticket else "N/A",
+        ])
+
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="reporte_consolidado_maestro.csv"'},
+    )
 
 
 @api_router.post("/notifications/{notif_id}/read")
@@ -966,11 +1164,12 @@ async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any]
     }
     await db.vehicle_records.insert_one(doc)
 
-    # Notificar a inspectores, supervisores y admin
-    await notify_roles(
-        ["inspector", "supervisor", "admin"],
-        "Nueva Entrada",
-        f"Se registró entrada de unidad con placas: {body.placas_unidad}. Chofer: {body.chofer_nombre}."
+    await _log_activity(
+        "caseta", rec_id,
+        f"Entrada Vehículo: {body.placas_unidad}",
+        f"Conductor: {body.chofer_nombre}",
+        current_user["name"],
+        "entrada"
     )
 
     # Sync to AppSheet
@@ -987,18 +1186,37 @@ async def list_vehicle_records(
     status: Optional[str] = None,
 ):
     filt: Dict[str, Any] = {}
-    if current_user.get("role") not in ["supervisor", "admin"]:
-        filt["user_id"] = current_user["id"]
+    # Administradores y supervisores ven todo.
+    # Inspectores ven lo suyo y lo que está actualmente en patio (para poder inspeccionar)
+    if current_user.get("role") not in ["supervisor", "admin"] and not is_admin(current_user):
+        filt["$or"] = [
+            {"user_id": current_user["id"]},
+            {"status": {"$in": ["entrada", "inspeccionado"]}}
+        ]
+
     if status:
         filt["status"] = status
     docs = await db.vehicle_records.find(filt, {"_id": 0}).sort("created_at", -1).to_list(1000)
-    return [VehicleRecord(**d) for d in docs]
+
+    # Check for shipping tickets to sync status
+    res = []
+    for d in docs:
+        plates = d["entry"].get("placas_unidad", "")
+        # Find if there is a shipping ticket after this entry
+        ticket = await db.shipping_tickets.find_one({
+            "placas_unidad": plates,
+            "created_at": {"$gte": d["created_at"]}
+        })
+        d["has_shipping_ticket"] = bool(ticket)
+        res.append(VehicleRecord(**d))
+
+    return res
 
 
 @api_router.get("/vehicle-records/{rec_id}", response_model=VehicleRecord)
 async def get_vehicle_record(rec_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     filt: Dict[str, Any] = {"id": rec_id}
-    if current_user.get("role") not in ["supervisor", "admin"]:
+    if current_user.get("role") != "supervisor":
         filt["user_id"] = current_user["id"]
     doc = await db.vehicle_records.find_one(filt, {"_id": 0})
     if not doc:
@@ -1006,12 +1224,31 @@ async def get_vehicle_record(rec_id: str, current_user: Dict[str, Any] = Depends
     return VehicleRecord(**doc)
 
 
-@api_router.delete("/vehicle-records/{rec_id}")
-async def delete_vehicle_record(rec_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
-    res = await db.vehicle_records.delete_one({"id": rec_id})
-    if res.deleted_count == 0:
+@api_router.put("/vehicle-records/{rec_id}", response_model=VehicleRecord)
+async def update_vehicle_record(
+    rec_id: str, body: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(require_supervisor),
+):
+    doc = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
+    if not doc:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
-    return {"ok": True}
+
+    # Update only allowed fields
+    update_data = {}
+    if "entry" in body: update_data["entry"] = body["entry"]
+    if "exit" in body: update_data["exit"] = body["exit"]
+    if "status" in body: update_data["status"] = body["status"]
+    if "inspection_id" in body: update_data["inspection_id"] = body["inspection_id"]
+
+    await db.vehicle_records.update_one({"id": rec_id}, {"$set": update_data})
+    updated_doc = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
+
+    # Sync to AppSheet
+    try:
+        await sync_to_appsheet("Caseta", updated_doc)
+    except: pass
+
+    return VehicleRecord(**updated_doc)
 
 
 @api_router.patch("/vehicle-records/{rec_id}/exit", response_model=VehicleRecord)
@@ -1030,6 +1267,14 @@ async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[
     doc["exit"] = exit_data
     doc["status"] = "salida"
 
+    await _log_activity(
+        "caseta", rec_id,
+        f"Salida Vehículo: {doc['entry']['placas_unidad']}",
+        f"Destino: {exit_data.get('destino')}",
+        current_user["name"],
+        "salida"
+    )
+
     # Intentar enviar reporte automático al finalizar la salida
     try:
         await _trigger_automatic_report(rec_id)
@@ -1038,148 +1283,232 @@ async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[
     except Exception as e:
         print(f"Error al disparar reporte o sync: {e}")
 
-    # Notificar a todos los roles
-    await notify_roles(
-        ["inspector", "supervisor", "admin"],
-        "Salida de Unidad 🚛",
-        f"La unidad con placas {doc['entry'].get('placas_unidad')} ha salido de las instalaciones. Guardia: {body.guardia_salida_nombre}."
-    )
-
     return VehicleRecord(**doc)
 
 
-async def _trigger_automatic_report(rec_id: str):
+async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[str] = None):
     logger.info(f"Generando reporte consolidado para ID: {rec_id}")
     record = await db.vehicle_records.find_one({"id": rec_id})
     if not record:
         logger.error(f"Reporte cancelado: No existe el registro {rec_id}")
-        return
+        return False
 
     placas = record["entry"].get("placas_unidad", "").strip()
 
-    # Buscar inspección vinculada o por placas (respaldo)
+    # Buscar inspección vinculada o por placas (con búsqueda flexible)
     inspection = None
     if record.get("inspection_id"):
         inspection = await db.inspections.find_one({"id": record["inspection_id"]})
 
     if not inspection and placas:
-        logger.info(f"Buscando inspección de respaldo para placas: {placas}")
-        # Case insensitive search with regex
+        # Intentar búsqueda exacta primero
         inspection = await db.inspections.find_one(
-            {"placas_unidad": {"$regex": f"^{placas}$", "$options": "i"}},
+            {"placas_unidad": placas},
             sort=[("created_at", -1)]
         )
+        if not inspection:
+            # Búsqueda flexible (solo letras y números)
+            norm_placas = re.sub(r'[^a-zA-Z0-9]', '', placas)
+            if norm_placas:
+                flex_regex = ".*".join(list(norm_placas))
+                inspection = await db.inspections.find_one(
+                    {"placas_unidad": {"$regex": flex_regex, "$options": "i"}},
+                    sort=[("created_at", -1)]
+                )
 
-    # Buscar ticket de embarque
-    fecha_inicio = record["created_at"]
-    fecha_fin = record.get("exit", {}).get("fecha_salida") or datetime.now(timezone.utc).isoformat()
-    ticket = await db.shipping_tickets.find_one({
-        "placas_unidad": placas,
-        "created_at": {"$gte": fecha_inicio, "$lte": fecha_fin}
-    })
+    # Buscar ticket de embarque con búsqueda flexible
+    ticket = None
+    if placas:
+        fecha_inicio = record["created_at"]
+        fecha_fin = record.get("exit", {}).get("fecha_salida") or datetime.now(timezone.utc).isoformat()
+        # Expandimos rango de búsqueda a 3 horas para mayor seguridad
+        start_dt = datetime.fromisoformat(fecha_inicio.replace('Z', '+00:00')) - timedelta(hours=3)
+        end_dt = datetime.fromisoformat(fecha_fin.replace('Z', '+00:00')) + timedelta(hours=3)
+
+        # Intento exacto
+        ticket = await db.shipping_tickets.find_one({
+            "placas_unidad": placas,
+            "created_at": {"$gte": start_dt.isoformat(), "$lte": end_dt.isoformat()}
+        })
+        if not ticket:
+            # Intento flexible
+            norm_placas = re.sub(r'[^a-zA-Z0-9]', '', placas)
+            if norm_placas:
+                flex_regex = ".*".join(list(norm_placas))
+                ticket = await db.shipping_tickets.find_one({
+                    "placas_unidad": {"$regex": flex_regex, "$options": "i"},
+                    "created_at": {"$gte": start_dt.isoformat(), "$lte": end_dt.isoformat()}
+                })
 
     logger.info(f"Datos encontrados - Inspección: {'SI' if inspection else 'NO'}, Ticket: {'SI' if ticket else 'NO'}")
 
     subject = f"REPORTE CONSOLIDADO SRIUC - UNIDAD: {placas}"
-    recipient = os.environ.get("REPORT_RECIPIENT", "d4r005@gmail.com")
+    recipient = recipient_override or os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com")
 
-    # Helper to generate photo HTML
-    def get_photo_html(title, photo_url):
-        if not photo_url or not isinstance(photo_url, str) or "data:image" not in photo_url:
+    # Si el estado general de la inspección es malo, marcarlo fuerte en el correo
+    color_header = "#0A2540"
+    if inspection and inspection.get("status_general") == "malo":
+        color_header = "#dc2626" # Rojo si hay falla
+
+    # Helper para generar HTML de fotos con redimensionamiento agresivo
+    def get_photo_html(b64, label):
+        if not b64 or not isinstance(b64, str) or "data:image" not in b64:
             return ""
-        return f"""
-        <div style="display: inline-block; margin: 10px; width: 220px; vertical-align: top; border: 1px solid #ddd; padding: 5px;">
-            <p style="margin: 0 0 5px 0; font-size: 10px; font-weight: bold; color: #666; text-transform: uppercase;">{title}</p>
-            <img src="{photo_url}" style="width: 100%; height: 150px; object-fit: cover;" />
+        # add_watermark ya redimensiona a 600px y baja calidad al 50%
+        watermarked_b64 = add_watermark(b64)
+        return f'''
+        <div style="display: inline-block; width: 45%; margin: 1%; vertical-align: top; border: 1px solid #eee; padding: 5px; background: #f9fafb; text-align: center;">
+            <p style="margin: 0 0 5px 0; font-size: 9px; font-weight: bold; color: #666; text-transform: uppercase;">{label}</p>
+            <img src="{watermarked_b64}" style="width: 100%; border: 1px solid #ddd;" />
         </div>
-        """
+        '''
 
-    # Búsqueda de información adicional
-    entry_photos = ""
-    inspection_photos = ""
+    # Fotos de Caseta
+    caseta_photos = []
+    if record["entry"].get("foto_frente_unidad"):
+        caseta_photos.append(get_photo_html(record["entry"]["foto_frente_unidad"], "FRONTAL"))
+    if record["entry"].get("foto_atras_caja"):
+        caseta_photos.append(get_photo_html(record["entry"]["foto_atras_caja"], "TRASERA"))
+    caseta_photos_html = "".join(caseta_photos)
+
+    # Fotos de Inspección: SOLO INCLUIR LAS QUE TIENEN FALLA PARA EVITAR PESO EXCESIVO
     inspection_rows = ""
-    ticket_photos = ""
-    exit_photos = ""
-    num_points = "19"
-
-    if record.get("entry"):
-        e = record["entry"]
-        entry_photos += get_photo_html("Frente Unidad", e.get("foto_frente_unidad"))
-        entry_photos += get_photo_html("Atrás Caja", e.get("foto_atras_caja"))
-        entry_photos += get_photo_html("ID Chofer", e.get("foto_id_chofer"))
-
-    if inspection:
-        is_9 = inspection.get("inspection_type") == "9_puntos_contenedor" or len(inspection.get("points", [])) <= 10
-        num_points = "9" if is_9 else "19"
-
-        for p in inspection.get("points", []):
-            st = p.get("estado", "NA").upper()
-            color = "#16a34a" if st == "BUENO" else ("#dc2626" if st == "MALO" else "#999")
-            inspection_rows += f"""
+    inspection_photos = []
+    if inspection and inspection.get("points"):
+        for p in inspection["points"]:
+            status_text = "BUENO" if p["estado"] == "bueno" else "FALLA"
+            status_color = "#16a34a" if p["estado"] == "bueno" else "#dc2626"
+            inspection_rows += f'''
             <tr>
-                <td style="padding:5px; border:1px solid #ddd; width:30px;">{p.get('number')}</td>
-                <td style="padding:5px; border:1px solid #ddd;">{p.get('name')}</td>
-                <td style="padding:5px; border:1px solid #ddd; font-weight:bold; color:{color};">{st}</td>
-                <td style="padding:5px; border:1px solid #ddd;">{p.get('comentarios', '')}</td>
+                <td style="padding: 5px; border: 1px solid #ddd; width: 30px;">{p['number']}</td>
+                <td style="padding: 5px; border: 1px solid #ddd;">{p['name']}</td>
+                <td style="padding: 5px; border: 1px solid #ddd; font-weight: bold; color: {status_color};">{status_text}</td>
+                <td style="padding: 5px; border: 1px solid #ddd;">{p.get('comentarios', '-')}</td>
             </tr>
-            """
-            if p.get("photo"):
-                inspection_photos += get_photo_html(f"Punto {p.get('number')}", p["photo"])
+            '''
+            # Solo adjuntamos foto si es MALA (falla) para ahorrar espacio
+            if p.get("photo") and p.get("estado") == "malo":
+                inspection_photos.append(get_photo_html(p["photo"], f"FALLA EN PUNTO {p['number']}"))
+    inspection_photos_html = "".join(inspection_photos)
 
-    if ticket:
-        ticket_photos += get_photo_html("Inicio Carga", ticket.get("foto_inicio_carga"))
-        ticket_photos += get_photo_html("Media Carga", ticket.get("foto_media_carga"))
-        ticket_photos += get_photo_html("Final Carga", ticket.get("foto_final_carga"))
+    # Fotos de Embarque: Solo la final para ahorrar espacio
+    ticket_photos_html = ""
+    if ticket and ticket.get("foto_final_carga"):
+        ticket_photos_html = get_photo_html(ticket["foto_final_carga"], "CARGA FINALIZADA")
 
-    if record.get("exit"):
-        exit_photos += get_photo_html("Sello VVTT (Salida)", record["exit"].get("sello_vvtt_foto"))
+    # Reglamento y Declaraciones Bilingüe
+    reglas_data = [
+        ('1. No romper el sello hasta que la cortina asignada esté abierta y el almacenista responsable esté presente.', '1. 在指定的卸货门打开且负责的仓库人员到场之前，请勿破坏封条。'),
+        ('2. No pasar materiales/equipos ajenos a NAF por la cortina.', '2. 请勿通过卸货门运送不属于 NAF 的材料/设备。'),
+        ('3. Prohibido brincar rampas y entrar al almacén sin autorización.', '3. 禁止未经授权跳过坡道或进入仓库。'),
+        ('4. Prohibidos drogas, armas, agentes biológicos, aerosoles, cámaras de video/foto, pornografía y bebidas alcohólicas.', '4. 禁止携带毒品、武器、生物制剂、气雾剂、摄相机、色情制品和酒精饮料。'),
+        ('5. Prohibido dar propinas, premios o incentivos al personal de seguridad/almacén NAF.', '5. 禁止向 NAF 安保或仓库人员提供小费、奖品或奖励。'),
+        ('6. No menores de edad ni personal ajeno a NAF en el patio de maniobras.', '6. 禁止未成年人或非 NAF 人员进入操作场区。'),
+        ('7. Prohibido tirar basura en el patio de maniobras.', '7. 禁止在操作场区乱扔垃圾。'),
+        ('8. Velocidad máxima 10 km/h.', '8. 最高时速 10 公里/小时。')
+    ]
+    declaraciones_data = [
+        ('1. Declaro NO transportar drogas, agentes biológicos, bioterrorismo, municiones, armas, contrabando ni personas indocumentadas.', '1. 我声明不运输毒品、生物制剂、生物恐怖主义物品、弹药、武器、走私品或无证人员。'),
+        ('2. Declaro estar en condición física adecuada y buen estado de salud.', '2. 我声明身体状况良好，健康状态佳。'),
+        ('3. Declaro NO haber consumido alcohol o drogas recientemente y NO estar bajo su influencia.', '3. 我声明最近没有饮酒或吸毒，且不受其影响。'),
+        ('4. Declaro que al estar en instalaciones NAF he leído, entendido y aceptado plenamente estas instrucciones.', '4. 我声明在 NAF 设施内已阅读、理解并完全接受这些指令。')
+    ]
+
+    reglas_html = "".join([f"<div style='margin-bottom:4px;'>{es}<br/><span style='color:#666; font-size:8px;'>{zh}</span></div>" for es, zh in reglas_data])
+    declaraciones_html = "".join([f"<div style='margin-bottom:4px;'>{es}<br/><span style='color:#666; font-size:8px;'>{zh}</span></div>" for es, zh in declaraciones_data])
 
     html = f"""
     <html>
-        <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; line-height: 1.6; max-width: 850px; margin: auto; border: 1px solid #eee; padding: 20px;">
-            <div style="background-color: #0A2540; padding: 20px; text-align: center; color: white;">
-                <h1 style="margin: 0;">Reporte Consolidado de Unidad</h1>
-                <p style="margin: 5px 0 0 0; opacity: 0.8;">Sistema de Registro e Inspección (SRIUC)</p>
+        <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; line-height: 1.4; max-width: 800px; margin: auto; border: 1px solid #eee; padding: 20px; font-size: 11px;">
+            <div style="background-color: {color_header}; padding: 20px; text-align: center; color: white;">
+                <h1 style="margin: 0;">Reporte Consolidado de Unidad / 综合报告</h1>
+                <p style="margin: 5px 0 0 0; opacity: 0.8;">Sistema de Registro e Inspección (SRIUC) / 注册、检查和运输系统</p>
+                {f'<p style="background: white; color: {color_header}; display: inline-block; padding: 2px 10px; font-weight: bold; margin-top: 10px;">¡ALERTA: FALLA DETECTADA! / 警报：检测到故障！</p>' if inspection and inspection.get("status_general") == "malo" else ''}
             </div>
 
             <div style="padding: 20px;">
-                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px;">1. Movimiento de Caseta</h2>
+                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px;">1. Movimiento de Caseta / 门卫室记录</h2>
                 <table style="width: 100%; border-collapse: collapse;">
-                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb; width: 30%;"><b>Placas:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{record['entry']['placas_unidad']}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb;"><b>Conductor:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{record['entry']['chofer_nombre']}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb;"><b>Compañía:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{record['entry'].get('compania_transporte', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb;"><b>Licencia:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{record['entry'].get('licencia_conductor', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb;"><b>Fecha Entrada:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{record['entry'].get('fecha_entrada', 'N/A')}</td></tr>
-                    {f'''<tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb; color: #16A34A;"><b>Fecha Salida:</b></td><td style="padding: 8px; border: 1px solid #ddd; color: #16A34A; font-weight: bold;">{record['exit'].get('fecha_salida', 'N/A')}</td></tr>''' if record.get('exit') else ''}
+                    <tr><td style="padding: 8px; font-weight: bold; width: 40%;">Placas Unidad / 车牌号:</td><td style="padding: 8px;">{record['entry']['placas_unidad']}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Conductor / 司机姓名:</td><td style="padding: 8px;">{record['entry']['chofer_nombre']}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Compañía / 运输公司:</td><td style="padding: 8px;">{record['entry'].get('compania_transporte', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Fecha Entrada / 进场时间:</td><td style="padding: 8px;">{record['entry'].get('fecha_entrada', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold; color: #16A34A;">Fecha Salida / 出场时间:</td><td style="padding: 8px; color: #16A34A; font-weight: bold;">{record['exit'].get('fecha_salida', 'N/A') if record.get('exit') else 'No registrada (En Patio) / 未登记（在场）'}</td></tr>
                 </table>
-                <div style="margin-top: 10px;">{entry_photos}{exit_photos}</div>
 
-                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">2. Inspección C-TPAT ({num_points} Puntos)</h2>
-                {f'''
-                <div style="background-color: {"#f0fdf4" if inspection.get("status_general") == "bueno" else "#fef2f2"}; padding: 15px; border-radius: 5px; margin-bottom: 10px;">
-                    <p style="margin: 0;">Resultado: <b style="color: {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">{inspection.get('status_general', 'N/A').upper()}</b></p>
-                    <p style="margin: 5px 0 0 0;">Inspector: {inspection.get('inspector_nombre', 'N/A')}</p>
-                    <p style="margin: 5px 0 0 0;">Estado: <b>{inspection.get('approval_status', 'pendiente').upper()}</b></p>
+                <div style="background: #f1f5f9; padding: 10px; border: 1px solid #ddd; margin-top: 10px; font-size: 9px;">
+                    <p style="margin: 0 0 5px 0; font-weight: bold; color: #0A2540;">REGLAMENTO Y SEGURIDAD / 安全条例:</p>
+                    {reglas_html}
+                    <p style="margin: 10px 0 5px 0; font-weight: bold; color: #0A2540;">DECLARACIONES / 司机声明:</p>
+                    {declaraciones_html}
+                    <p style="margin-top: 5px; font-weight: bold; color: #16a34a;">ACEPTADO / 已接受 ✓</p>
                 </div>
-                <table style="width: 100%; border-collapse: collapse;">
+
+                <div style="margin-top: 15px; display: flex; gap: 20px;">
+                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA CONDUCTOR (ENTRADA) / 司机签字:</p><img src="{record["entry"]["firma_operador"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if record["entry"].get("firma_operador") else ''}
+                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA GUARDIA (SALIDA) / 警卫签字:</p><img src="{record["exit"]["firma_guardia"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if record.get("exit") and record["exit"].get("firma_guardia") else ''}
+                </div>
+                <div style="margin-top: 10px;">{caseta_photos_html}</div>
+
+                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">2. Inspección C-TPAT / C-TPAT 检查 ({inspection.get('inspection_type', 'N/A').replace('_', ' ').upper()})</h2>
+                {f'''
+                <div style="background-color: {"#f0fdf4" if inspection.get("status_general") == "bueno" else "#fef2f2"}; padding: 15px; border-radius: 5px; border-left: 5px solid {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"}; margin-bottom: 10px;">
+                    <p style="margin: 0;">Estado General / 总体状态: <b style="color: {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">{inspection.get('status_general', 'N/A').upper()} / {"良好" if inspection.get("status_general") == "bueno" else "故障"}</b></p>
+                    <p style="margin: 5px 0 0 0;">Estado Aprobación / 批准状态: <b>{inspection.get('approval_status', 'pendiente').upper()} / {"已批准" if inspection.get('approval_status') == "aprobada" else "已拒绝" if inspection.get('approval_status') == "rechazada" else "待定"}</b></p>
+                    <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                        <tr>
+                            <td style="width: 50%; vertical-align: top;">
+                                <p style="margin: 0; font-weight: bold;">Inspector / 检查员:</p>
+                                <p style="margin: 2px 0;">{inspection.get('inspector_nombre', 'N/A')}</p>
+                                {f'<img src="{inspection.get("inspector_firma")}" style="height:45px; border-bottom:1px solid #0A2540;" />' if inspection.get("inspector_firma") else ''}
+                            </td>
+                            <td style="width: 50%; vertical-align: top;">
+                                <p style="margin: 0; font-weight: bold;">Supervisor / 主管:</p>
+                                <p style="margin: 2px 0;">{inspection.get('approved_by_name', 'N/A')}</p>
+                                {f'<img src="{inspection.get("approved_by_signature")}" style="height:45px; border-bottom:1px solid #0A2540;" />' if inspection.get("approved_by_signature") else ''}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
                     <tr style="background: #f1f5f9; font-weight: bold;">
-                        <td style="padding: 5px; border: 1px solid #ddd;">#</td><td style="padding: 5px; border: 1px solid #ddd;">Punto</td><td style="padding: 5px; border: 1px solid #ddd;">Estatus</td><td style="padding: 5px; border: 1px solid #ddd;">Comentarios</td>
+                        <td style="padding: 5px; border: 1px solid #ddd; width: 30px;">#</td>
+                        <td style="padding: 5px; border: 1px solid #ddd;">Punto / 检查点</td>
+                        <td style="padding: 5px; border: 1px solid #ddd; width: 100px;">Estado / 状态</td>
+                        <td style="padding: 5px; border: 1px solid #ddd;">Comentarios / 备注</td>
                     </tr>
                     {inspection_rows}
                 </table>
-                <div style="margin-top: 10px;">{inspection_photos}</div>
-                ''' if inspection else "<p style='color: #666; font-style: italic;'>No se realizó inspección digital.</p>"}
+                <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
+                    <p style="font-size: 10px; color: #666;">(Solo se incluyen fotos de puntos con falla detectada / 仅包含检测到故障点的照片)</p>
+                    {inspection_photos_html}
+                </div>
+                ''' if inspection else "<p style='color: #666; font-style: italic;'>No se realizó inspección digital para esta unidad / 该单位未进行数字检查。</p>"}
 
-                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">3. Ticket de Embarque</h2>
+                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">3. Ticket de Embarque / 运输单</h2>
                 {f'''
                 <table style="width: 100%; border-collapse: collapse;">
-                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb; width: 30%;"><b>Cliente:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{ticket.get('cliente', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb;"><b>Almacenista:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{ticket.get('almacenista', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb;"><b>Pallets:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{ticket.get('numero_pallets', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; border: 1px solid #ddd; background: #f9fafb;"><b>Destino:</b></td><td style="padding: 8px; border: 1px solid #ddd;">{ticket.get('observaciones', '').replace('Destino: ', '')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold; width: 40%;">Cliente / 客户:</td><td style="padding: 8px;">{ticket.get('cliente', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Pallets / 托盘数量:</td><td style="padding: 8px;">{ticket.get('numero_pallets', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Sellos / 封条:</td><td style="padding: 8px;">{ticket.get('sellos', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Almacenista / 仓管员:</td><td style="padding: 8px;">{ticket.get('almacenista', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Guardia / 警卫:</td><td style="padding: 8px;">{ticket.get('nombre_guardia', 'N/A')}</td></tr>
                 </table>
-                <div style="margin-top: 10px;">{ticket_photos}</div>
-                ''' if ticket else "<p style='color: #666; font-style: italic;'>No se generó ticket de embarque.</p>"}
+                <div style="margin-top: 15px; display: flex; gap: 20px;">
+                    {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA ALMACENISTA / 仓管员签字:</p><img src="{ticket["firma_almacenista"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if ticket.get("firma_almacenista") else ''}
+                    {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA GUARDIA / 警卫签字:</p><img src="{ticket["firma_guardia"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if ticket.get("firma_guardia") else ''}
+                </div>
+                <div style="margin-top: 10px;">{ticket_photos_html}</div>
+                ''' if ticket else "<p style='color: #666; font-style: italic;'>No se generó ticket de embarque para este movimiento / 本次操作未生成运输单。</p>"}
+            </div>
+
+            <div style="margin-top: 40px; padding: 20px; background-color: #f9fafb; text-align: center; font-size: 12px; color: #666;">
+                <p>Este es un reporte automático generado por el Sistema SRIUC / 这是由 SRIUC 系统生成的自动报告。</p>
+                <p>&copy; {datetime.now().year} Branco Industries - Todos los derechos reservados / 版权所有。</p>
+            </div>
+        </body>
+    </html>
+    """
             </div>
 
             <div style="margin-top: 40px; padding: 20px; background-color: #f9fafb; text-align: center; font-size: 12px; color: #666;">
@@ -1190,7 +1519,12 @@ async def _trigger_automatic_report(rec_id: str):
     </html>
     """
 
-    await send_automatic_report(subject, recipient, html)
+    try:
+        success = await send_automatic_report(subject, recipient, html)
+        return success
+    except Exception as e:
+        logger.error(f"Fallo al enviar reporte automático: {e}")
+        return False
 
 
 @api_router.patch("/vehicle-records/{rec_id}/link-inspection")
@@ -1238,64 +1572,6 @@ class ShippingTicket(BaseModel):
     nombre_guardia: str = ""
     created_at: str
 
-class SendConsolidatedRequest(BaseModel):
-    record_id: str
-    emails: List[EmailStr]
-
-@api_router.post("/reports/send-consolidated")
-async def send_consolidated_manual(body: SendConsolidatedRequest, current_user: Dict[str, Any] = Depends(require_supervisor)):
-    record = await db.vehicle_records.find_one({"id": body.record_id})
-    if not record:
-        raise HTTPException(status_code=404, detail="Registro de caseta no encontrado")
-
-    # Generate HTML (reusing logic from _trigger_automatic_report)
-    placas = record["entry"].get("placas_unidad", "").strip()
-    inspection = await db.inspections.find_one({"id": record.get("inspection_id")})
-    if not inspection and placas:
-        inspection = await db.inspections.find_one(
-            {"placas_unidad": {"$regex": f"^{placas}$", "$options": "i"}},
-            sort=[("created_at", -1)]
-        )
-
-    fecha_inicio = record["created_at"]
-    fecha_fin = record.get("exit", {}).get("fecha_salida") or datetime.now(timezone.utc).isoformat()
-    ticket = await db.shipping_tickets.find_one({
-        "placas_unidad": placas,
-        "created_at": {"$gte": fecha_inicio, "$lte": fecha_fin}
-    })
-
-    subject = f"REPORTE CONSOLIDADO SRIUC - UNIDAD: {placas}"
-
-    # Simplified HTML for manual send
-    html = f"""
-    <html>
-        <body style="font-family: Arial, sans-serif; color: #1a1a1a; max-width: 800px; margin: auto; border: 1px solid #eee; padding: 20px;">
-            <div style="background-color: #0A2540; padding: 20px; text-align: center; color: white;">
-                <h1 style="margin: 0;">Reporte Consolidado Manual</h1>
-                <p style="margin: 5px 0 0 0;">Solicitado por: {current_user['name']}</p>
-            </div>
-            <div style="padding: 20px;">
-                <h2>1. Movimiento de Caseta</h2>
-                <p><b>Placas:</b> {record['entry']['placas_unidad']}</p>
-                <p><b>Chofer:</b> {record['entry']['chofer_nombre']}</p>
-                <p><b>Entrada:</b> {record['entry'].get('fecha_entrada', 'N/A')}</p>
-                <p><b>Salida:</b> {record['exit'].get('fecha_salida', 'N/A') if record.get('exit') else 'No registrada'}</p>
-
-                <h2>2. Inspección C-TPAT</h2>
-                {f"<p>Estado: <b>{inspection.get('status_general', '').upper()}</b></p>" if inspection else "<p>No realizada</p>"}
-
-                <h2>3. Embarque</h2>
-                {f"<p>Cliente: {ticket.get('cliente')}</p><p>Pallets: {ticket.get('numero_pallets')}</p>" if ticket else "<p>No realizado</p>"}
-            </div>
-        </body>
-    </html>
-    """
-
-    for email in body.emails:
-        await send_automatic_report(subject, email, html)
-
-    return {"message": f"Reporte enviado a {len(body.emails)} destinatarios"}
-
 class ShippingTicketCreate(BaseModel):
     almacenista: str
     fecha: Optional[str] = None
@@ -1336,27 +1612,12 @@ async def create_ticket(body: ShippingTicketCreate, current_user: Dict[str, Any]
     doc["created_at"] = now
     await db.shipping_tickets.insert_one(doc)
 
-    # VINCULACIÓN AUTOMÁTICA: Buscar registro de caseta para estas placas
-    try:
-        placas = body.placas_unidad.strip().upper()
-        record = await db.vehicle_records.find_one(
-            {"entry.placas_unidad": {"$regex": f"^{placas}$", "$options": "i"}, "status": {"$ne": "salida"}},
-            sort=[("created_at", -1)]
-        )
-        if record:
-            # If it's already inspected, keep that status, otherwise update to something?
-            # Actually just ensure the ticket has an inspection_id if the record has one
-            if record.get("inspection_id"):
-                await db.shipping_tickets.update_one({"id": tid}, {"$set": {"inspection_id": record["inspection_id"]}})
-            logger.info(f"Ticket {tid} vinculado automáticamente a Caseta {record['id']}")
-    except Exception as e:
-        logger.error(f"Error en vinculación automática de ticket: {e}")
-
-    # Notificar a todos los roles
-    await notify_roles(
-        ["inspector", "supervisor", "admin"],
-        "Nuevo Ticket Embarque 📦",
-        f"Se generó ticket para cliente {body.cliente}. Unidad: {body.placas_unidad}. Almacenista: {body.almacenista}."
+    await _log_activity(
+        "embarque", tid,
+        f"Ticket Embarque: {body.placas_unidad}",
+        f"Cliente: {body.cliente}",
+        current_user["name"],
+        "embarque"
     )
 
     # Sync to AppSheet
@@ -1370,7 +1631,7 @@ async def create_ticket(body: ShippingTicketCreate, current_user: Dict[str, Any]
 @api_router.get("/shipping-tickets", response_model=List[ShippingTicket])
 async def list_tickets(current_user: Dict[str, Any] = Depends(get_current_user)):
     filt: Dict[str, Any] = {}
-    if current_user.get("role") not in ["supervisor", "admin"]:
+    if current_user.get("role") != "supervisor":
         filt["user_id"] = current_user["id"]
     docs = await db.shipping_tickets.find(filt, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return [ShippingTicket(**d) for d in docs]
@@ -1379,7 +1640,7 @@ async def list_tickets(current_user: Dict[str, Any] = Depends(get_current_user))
 @api_router.get("/shipping-tickets/{ticket_id}", response_model=ShippingTicket)
 async def get_ticket(ticket_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     filt: Dict[str, Any] = {"id": ticket_id}
-    if current_user.get("role") not in ["supervisor", "admin"]:
+    if current_user.get("role") != "supervisor":
         filt["user_id"] = current_user["id"]
     doc = await db.shipping_tickets.find_one(filt, {"_id": 0})
     if not doc:
@@ -1387,12 +1648,27 @@ async def get_ticket(ticket_id: str, current_user: Dict[str, Any] = Depends(get_
     return ShippingTicket(**doc)
 
 
-@api_router.delete("/shipping-tickets/{ticket_id}")
-async def delete_shipping_ticket(ticket_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
-    res = await db.shipping_tickets.delete_one({"id": ticket_id})
-    if res.deleted_count == 0:
+@api_router.put("/shipping-tickets/{ticket_id}", response_model=ShippingTicket)
+async def update_shipping_ticket(
+    ticket_id: str, body: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(require_supervisor),
+):
+    doc = await db.shipping_tickets.find_one({"id": ticket_id}, {"_id": 0})
+    if not doc:
         raise HTTPException(status_code=404, detail="Ticket no encontrado")
-    return {"ok": True}
+
+    # Update doc with provided body fields (excluding id and user_id)
+    update_data = {k: v for k, v in body.items() if k not in ["id", "user_id", "created_at"]}
+
+    await db.shipping_tickets.update_one({"id": ticket_id}, {"$set": update_data})
+    updated_doc = await db.shipping_tickets.find_one({"id": ticket_id}, {"_id": 0})
+
+    # Sync to AppSheet
+    try:
+        await sync_to_appsheet("Embarque", updated_doc)
+    except: pass
+
+    return ShippingTicket(**updated_doc)
 
 
 # ========== Analytics (admin only) ==========
@@ -1457,122 +1733,6 @@ async def analytics(
         "by_inspector": by_inspector_list,
         "top_failed_points": point_failures_list,
     }
-
-
-@api_router.get("/activities")
-async def get_recent_activities(
-    limit: int = Query(20, le=50),
-    current_user: Dict[str, Any] = Depends(get_current_user)
-):
-    """Retorna una lista unificada de las actividades más recientes (inspecciones, caseta, embarque)."""
-    # 1. Inspections (Excluding large fields like photos)
-    insp_filt = {}
-    if current_user["role"] not in ["supervisor", "admin"]:
-        insp_filt["user_id"] = current_user["id"]
-    inspections = await db.inspections.find(insp_filt, {"_id": 0, "points": 0, "inspector_firma": 0, "verificador_firma": 0}).sort("created_at", -1).to_list(limit)
-
-    # 2. Vehicle Records
-    vec_filt = {}
-    if current_user["role"] not in ["supervisor", "admin"]:
-        vec_filt["user_id"] = current_user["id"]
-    records = await db.vehicle_records.find(vec_filt, {"_id": 0, "entry.foto_frente_unidad": 0, "entry.foto_atras_caja": 0, "entry.foto_id_chofer": 0, "exit.sello_vvtt_foto": 0, "entry.firma_operador": 0}).sort("created_at", -1).to_list(limit)
-
-    # 3. Shipping Tickets
-    ship_filt = {}
-    if current_user["role"] not in ["supervisor", "admin"]:
-        ship_filt["user_id"] = current_user["id"]
-    tickets = await db.shipping_tickets.find(ship_filt, {"_id": 0, "foto_inicio_carga": 0, "foto_media_carga": 0, "foto_final_carga": 0, "firma_almacenista": 0, "firma_guardia": 0}).sort("created_at", -1).to_list(limit)
-
-    # Unify
-    activities = []
-    for i in inspections:
-        activities.append({
-            "id": i["id"],
-            "type": "inspection",
-            "title": f"Inspección: {i.get('placas_unidad')}",
-            "subtitle": f"{i.get('compania_transportista')} · {i.get('numero_trailer')}",
-            "status": i.get("status_general"),
-            "created_at": i["created_at"],
-            "user_name": i.get("inspector_nombre", "Inspector"),
-            "inspection_type": i.get("inspection_type")
-        })
-
-    for r in records:
-        title = "Entrada Caseta" if r["status"] == "entrada" else "Salida de Unidad"
-        activities.append({
-            "id": r["id"],
-            "type": "caseta",
-            "title": f"{title}: {r['entry'].get('placas_unidad')}",
-            "subtitle": r['entry'].get('chofer_nombre'),
-            "status": r["status"],
-            "created_at": r["created_at"],
-            "user_name": r['entry'].get('guardia_caseta_nombre', "Guardia")
-        })
-
-    for t in tickets:
-        activities.append({
-            "id": t["id"],
-            "type": "embarque",
-            "title": f"Embarque: {t.get('cliente')}",
-            "subtitle": f"Placas: {t.get('placas_unidad')} · {t.get('almacenista')}",
-            "status": "ticket",
-            "created_at": t["created_at"],
-            "user_name": t.get("almacenista")
-        })
-
-    # Sort all by created_at descending
-    activities.sort(key=lambda x: x["created_at"], reverse=True)
-    return activities[:limit]
-
-
-# ========== Admin Photo Management ==========
-class PhotoUpdateBody(BaseModel):
-    field_path: str  # e.g. "entry.foto_frente_unidad" or "foto_inicio_carga"
-    photo_data: str  # base64 or empty string to delete
-
-@api_router.patch("/admin/vehicle-records/{rec_id}/photo")
-async def admin_update_vehicle_photo(rec_id: str, body: PhotoUpdateBody, current_user: Dict[str, Any] = Depends(require_admin)):
-    # Support paths like "entry.foto_frente_unidad"
-    await db.vehicle_records.update_one({"id": rec_id}, {"$set": {body.field_path: body.photo_data}})
-    return {"ok": True}
-
-@api_router.patch("/admin/inspections/{insp_id}/point/{point_num}/photo")
-async def admin_update_inspection_photo(insp_id: str, point_num: int, body: PhotoUpdateBody, current_user: Dict[str, Any] = Depends(require_admin)):
-    # Update nested point photo
-    await db.inspections.update_one(
-        {"id": insp_id, "points.number": point_num},
-        {"$set": {"points.$.photo": body.photo_data}}
-    )
-    return {"ok": True}
-
-@api_router.patch("/admin/shipping-tickets/{ticket_id}/photo")
-async def admin_update_ticket_photo(ticket_id: str, body: PhotoUpdateBody, current_user: Dict[str, Any] = Depends(require_admin)):
-    await db.shipping_tickets.update_one({"id": ticket_id}, {"$set": {body.field_path: body.photo_data}})
-    return {"ok": True}
-
-
-@api_router.post("/admin/repair-links")
-async def admin_repair_links(current_user: Dict[str, Any] = Depends(require_admin)):
-    """Busca registros de caseta sin inspección y trata de vincularlos por placas."""
-    records = await db.vehicle_records.find({"inspection_id": None}).to_list(1000)
-    linked_count = 0
-    for r in records:
-        placas = r["entry"].get("placas_unidad", "").strip().upper()
-        if not placas: continue
-
-        # Buscar inspección para estas placas creada cerca de la fecha de entrada
-        insp = await db.inspections.find_one(
-            {"placas_unidad": {"$regex": f"^{placas}$", "$options": "i"}},
-            sort=[("created_at", -1)]
-        )
-        if insp:
-            await db.vehicle_records.update_one(
-                {"id": r["id"]},
-                {"$set": {"inspection_id": insp["id"], "status": "inspeccionado"}}
-            )
-            linked_count += 1
-
-    return {"message": f"Se vincularon {linked_count} registros automáticamente"}
 
 
 app.include_router(api_router)
