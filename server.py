@@ -838,10 +838,10 @@ async def approve_inspection(
 
     await _log_activity(
         "inspection", inspection_id,
-        f"Inspección Rechazada: {doc.get('placas_unidad')}",
-        f"Rechazada por {body.name or current_user['name']}",
+        f"Inspección Aprobada: {doc.get('placas_unidad')}",
+        f"Aprobada por {body.name or current_user['name']}",
         current_user["name"],
-        "malo"
+        "bueno"
     )
 
     await _create_notification(
@@ -879,10 +879,10 @@ async def reject_inspection(
 
     await _log_activity(
         "inspection", inspection_id,
-        f"Inspección Rechazada: {doc.get('placas_unidad')}",
-        f"Rechazada por {body.name or current_user['name']}",
+        f"Inspección Aprobada: {doc.get('placas_unidad')}",
+        f"Aprobada por {body.name or current_user['name']}",
         current_user["name"],
-        "malo"
+        "bueno"
     )
 
     await _create_notification(
@@ -1454,13 +1454,21 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
                 {f'''
                 <div style="background-color: {"#f0fdf4" if inspection.get("status_general") == "bueno" else "#fef2f2"}; padding: 15px; border-radius: 5px; border-left: 5px solid {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"}; margin-bottom: 10px;">
                     <p style="margin: 0;">Estado General / 总体状态: <b style="color: {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">{inspection.get('status_general', 'N/A').upper()} / {"良好" if inspection.get("status_general") == "bueno" else "故障"}</b></p>
-                    <p style="margin: 5px 0 0 0;">Inspector / 检查员: {inspection.get('inspector_nombre', 'N/A')}</p>
                     <p style="margin: 5px 0 0 0;">Estado Aprobación / 批准状态: <b>{inspection.get('approval_status', 'pendiente').upper()} / {"已批准" if inspection.get('approval_status') == "aprobada" else "已拒绝" if inspection.get('approval_status') == "rechazada" else "待定"}</b></p>
-                    <p style="margin: 5px 0 0 0;">Autorizado por / 授权人: {inspection.get('approved_by_name', 'N/A')}</p>
-                    <div style="margin-top: 15px; display: flex; gap: 20px;">
-                        {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA INSPECTOR / 检查员签字:</p><img src="{inspection["inspector_firma"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if inspection.get("inspector_firma") else ''}
-                        {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA AUTORIZACIÓN / 授权签字 (Supervisor):</p><img src="{inspection["approved_by_signature"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if inspection.get("approved_by_signature") else ''}
-                    </div>
+                    <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                        <tr>
+                            <td style="width: 50%; vertical-align: top;">
+                                <p style="margin: 0; font-weight: bold;">Inspector / 检查员:</p>
+                                <p style="margin: 2px 0;">{inspection.get('inspector_nombre', 'N/A')}</p>
+                                {f'<img src="{inspection.get("inspector_firma")}" style="height:45px; border-bottom:1px solid #0A2540;" />' if inspection.get("inspector_firma") else ''}
+                            </td>
+                            <td style="width: 50%; vertical-align: top;">
+                                <p style="margin: 0; font-weight: bold;">Supervisor / 主管:</p>
+                                <p style="margin: 2px 0;">{inspection.get('approved_by_name', 'N/A')}</p>
+                                {f'<img src="{inspection.get("approved_by_signature")}" style="height:45px; border-bottom:1px solid #0A2540;" />' if inspection.get("approved_by_signature") else ''}
+                            </td>
+                        </tr>
+                    </table>
                 </div>
                 <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
                     <tr style="background: #f1f5f9; font-weight: bold;">
@@ -1484,6 +1492,7 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
                     <tr><td style="padding: 8px; font-weight: bold;">Pallets / 托盘数量:</td><td style="padding: 8px;">{ticket.get('numero_pallets', 'N/A')}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold;">Sellos / 封条:</td><td style="padding: 8px;">{ticket.get('sellos', 'N/A')}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold;">Almacenista / 仓管员:</td><td style="padding: 8px;">{ticket.get('almacenista', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Guardia / 警卫:</td><td style="padding: 8px;">{ticket.get('nombre_guardia', 'N/A')}</td></tr>
                 </table>
                 <div style="margin-top: 15px; display: flex; gap: 20px;">
                     {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA ALMACENISTA / 仓管员签字:</p><img src="{ticket["firma_almacenista"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if ticket.get("firma_almacenista") else ''}
