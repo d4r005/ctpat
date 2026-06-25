@@ -1195,6 +1195,29 @@ async def admin_update_shipping_ticket(
         raise HTTPException(status_code=404, detail="Ticket no encontrado")
     return {"ok": True}
 
+# --- DELETE ROUTES FOR ADMIN ---
+
+@api_router.delete("/inspections/{inspection_id}/admin-delete")
+async def admin_delete_inspection(inspection_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
+    res = await db.inspections.delete_one({"id": inspection_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Inspección no encontrada")
+    return {"ok": True}
+
+@api_router.delete("/vehicle-records/{rec_id}/admin-delete")
+async def admin_delete_vehicle_record(rec_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
+    res = await db.vehicle_records.delete_one({"id": rec_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    return {"ok": True}
+
+@api_router.delete("/shipping-tickets/{ticket_id}/admin-delete")
+async def admin_delete_shipping_ticket(ticket_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
+    res = await db.shipping_tickets.delete_one({"id": ticket_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Ticket no encontrado")
+    return {"ok": True}
+
 @api_router.post("/vehicle-records/{rec_id}/resend-report")
 async def resend_consolidated_report(rec_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
     """Dispara manualmente el envío del reporte consolidado"""
