@@ -791,11 +791,11 @@ async def update_inspection(
     await db.inspections.update_one({"id": inspection_id}, {"$set": update_data})
     updated_doc = await db.inspections.find_one({"id": inspection_id}, {"_id": 0})
 
-    # Sync to AppSheet
+    # Sync update to Google Sheets
     try:
-        await sync_to_appsheet("Inspecciones", updated_doc)
+        await sync_to_google_sheets("inspeccion", updated_doc)
     except Exception as e:
-        logger.error(f"Error syncing update to AppSheet: {e}")
+        logger.error(f"Error syncing update to Google Sheets: {e}")
 
     return _serialize_inspection(updated_doc)
 
@@ -1115,17 +1115,17 @@ async def get_recent_activities(
     return activities[:limit]
 
 
-@api_router.post("/test-appsheet")
-async def test_appsheet(current_user: Dict[str, Any] = Depends(require_admin)):
-    """Ruta para probar la conexión con AppSheet API"""
+@api_router.post("/test-sheets")
+async def test_sheets(current_user: Dict[str, Any] = Depends(require_admin)):
+    """Ruta para probar la conexión con Google Sheets"""
     test_data = {
         "id": str(uuid.uuid4()),
         "test": True,
-        "message": "Prueba de conexión desde SRIUC API",
+        "message": "Prueba de conexión desde SRIUC API a Google Sheets",
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
-    await sync_to_appsheet("Test", test_data)
-    return {"message": "Petición de prueba enviada a AppSheet. Revisa los logs del servidor."}
+    await sync_to_google_sheets("entrada", {"id": test_data["id"], "entry": {"placas_unidad": "TEST-123", "chofer_nombre": "PRUEBA", "compania_transporte": "NAF", "numero_caja": "000"}})
+    return {"message": "Petición de prueba enviada a Google Sheets. Revisa tu Excel."}
 
 
 @api_router.post("/test-email")
@@ -1839,9 +1839,9 @@ async def update_shipping_ticket(
     await db.shipping_tickets.update_one({"id": ticket_id}, {"$set": update_data})
     updated_doc = await db.shipping_tickets.find_one({"id": ticket_id}, {"_id": 0})
 
-    # Sync to AppSheet
+    # Sync update to Google Sheets
     try:
-        await sync_to_appsheet("Embarque", updated_doc)
+        await sync_to_google_sheets("embarque", updated_doc)
     except: pass
 
     return ShippingTicket(**updated_doc)
