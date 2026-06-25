@@ -121,6 +121,14 @@ export default function Supervisor() {
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
       }
 
+      // REFUERZO: Si aún no se encuentra, buscar directamente en el servidor por si no se cargó en allInspections
+      if (!insp && placas) {
+        try {
+          const directFetch = await apiCall<any[]>(`/inspections?inspector_id=all&date_from=2024-01-01`, { token });
+          insp = directFetch.find(i => i.placas_unidad?.trim().toUpperCase() === placas || i.id === record.inspection_id);
+        } catch (e) { console.warn("Direct inspection fetch failed", e); }
+      }
+
       if (!insp) {
         const proceed = window.confirm(`No se encontró una inspección digital para la placa: ${placas}. ¿Desea generar el reporte solo con los datos de Caseta y Embarque?`);
         if (!proceed) return;
@@ -143,6 +151,9 @@ export default function Supervisor() {
         created_at: record.created_at,
         inspection_type: '19_puntos'
       } as any;
+
+      // If we are using the fallback, explicitly force 19 points label if that's the likely case
+      if (!insp) finalInsp.inspection_type = '19_puntos';
 
       const htmlEs = generateConsolidatedReportHtml({ inspection: finalInsp, caseta: record, embarque: ship }, 'es');
       const htmlZh = generateConsolidatedReportHtml({ inspection: finalInsp, caseta: record, embarque: ship }, 'zh');
@@ -269,7 +280,7 @@ export default function Supervisor() {
 
         {activeTab === 'admin_tools' && (
           <ScrollView style={{ flex: 1, padding: spacing.lg }}>
-            <Text style={styles.adminSectionTitle}>Herramientas de Limpieza</Text>
+            <Text style={styles.adminSectionTitle}>{t('admin_tools')}</Text>
             <Text style={{ color: colors.muted, marginBottom: spacing.lg }}>Use estas herramientas para corregir problemas de datos.</Text>
 
             <Pressable
@@ -283,23 +294,23 @@ export default function Supervisor() {
               }}
             >
               <Ionicons name="build" size={24} color="#FFF" />
-              <Text style={styles.bigAdminBtnText}>VINCULAR REGISTROS HUÉRFANOS</Text>
+              <Text style={styles.bigAdminBtnText}>{t('vincular_registros')}</Text>
             </Pressable>
 
             <Text style={styles.adminTip}>
               * Esta acción busca inspecciones y tickets que no están vinculados a su entrada de caseta correspondiente y los une por número de placa.
             </Text>
 
-            <Text style={styles.adminSectionTitle}>Gestión de Fotografías</Text>
+            <Text style={styles.adminSectionTitle}>{t('gestion_fotos')}</Text>
             <Text style={{ fontSize: 14, color: colors.onSurface, marginBottom: spacing.md }}>
               Como Administrador, puede modificar o eliminar cualquier foto directamente desde la vista de detalle de cada registro.
             </Text>
 
             <View style={styles.routeBox}>
-              <Text style={styles.routeTitle}>RUTAS PARA EDITAR FOTOS:</Text>
-              <Text style={styles.routeItem}>• Caseta: Pestaña "CASETA" {'>'} Seleccionar Unidad {'>'} Botones Lápiz/Basura sobre fotos.</Text>
-              <Text style={styles.routeItem}>• Inspección: Pestaña "INSPECCIONES" {'>'} Seleccionar {'>'} Botones Lápiz/Basura sobre fotos.</Text>
-              <Text style={styles.routeItem}>• Embarque: Pestaña "EMBARQUE" {'>'} Seleccionar {'>'} Botones Lápiz/Basura sobre fotos.</Text>
+              <Text style={styles.routeTitle}>{t('rutas_edicion')}</Text>
+              <Text style={styles.routeItem}>• {t('caseta')}: Pestaña "{t('caseta').toUpperCase()}" {'>'} Seleccionar Unidad {'>'} Botones Lápiz/Basura sobre fotos.</Text>
+              <Text style={styles.routeItem}>• {t('inspeccion')}: Pestaña "{t('inspeccion').toUpperCase()}" {'>'} Seleccionar {'>'} Botones Lápiz/Basura sobre fotos.</Text>
+              <Text style={styles.routeItem}>• {t('embarque')}: Pestaña "{t('embarque').toUpperCase()}" {'>'} Seleccionar {'>'} Botones Lápiz/Basura sobre fotos.</Text>
             </View>
           </ScrollView>
         )}

@@ -143,7 +143,16 @@ const resources = {
       "kpis": "KPIs",
       "usuarios_caps": "USUARIOS",
       "pendientes_ticket": "INSPECCIONES PENDIENTES DE TICKET",
-      "generar": "GENERAR"
+      "generar": "GENERAR",
+      "actividad_reciente": "ACTIVIDAD RECIENTE",
+      "no_hay_actividad": "No hay actividad reciente",
+      "usuario": "Usuario",
+      "aprobada_caps": "APROBADA",
+      "con_falla_caps": "CON FALLA",
+      "admin_tools": "HERRAMIENTAS ADMIN",
+      "vincular_registros": "VINCULAR REGISTROS HUÉRFANOS",
+      "gestion_fotos": "Gestión de Fotografías",
+      "rutas_edicion": "RUTAS PARA EDITAR FOTOS:"
     }
   },
   en: {
@@ -286,7 +295,16 @@ const resources = {
       "kpis": "KPIs",
       "usuarios_caps": "USERS",
       "pendientes_ticket": "PENDING SHIPPING TICKETS",
-      "generar": "GENERATE"
+      "generar": "GENERATE",
+      "actividad_recent": "RECENT ACTIVITY",
+      "no_hay_actividad": "No recent activity",
+      "usuario": "User",
+      "aprobada_caps": "APPROVED",
+      "con_falla_caps": "WITH FAILURE",
+      "admin_tools": "ADMIN TOOLS",
+      "vincular_registros": "LINK ORPHAN RECORDS",
+      "gestion_fotos": "Photo Management",
+      "rutas_edicion": "PHOTO EDIT ROUTES:"
     }
   },
   zh: {
@@ -395,7 +413,7 @@ const resources = {
       "puntos": "检查点",
       "observaciones": "备注信息",
       "firmas": "签名",
-      "datos_unidad": "单位车辆信息",
+      "datos_unit": "单位车辆信息",
       "compania_transportista_caps": "运输公司",
       "placas_unidad_caps": "车辆车牌",
       "numero_trailer_caps": "挂车/集装箱号",
@@ -429,7 +447,17 @@ const resources = {
       "kpis": "关键绩效指标",
       "usuarios_caps": "用户管理",
       "pendientes_ticket": "待填写的装运单",
-      "generar": "生成"
+      "generar": "生成",
+      "actividad_reciente": "最近活动",
+      "tiempo_real": "实时",
+      "no_hay_actividad": "无最近活动",
+      "usuario": "用户",
+      "aprobada_caps": "已通过",
+      "con_falla_caps": "有故障",
+      "admin_tools": "管理员工具",
+      "vincular_registros": "修复关联",
+      "gestion_fotos": "照片管理",
+      "rutas_edicion": "照片编辑路径："
     }
   }
 };

@@ -10,8 +10,8 @@ export const generateConsolidatedReportHtml = (data: ReportData, lang: 'es' | 'z
   const { inspection: i, caseta, embarque } = data;
   const isZh = lang === 'zh';
 
-  // Detectamos 19 o 9 puntos basado en la longitud de points o tipo explícito
-  const is9Points = i.inspection_type === '9_puntos_contenedor' || (i.points && i.points.length <= 10);
+  // CORRECCIÓN: Detectamos 19 o 9 puntos basado en el tipo explícito o longitud
+  const is9Points = i.inspection_type === '9_puntos_contenedor' || (i.points && i.points.length > 0 && i.points.length <= 10);
   const numPoints = is9Points ? '9' : '19';
 
   // Determinamos si es carga o descarga basado en la condición de entrada
