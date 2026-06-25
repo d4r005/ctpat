@@ -1007,7 +1007,7 @@ async def test_appsheet(current_user: Dict[str, Any] = Depends(require_admin)):
 @api_router.post("/test-email")
 async def test_email(current_user: Dict[str, Any] = Depends(require_admin)):
     """Ruta para probar la configuración SMTP"""
-    recipient = os.environ.get("REPORT_RECIPIENT", "d4r005@gmail.com")
+    recipient = os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com")
     subject = "🧪 Prueba de Conexión SMTP - SRIUC"
     html = f"""
     <html>
@@ -1026,7 +1026,104 @@ async def test_email(current_user: Dict[str, Any] = Depends(require_admin)):
         await send_automatic_report(subject, recipient, html)
         return {"message": f"Correo de prueba enviado exitosamente a {recipient}"}
     except Exception as e:
+        logger.error(f"Error en test-email: {e}")
         raise HTTPException(status_code=500, detail=f"Error al enviar correo: {str(e)}")
+
+# ========== ADMIN MASTER PANEL ROUTES ==========
+
+@api_router.patch("/inspections/{inspection_id}/admin-update")
+async def admin_update_inspection(
+    inspection_id: str, body: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(require_admin)
+):
+    # Permite modificar cualquier campo de la inspección
+    if "_id" in body: del body["_id"]
+    res = await db.inspections.update_one({"id": inspection_id}, {"$set": body})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Inspección no encontrada")
+    return {"ok": True, "updated_fields": list(body.keys())}
+
+@api_router.patch("/vehicle-records/{rec_id}/admin-update")
+async def admin_update_vehicle_record(
+    rec_id: str, body: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(require_admin)
+):
+    if "_id" in body: del body["_id"]
+    res = await db.vehicle_records.update_one({"id": rec_id}, {"$set": body})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    return {"ok": True}
+
+@api_router.patch("/shipping-tickets/{ticket_id}/admin-update")
+async def admin_update_shipping_ticket(
+    ticket_id: str, body: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(require_admin)
+):
+    if "_id" in body: del body["_id"]
+    res = await db.shipping_tickets.update_one({"id": ticket_id}, {"$set": body})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Ticket no encontrado")
+    return {"ok": True}
+
+@api_router.post("/vehicle-records/{rec_id}/resend-report")
+async def resend_consolidated_report(rec_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
+    """Dispara manualmente el envío del reporte consolidado"""
+    try:
+        await _trigger_automatic_report(rec_id)
+        return {"ok": True, "message": "Reporte enviado a cola de correo"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/reports/consolidated-export")
+async def export_consolidated_csv(current_user: Dict[str, Any] = Depends(require_admin)):
+    """Exporta un CSV uniendo Caseta, Inspección y Embarque"""
+    records = await db.vehicle_records.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+
+    # Headers
+    writer.writerow([
+        "ID Registro", "Status", "Fecha Entrada", "Fecha Salida", "Placas", "Chofer", "Compañia",
+        "Inspeccion ID", "Inspeccion Tipo", "Inspeccion Status", "Fallas",
+        "Ticket Embarque", "Cliente", "Pallets", "Sellos"
+    ])
+
+    for r in records:
+        # Buscar inspección vinculada
+        placas = r["entry"].get("placas_unidad", "")
+        insp = None
+        if r.get("inspection_id"):
+            insp = await db.inspections.find_one({"id": r["inspection_id"]})
+        if not insp:
+            insp = await db.inspections.find_one({"placas_unidad": placas}, sort=[("created_at", -1)])
+
+        # Buscar ticket
+        ticket = await db.shipping_tickets.find_one({
+            "placas_unidad": placas,
+            "created_at": {"$gte": r["created_at"]}
+        })
+
+        fallas = sum(1 for p in insp.get("points", [])) if insp and "points" in insp else 0
+
+        writer.writerow([
+            r["id"], r.get("status"), r["entry"].get("fecha_entrada"), r.get("exit", {}).get("fecha_salida", "N/A"),
+            placas, r["entry"].get("chofer_nombre"), r["entry"].get("compania_transporte"),
+            insp.get("id", "N/A") if insp else "N/A",
+            insp.get("inspection_type", "N/A") if insp else "N/A",
+            insp.get("status_general", "N/A") if insp else "N/A",
+            fallas,
+            ticket.get("id", "N/A") if ticket else "N/A",
+            ticket.get("cliente", "N/A") if ticket else "N/A",
+            ticket.get("numero_pallets", "N/A") if ticket else "N/A",
+            ticket.get("sellos", "N/A") if ticket else "N/A",
+        ])
+
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="reporte_consolidado_maestro.csv"'},
+    )
 
 
 @api_router.post("/notifications/{notif_id}/read")
@@ -1253,16 +1350,16 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
     if inspection and inspection.get("status_general") == "malo":
         color_header = "#dc2626" # Rojo si hay falla
 
-    # Helper para generar HTML de fotos con marca de agua opcional
+    # Helper para generar HTML de fotos con redimensionamiento agresivo
     def get_photo_html(b64, label):
         if not b64 or not isinstance(b64, str) or "data:image" not in b64:
             return ""
-        # Aplicamos marca de agua para asegurar que la imagen tenga un tamaño razonable y metadata correcta
+        # add_watermark ya redimensiona a 600px y baja calidad al 50%
         watermarked_b64 = add_watermark(b64)
         return f'''
-        <div style="display: inline-block; width: 30%; margin: 1%; vertical-align: top; border: 1px solid #eee; padding: 5px; background: #f9fafb; text-align: center;">
-            <p style="margin: 0 0 5px 0; font-size: 8px; font-weight: bold; color: #666; text-transform: uppercase;">{label}</p>
-            <img src="{watermarked_b64}" style="width: 100%; height: 120px; object-fit: cover; border: 1px solid #ddd;" />
+        <div style="display: inline-block; width: 45%; margin: 1%; vertical-align: top; border: 1px solid #eee; padding: 5px; background: #f9fafb; text-align: center;">
+            <p style="margin: 0 0 5px 0; font-size: 9px; font-weight: bold; color: #666; text-transform: uppercase;">{label}</p>
+            <img src="{watermarked_b64}" style="width: 100%; border: 1px solid #ddd;" />
         </div>
         '''
 
@@ -1272,13 +1369,9 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
         caseta_photos.append(get_photo_html(record["entry"]["foto_frente_unidad"], "FRONTAL"))
     if record["entry"].get("foto_atras_caja"):
         caseta_photos.append(get_photo_html(record["entry"]["foto_atras_caja"], "TRASERA"))
-    if record["entry"].get("foto_id_chofer"):
-        caseta_photos.append(get_photo_html(record["entry"]["foto_id_chofer"], "ID CHOFER"))
-    if record.get("exit") and record["exit"].get("sello_vvtt_foto"):
-        caseta_photos.append(get_photo_html(record["exit"]["sello_vvtt_foto"], "SELLO VVTT"))
     caseta_photos_html = "".join(caseta_photos)
 
-    # Fotos de Inspección y Tabla
+    # Fotos de Inspección: SOLO INCLUIR LAS QUE TIENEN FALLA PARA EVITAR PESO EXCESIVO
     inspection_rows = ""
     inspection_photos = []
     if inspection and inspection.get("points"):
@@ -1293,20 +1386,15 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
                 <td style="padding: 5px; border: 1px solid #ddd;">{p.get('comentarios', '-')}</td>
             </tr>
             '''
-            if p.get("photo"):
-                inspection_photos.append(get_photo_html(p["photo"], f"PUNTO {p['number']}"))
+            # Solo adjuntamos foto si es MALA (falla) para ahorrar espacio
+            if p.get("photo") and p.get("estado") == "malo":
+                inspection_photos.append(get_photo_html(p["photo"], f"FALLA EN PUNTO {p['number']}"))
     inspection_photos_html = "".join(inspection_photos)
 
-    # Fotos de Embarque
-    ticket_photos = []
-    if ticket:
-        if ticket.get("foto_inicio_carga"):
-            ticket_photos.append(get_photo_html(ticket["foto_inicio_carga"], "INICIO CARGA"))
-        if ticket.get("foto_media_carga"):
-            ticket_photos.append(get_photo_html(ticket["foto_media_carga"], "MEDIA CARGA"))
-        if ticket.get("foto_final_carga"):
-            ticket_photos.append(get_photo_html(ticket["foto_final_carga"], "FINAL CARGA"))
-    ticket_photos_html = "".join(ticket_photos)
+    # Fotos de Embarque: Solo la final para ahorrar espacio
+    ticket_photos_html = ""
+    if ticket and ticket.get("foto_final_carga"):
+        ticket_photos_html = get_photo_html(ticket["foto_final_carga"], "CARGA FINALIZADA")
 
     html = f"""
     <html>
@@ -1325,13 +1413,10 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
                     <tr><td style="padding: 8px; font-weight: bold;">Compañía:</td><td style="padding: 8px;">{record['entry'].get('compania_transporte', 'N/A')}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold;">Fecha Entrada:</td><td style="padding: 8px;">{record['entry'].get('fecha_entrada', 'N/A')}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold; color: #16A34A;">Fecha Salida:</td><td style="padding: 8px; color: #16A34A; font-weight: bold;">{record['exit'].get('fecha_salida', 'N/A') if record.get('exit') else 'No registrada (En Patio)'}</td></tr>
-                    {f'''
-                    <tr><td style="padding: 8px; font-weight: bold;">Sello VVTT (Salida):</td><td style="padding: 8px; text-transform: uppercase;">{record['exit'].get('sello_vvtt_estado', 'N/A')}</td></tr>
-                    ''' if record.get('exit') else ''}
                 </table>
                 <div style="margin-top: 10px;">{caseta_photos_html}</div>
 
-                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">2. Inspección C-TPAT</h2>
+                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">2. Inspección C-TPAT ({inspection.get('inspection_type', 'N/A').replace('_', ' ').upper()})</h2>
                 {f'''
                 <div style="background-color: {"#f0fdf4" if inspection.get("status_general") == "bueno" else "#fef2f2"}; padding: 15px; border-radius: 5px; border-left: 5px solid {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"}; margin-bottom: 10px;">
                     <p style="margin: 0;">Estado General: <b style="color: {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">{inspection.get('status_general', 'N/A').upper()}</b></p>
@@ -1347,14 +1432,16 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
                     </tr>
                     {inspection_rows}
                 </table>
-                <div style="margin-top: 10px;">{inspection_photos_html}</div>
+                <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
+                    <p style="font-size: 10px; color: #666;">(Solo se incluyen fotos de puntos con falla detectada)</p>
+                    {inspection_photos_html}
+                </div>
                 ''' if inspection else "<p style='color: #666; font-style: italic;'>No se realizó inspección digital para esta unidad.</p>"}
 
                 <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">3. Ticket de Embarque</h2>
                 {f'''
                 <table style="width: 100%; border-collapse: collapse;">
                     <tr><td style="padding: 8px; font-weight: bold; width: 30%;">Cliente:</td><td style="padding: 8px;">{ticket.get('cliente', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Almacenista:</td><td style="padding: 8px;">{ticket.get('almacenista', 'N/A')}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold;">Pallets:</td><td style="padding: 8px;">{ticket.get('numero_pallets', 'N/A')}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold;">Sellos:</td><td style="padding: 8px;">{ticket.get('sellos', 'N/A')}</td></tr>
                 </table>
