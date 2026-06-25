@@ -5,7 +5,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { apiCall } from '@/src/api/client';
+import * as FileSystem from 'expo-file-system';
+import { apiCall, API_BASE } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
@@ -18,7 +19,7 @@ interface Analytics {
   top_failed_points: { name: string; count: number }[];
 }
 
-export default function Analitica() {
+export default function Analitica({ nested = false }: { nested?: boolean }) {
   const { user, token } = useAuth();
   const router = useRouter();
   const [data, setData] = useState<Analytics | null>(null);
@@ -39,7 +40,9 @@ export default function Analitica() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { if (user?.role === 'supervisor') load(); }, [token]);
+  const isSupervisorOrAdmin = user?.role === 'supervisor' || user?.role === 'admin';
+
+  useEffect(() => { if (isSupervisorOrAdmin) load(); }, [token]);
 
   const applyPreset = (days: number) => {
     const to = new Date();
@@ -85,37 +88,84 @@ ${data.top_failed_points.length ? data.top_failed_points.map((p) => `<tr><td sty
 </table>
 </body></html>`;
     try {
-      const { uri } = await Print.printToFileAsync({ html, base64: false });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Reporte Analítica NAF' });
+      const result = await Print.printToFileAsync({ html, base64: false });
+      if (result && result.uri && await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', dialogTitle: 'Reporte Analítica NAF' });
       }
     } catch (e: any) { alert(e.message); }
   };
 
-  if (user?.role !== 'supervisor') {
+  const exportCsv = async () => {
+    if (!token) return;
+    try {
+      setLoading(true);
+      const qs = new URLSearchParams();
+      qs.append('mode', 'summary');
+      qs.append('scope', 'all');
+      if (dateFrom) qs.append('date_from', dateFrom);
+      if (dateTo) qs.append('date_to', dateTo);
+
+      const url = `${API_BASE}/inspections/export?${qs.toString()}`;
+
+      if (Platform.OS === 'web') {
+        const response = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `Analitica_NAF_${dateFrom || 'report'}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(downloadUrl);
+        document.body.removeChild(a);
+      } else {
+        const filename = `${(FileSystem as any).documentDirectory}reporte_naf.csv`;
+        const res = await FileSystem.downloadAsync(url, filename, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(res.uri, { mimeType: 'text/csv', dialogTitle: 'Descargar CSV' });
+        }
+      }
+    } catch (e: any) {
+      alert('Error al exportar CSV: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isSupervisorOrAdmin) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.center}>
-          <Ionicons name="lock-closed" size={48} color={colors.muted} />
-          <Text style={{ color: colors.muted, marginTop: spacing.md }}>Acceso restringido</Text>
-        </View>
-      </SafeAreaView>
+      <View style={styles.center}>
+        <Ionicons name="lock-closed" size={48} color={colors.muted} />
+        <Text style={{ color: colors.muted, marginTop: spacing.md }}>Acceso restringido</Text>
+      </View>
     );
   }
 
   const maxInsp = Math.max(1, ...(data?.by_inspector || []).map((i) => i.total));
   const maxPoint = Math.max(1, ...(data?.top_failed_points || []).map((p) => p.count));
 
-  return (
-    <SafeAreaView style={styles.safe} edges={['top']} testID="analitica-screen">
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} testID="analitica-back"><Ionicons name="arrow-back" size={24} color={colors.onSurface} /></Pressable>
-        <Text style={styles.headerTitle}>Analítica</Text>
-        <View style={{ width: 24 }} />
-      </View>
+  const Content = (
+    <View style={{ flex: 1 }}>
+      {!nested && (
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} testID="analitica-back"><Ionicons name="arrow-back" size={24} color={colors.onSurface} /></Pressable>
+          <Text style={styles.headerTitle}>Analítica</Text>
+          <View style={{ width: 24 }} />
+        </View>
+      )}
+
+      {nested && (
+        <View style={{ padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider }}>
+          <Text style={[styles.headerTitle, { fontSize: 14 }]}>KPIs Y ANALÍTICA</Text>
+        </View>
+      )}
 
       <ScrollView
-        contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}
+        contentContainerStyle={{ padding: nested ? spacing.md : spacing.lg, paddingBottom: spacing.xxxl }}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brandPrimary} />}
       >
         <View style={styles.dateBox}>
@@ -140,16 +190,16 @@ ${data.top_failed_points.length ? data.top_failed_points.map((p) => `<tr><td sty
           <Pressable testID="analitica-preset-30" style={styles.presetChip} onPress={() => applyPreset(30)}>
             <Text style={styles.presetText}>30 DÍAS</Text>
           </Pressable>
-          <Pressable testID="analitica-preset-90" style={styles.presetChip} onPress={() => applyPreset(90)}>
-            <Text style={styles.presetText}>90 DÍAS</Text>
-          </Pressable>
-          <Pressable testID="analitica-preset-clear" style={[styles.presetChip, { backgroundColor: colors.error }]} onPress={() => { setDateFrom(''); setDateTo(''); setTimeout(load, 50); }}>
-            <Text style={[styles.presetText, { color: colors.onError }]}>LIMPIAR</Text>
-          </Pressable>
           {data && (
             <Pressable testID="analitica-pdf-btn" style={[styles.presetChip, { backgroundColor: colors.brandSecondary, flex: 1 }]} onPress={exportPdf}>
               <Ionicons name="document-text" size={14} color={colors.onBrandSecondary} />
               <Text style={[styles.presetText, { color: colors.onBrandSecondary, marginLeft: 4 }]}>PDF</Text>
+            </Pressable>
+          )}
+          {data && (
+            <Pressable testID="analitica-csv-btn" style={[styles.presetChip, { backgroundColor: colors.success, flex: 1 }]} onPress={exportCsv}>
+              <Ionicons name="download" size={14} color="#FFF" />
+              <Text style={[styles.presetText, { color: '#FFF', marginLeft: 4 }]}>CSV</Text>
             </Pressable>
           )}
         </View>
@@ -176,7 +226,7 @@ ${data.top_failed_points.length ? data.top_failed_points.map((p) => `<tr><td sty
                 <View key={i.name} style={styles.row} testID={`analitica-inspector-${i.name}`}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.rowLabel}>{i.name}</Text>
-                    <Text style={styles.rowMeta}>{i.aprobadas} aprob · {i.rechazadas} rech · {i.fallas} con falla</Text>
+                    <Text style={styles.rowMeta}>{i.aprobadas} aprob · {i.rechazadas} rech</Text>
                   </View>
                   <View style={styles.barWrap}>
                     <View style={[styles.bar, { width: `${(i.total / maxInsp) * 100}%`, backgroundColor: colors.brandPrimary }]} />
@@ -189,7 +239,7 @@ ${data.top_failed_points.length ? data.top_failed_points.map((p) => `<tr><td sty
             <Section title="TOP 10 PUNTOS CON MÁS FALLAS">
               {data.top_failed_points.length === 0 ? <Text style={styles.emptyText}>Sin fallas registradas en este periodo</Text> : data.top_failed_points.map((p) => (
                 <View key={p.name} style={styles.row}>
-                  <Text style={[styles.rowLabel, { flex: 1 }]} numberOfLines={2}>{p.name}</Text>
+                  <Text style={[styles.rowLabel, { flex: 1, fontSize: 10 }]} numberOfLines={2}>{p.name}</Text>
                   <View style={styles.barWrap}>
                     <View style={[styles.bar, { width: `${(p.count / maxPoint) * 100}%`, backgroundColor: colors.error }]} />
                     <Text style={styles.barValue}>{p.count}</Text>
@@ -200,6 +250,14 @@ ${data.top_failed_points.length ? data.top_failed_points.map((p) => `<tr><td sty
           </>
         )}
       </ScrollView>
+    </View>
+  );
+
+  if (nested) return Content;
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']} testID="analitica-screen">
+      {Content}
     </SafeAreaView>
   );
 }

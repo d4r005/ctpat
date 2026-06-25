@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl } from 'react-native';
+import React, { useState, useCallback, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl, Platform, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,28 +9,85 @@ import { useInspections } from '@/src/context/InspectionContext';
 import { useNotifications } from '@/src/context/NotificationsContext';
 import NotificationsPanel from '@/src/components/NotificationsPanel';
 import { colors, spacing, radius, typography } from '@/src/constants/theme';
+import { apiCall } from '@/src/api/client';
 
 export default function Inicio() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { t } = useTranslation();
-  const { inspections, allInspections, isOnline, pendingCount, refresh, loading } = useInspections();
-  const { unreadCount } = useNotifications();
+  const { inspections, allInspections, isOnline, pendingCount, refresh: refreshInspections, loading: inspectionsLoading } = useInspections();
+  const { unreadCount, refresh: refreshNotifications } = useNotifications();
   const [showNotifs, setShowNotifs] = useState(false);
   const router = useRouter();
 
-  const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD local
+  const [activities, setActivities] = useState<any[]>([]);
+  const [loadingActivities, setLoadingActivities] = useState(false);
+
+  const loadActivities = useCallback(async () => {
+    if (!token) return;
+    setLoadingActivities(true);
+    try {
+      const data = await apiCall<any[]>('/activities', { token });
+      setActivities(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Error fetching activities:', e);
+      setActivities([]);
+    } finally {
+      setLoadingActivities(false);
+    }
+  }, [token]);
+
+  const refreshAll = async () => {
+    await Promise.all([
+      refreshInspections(),
+      refreshNotifications(),
+      loadActivities()
+    ]);
+  };
+
+  useEffect(() => {
+    loadActivities();
+    const interval = setInterval(loadActivities, 30000); // refresh activities every 30s
+    return () => clearInterval(interval);
+  }, [loadActivities]);
+
+  const todayStr = new Date().toLocaleDateString('en-CA');
   const source = allInspections.length > 0 ? allInspections : inspections;
   const todayInspections = source.filter((i) => {
     const createdDate = new Date(i.created_at).toLocaleDateString('en-CA');
     return createdDate === todayStr;
   });
 
-  const sortedInspections = [...todayInspections].sort((a, b) =>
-    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
+  const totalBuenas = (todayInspections || []).filter((i) => i.status_general === 'bueno').length;
+  const totalMalas = (todayInspections || []).filter((i) => i.status_general === 'malo').length;
 
-  const totalBuenas = sortedInspections.filter((i) => i.status_general === 'bueno').length;
-  const totalMalas = sortedInspections.filter((i) => i.status_general === 'malo').length;
+  const getActivityIcon = (type: string): any => {
+    switch (type) {
+      case 'inspection': return 'clipboard-outline';
+      case 'caseta': return 'car-outline';
+      case 'embarque': return 'cube-outline';
+      default: return 'radio-button-on-outline';
+    }
+  };
+
+  const formatTime = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
+    }
+  };
+
+  const navigateToActivity = (activity: any) => {
+    if (activity.type === 'inspection') {
+      router.push(`/inspection/${activity.id}`);
+    } else if (activity.type === 'caseta') {
+      router.push(`/caseta/${activity.id}`);
+    } else if (activity.type === 'embarque') {
+      router.push(`/embarque/${activity.id}`);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="inicio-screen">
@@ -49,11 +106,11 @@ export default function Inicio() {
 
       <ScrollView
         contentContainerStyle={styles.container}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={colors.brandPrimary} />}
+        refreshControl={<RefreshControl refreshing={inspectionsLoading || loadingActivities} onRefresh={refreshAll} tintColor={colors.brandPrimary} />}
       >
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.hello}>{t('hola')}, {user?.name?.split(' ')[0] || t('inspector')}</Text>
+            <Text style={styles.hello}>{t('hola')}, {user?.name?.split(' ')[0] || t('usuario')}</Text>
           </View>
           <Pressable testID="inicio-bell-btn" style={styles.bellBtn} onPress={() => setShowNotifs(true)}>
             <Ionicons name="notifications" size={24} color={colors.onSurface} />
@@ -80,33 +137,47 @@ export default function Inicio() {
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>{t('inspecciones_hoy_caps')} ({t('tiempo_real')})</Text>
-        {sortedInspections.length === 0 ? (
-          <View style={styles.emptyBox} testID="inicio-empty">
-            <Ionicons name="clipboard-outline" size={48} color={colors.muted} />
-            <Text style={styles.emptyText}>{t('no_hay_inspecciones')}</Text>
-            <Text style={styles.emptySub}>{t('nuevas_apareceran_aqui')}</Text>
-          </View>
-        ) : (
-          sortedInspections.map((i) => (
+        <Text style={styles.sectionTitle}>{t('actividad_reciente', 'ACTIVIDAD RECIENTE')} ({t('tiempo_real')})</Text>
+        <FlatList
+          data={activities}
+          keyExtractor={(a) => `${a.type}-${a.id}`}
+          renderItem={({ item: a }) => (
             <Pressable
-              key={i.id}
-              testID={`inicio-inspection-${i.id}`}
+              testID={`inicio-activity-${a.id}`}
               style={styles.listItem}
-              onPress={() => router.push(`/inspection/${i.id}`)}
+              onPress={() => navigateToActivity(a)}
             >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.listTitle}>{i.placas_unidad || t('sin_placas')}</Text>
-                <Text style={styles.listSub}>{i.compania_transportista} · {i.numero_trailer}</Text>
-                <Text style={styles.listTime}>{new Date(i.created_at).toLocaleTimeString()}</Text>
-                <Text style={{ fontSize: 10, color: colors.muted, marginTop: 2 }}>{t('inspector')}: {i.inspector_nombre}</Text>
+              <View style={[styles.typeIconBox, { backgroundColor: a.type === 'inspection' ? colors.brandPrimary : a.type === 'caseta' ? colors.success : colors.info }]}>
+                <Ionicons name={getActivityIcon(a.type) as any} size={20} color="#FFF" />
               </View>
-              <View style={[styles.statusChip, { backgroundColor: i.status_general === 'bueno' ? colors.success : colors.error }]}>
-                <Text style={styles.statusChipText}>{i.status_general === 'bueno' ? t('bueno') : t('con_falla')}</Text>
+              <View style={{ flex: 1, marginLeft: spacing.md }}>
+                <Text style={styles.listTitle}>{a.title}</Text>
+                <Text style={styles.listSub}>{a.subtitle}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 8 }}>
+                  <Text style={styles.listTime}>{formatTime(a.created_at)}</Text>
+                  <Text style={{ fontSize: 10, color: colors.muted }}>• {a.user_name}</Text>
+                </View>
               </View>
+              {a.type === 'inspection' && (
+                <View style={[styles.statusChip, { backgroundColor: a.status === 'bueno' ? colors.success : colors.error }]}>
+                  <Text style={styles.statusChipText}>{a.status === 'bueno' ? t('bueno') : t('con_falla')}</Text>
+                </View>
+              )}
             </Pressable>
-          ))
-        )}
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyBox} testID="inicio-empty">
+              <Ionicons name="flash-outline" size={48} color={colors.muted} />
+              <Text style={styles.emptyText}>{t('no_hay_actividad', 'No hay actividad reciente')}</Text>
+              <Text style={styles.emptySub}>{t('nuevas_apareceran_aqui')}</Text>
+            </View>
+          }
+          scrollEnabled={false} // Since it's inside a ScrollView
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={true}
+        />
       </ScrollView>
 
       <NotificationsPanel visible={showNotifs} onClose={() => setShowNotifs(false)} />
@@ -164,6 +235,7 @@ const styles = StyleSheet.create({
     padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center',
   },
   listTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface },
+  typeIconBox: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   listSub: { color: colors.muted, fontSize: typography.sizes.sm, marginTop: 2 },
   listTime: { color: colors.onSurfaceTertiary, fontSize: typography.sizes.sm, marginTop: 4 },
   statusChip: { paddingHorizontal: spacing.sm, paddingVertical: 4 },

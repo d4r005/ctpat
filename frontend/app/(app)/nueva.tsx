@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import Signature from 'react-native-signature-canvas';
+import Signature from '@/src/components/SignaturePad';
 import { useTranslation } from 'react-i18next';
 import { useInspections, InspectionPoint } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
@@ -131,18 +131,38 @@ export default function Nueva() {
         } catch {}
       }
 
+      if (Platform.OS === 'web') {
+        const proceed = window.confirm(`${t('inspeccion_guardada')}. ${t('desea_generar_ticket')}`);
+        if (proceed) {
+          const queryParams = new URLSearchParams({
+            record_id: params.record_id || '',
+            inspection_id: created.id,
+            compania: compania,
+            placas: placas,
+            trailer: trailer,
+            sello: precinto !== 'N/A' ? precinto : '',
+            operador: inspectorNombre
+          });
+          router.replace(`/embarque/nuevo?${queryParams.toString()}`);
+        } else {
+          router.replace(`/inspection/${created.id}${params.record_id ? `?record_id=${params.record_id}` : ''}`);
+        }
+        return;
+      }
+
       Alert.alert(
         t('inspeccion_guardada'),
         t('desea_generar_ticket'),
         [
           {
             text: t('ver_detalle'),
-            onPress: () => router.replace(`/inspection/${created.id}`)
+            onPress: () => router.replace(`/inspection/${created.id}${params.record_id ? `?record_id=${params.record_id}` : ''}`)
           },
           {
             text: t('si_generar_ticket_caps'),
             onPress: () => {
               const queryParams = new URLSearchParams({
+                record_id: params.record_id || '',
                 inspection_id: created.id,
                 compania: compania,
                 placas: placas,

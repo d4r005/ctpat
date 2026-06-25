@@ -10,24 +10,31 @@ export const generateConsolidatedReportHtml = (data: ReportData, lang: 'es' | 'z
   const { inspection: i, caseta, embarque } = data;
   const isZh = lang === 'zh';
 
+  // CORRECCIÓN: Detectamos 19 o 9 puntos basado en el tipo explícito o longitud
+  const is9Points = i.inspection_type === '9_puntos_contenedor' || (i.points && i.points.length > 0 && i.points.length <= 10);
+  const numPoints = is9Points ? '9' : '19';
+
+  // Determinamos si es carga o descarga basado en la condición de entrada
+  const isDescarga = caseta?.entry?.condicion_carga?.toLowerCase() === 'descarga';
+
   const t = {
     title: isZh ? '综合报告' : 'REPORTE CONSOLIDADO',
-    subtitle: isZh ? '注册、检查和运输' : 'Registro, Inspección y Embarque',
+    subtitle: isZh ? '注册、检查和装运' : 'Registro, Inspección y Embarque',
     generated: isZh ? '生成日期' : 'Generado',
     sectionCaseta: isZh ? '1. 门卫室记录 (进出)' : '1. REGISTRO DE CASETA (ENTRADA/SALIDA)',
-    sectionInspection: isZh ? '2. C-TPAT 检查 (19/9 点)' : '2. INSPECCIÓN C-TPAT (19/9 PUNTOS)',
-    sectionShipping: isZh ? '3. 运输单 (出库)' : '3. TICKET DE EMBARQUE (DESPACHO)',
+    sectionInspection: isZh ? `2. C-TPAT ${numPoints} 点检查` : `2. INSPECCIÓN C-TPAT (${numPoints} PUNTOS)`,
+    sectionShipping: isZh ? '3. 装运单 (出库)' : '3. TICKET DE EMBARQUE (DESPACHO)',
     generalData: isZh ? '基本信息' : 'Datos Generales',
     plates: isZh ? '车牌号' : 'Placas',
     driver: isZh ? '司机姓名' : 'Nombre del Chofer',
     company: isZh ? '运输公司' : 'Compañía',
-    trailer: isZh ? '拖车编号' : 'Número de Tráiler',
+    trailer: isZh ? '挂车编号' : 'Número de Tráiler',
     entryDate: isZh ? '进场时间' : 'Fecha Entrada',
     exitDate: isZh ? '出场时间' : 'Fecha Salida',
     status: isZh ? '状态' : 'Estado',
     inspector: isZh ? '检查员' : 'Inspector',
     supervisor: isZh ? '主管' : 'Supervisor',
-    result: isZh ? '检查结果' : 'Resultado',
+    resultLabel: isZh ? '结果' : 'Resultado',
     good: isZh ? '良好' : 'BUENO',
     bad: isZh ? '故障' : 'FALLA',
     approved: isZh ? '已批准' : 'APROBADA',
@@ -39,38 +46,91 @@ export const generateConsolidatedReportHtml = (data: ReportData, lang: 'es' | 'z
     customer: isZh ? '客户' : 'Cliente',
     pallets: isZh ? '托盘数量' : 'Pallets',
     noData: isZh ? '无相关记录' : 'No se encontró registro vinculado.',
+    movType: isZh ? '作业类型' : 'Tipo de Movimiento',
+    carga: isZh ? '装货' : 'CARGA',
+    descarga: isZh ? '卸货' : 'DESCARGA',
+    photos: isZh ? '照片证据' : 'EVIDENCIA FOTOGRÁFICA',
+    point: isZh ? '检查点' : 'Punto',
+    storekeeper: isZh ? '仓管员' : 'Almacenista',
+    guard: isZh ? '保安' : 'Guardia',
+    noShipTicket: isZh ? '卸货作业无装运单' : 'Operación de DESCARGA: No requiere ticket de embarque de salida.',
+    license: isZh ? '驾驶证' : 'Licencia',
+    tractor: isZh ? '牵引车' : 'Tractor',
+    destination: isZh ? '目的地' : 'Destino',
+    frontal: isZh ? '正面' : 'FRONTAL',
+    rear: isZh ? '后面' : 'TRASERA',
+    idChofer: isZh ? '司机证件' : 'ID CHOFER',
+    selloVvtt: isZh ? '封条核对' : 'SELLO VVTT',
+    inicioCarga: isZh ? '装货开始' : 'INICIO CARGA',
+    mediaCarga: isZh ? '装货中' : 'MEDIA CARGA',
+    finalCarga: isZh ? '装货完成' : 'FINAL CARGA',
   };
 
-  const inspectionRows = i.points.map(p => `
+  const getPhotoHtml = (url: string, label: string) => {
+    if (!url || !url.startsWith('data:image')) return '';
+    return `
+      <div style="display:inline-block; width:30%; margin:1%; vertical-align:top; border:1px solid #eee; padding:5px; background:#f9fafb;">
+        <p style="margin:0 0 5px 0; font-size:8px; font-weight:bold; color:#666; text-transform:uppercase;">${label}</p>
+        <img src="${url}" style="width:100%; height:120px; object-fit:cover; border:1px solid #ddd;" />
+      </div>
+    `;
+  };
+
+  const inspectionRows = i.points.map(p => {
+    const pStatus = p.estado === 'bueno' ? t.good : (p.estado === 'malo' ? t.bad : 'N/A');
+    return `
     <tr>
       <td style="padding:5px;border:1px solid #ddd;width:30px;">${p.number}</td>
       <td style="padding:5px;border:1px solid #ddd;">${p.name}</td>
-      <td style="padding:5px;border:1px solid #ddd;font-weight:bold;color:${p.estado === 'bueno' ? '#16a34a' : '#dc2626'}">${p.estado === 'bueno' ? t.good : (p.estado === 'malo' ? t.bad : 'N/A')}</td>
+      <td style="padding:5px;border:1px solid #ddd;font-weight:bold;color:${p.estado === 'bueno' ? '#16a34a' : (p.estado === 'malo' ? '#dc2626' : '#999')}">${pStatus}</td>
       <td style="padding:5px;border:1px solid #ddd;">${p.comentarios || '-'}</td>
     </tr>
-  `).join('');
+    `;
+  }).join('');
+
+  const inspectionPhotosHtml = i.points
+    .filter(p => p.photo)
+    .map(p => getPhotoHtml(p.photo!, `${t.point} ${p.number}`))
+    .join('');
 
   const casetaHtml = caseta ? `
-    <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
+      <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;width:30%;"><b>${t.movType}</b></td><td style="padding:8px;border:1px solid #ddd;font-weight:bold;color:#0A2540;">${isDescarga ? t.descarga : t.carga}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;width:30%;"><b>${t.plates}</b></td><td style="padding:8px;border:1px solid #ddd;">${caseta.entry.placas_unidad}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${t.driver}</b></td><td style="padding:8px;border:1px solid #ddd;">${caseta.entry.chofer_nombre}</td></tr>
+      <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${t.license}</b></td><td style="padding:8px;border:1px solid #ddd;">${caseta.entry.licencia_conductor || '-'}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${t.company}</b></td><td style="padding:8px;border:1px solid #ddd;">${caseta.entry.compania_transporte}</td></tr>
+      <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${t.tractor}</b></td><td style="padding:8px;border:1px solid #ddd;">${caseta.entry.numero_tractor || '-'}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${t.entryDate}</b></td><td style="padding:8px;border:1px solid #ddd;">${new Date(caseta.entry.fecha_entrada).toLocaleString(isZh ? 'zh-CN' : 'es-MX')}</td></tr>
       ${caseta.exit ? `
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${t.exitDate}</b></td><td style="padding:8px;border:1px solid #ddd;">${new Date(caseta.exit.fecha_salida).toLocaleString(isZh ? 'zh-CN' : 'es-MX')}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${t.seal} (Salida)</b></td><td style="padding:8px;border:1px solid #ddd;">${caseta.exit.sello_salida || '-'}</td></tr>
       ` : ''}
     </table>
+    <div style="margin-bottom:20px;">
+      ${getPhotoHtml(caseta.entry.foto_frente_unidad, t.frontal)}
+      ${getPhotoHtml(caseta.entry.foto_atras_caja, t.rear)}
+      ${getPhotoHtml(caseta.entry.foto_id_chofer, t.idChofer)}
+      ${caseta.exit ? getPhotoHtml(caseta.exit.sello_vvtt_foto, t.selloVvtt) : ''}
+    </div>
   ` : `<p style="color:#666;font-style:italic;">${t.noData}</p>`;
 
-  const embarqueHtml = embarque ? `
-    <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+  // Si es descarga, usualmente no hay ticket de embarque de salida.
+  const shippingSection = (!isDescarga && embarque) ? `
+    <div class="section-title">${t.sectionShipping}</div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;width:30%;"><b>${t.customer}</b></td><td style="padding:8px;border:1px solid #ddd;">${embarque.cliente}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${t.pallets}</b></td><td style="padding:8px;border:1px solid #ddd;">${embarque.numero_pallets}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${t.seal}</b></td><td style="padding:8px;border:1px solid #ddd;">${embarque.numero_sello}</td></tr>
-      <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${isZh ? '仓管员' : 'Almacenista'}</b></td><td style="padding:8px;border:1px solid #ddd;">${embarque.almacenista}</td></tr>
+      <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${t.storekeeper}</b></td><td style="padding:8px;border:1px solid #ddd;">${embarque.almacenista}</td></tr>
+      <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${t.destination}</b></td><td style="padding:8px;border:1px solid #ddd;">${embarque.observaciones?.replace('Destino: ', '') || '-'}</td></tr>
     </table>
-  ` : `<p style="color:#666;font-style:italic;">${t.noData}</p>`;
+    <div style="margin-bottom:20px;">
+      ${getPhotoHtml(embarque.foto_inicio_carga, t.inicioCarga)}
+      ${getPhotoHtml(embarque.foto_media_carga, t.mediaCarga)}
+      ${getPhotoHtml(embarque.foto_final_carga, t.finalCarga)}
+    </div>
+  ` : isDescarga ? `<div class="section-title">${t.sectionShipping}</div><p style="color:#666;font-style:italic;padding:10px;">${t.noShipTicket}</p>` : '';
 
   const approvalStatusLabel = i.approval_status === 'aprobada' ? t.approved : (i.approval_status === 'rechazada' ? t.rejected : t.pending);
 
@@ -80,17 +140,17 @@ export const generateConsolidatedReportHtml = (data: ReportData, lang: 'es' | 'z
 <head>
   <meta charset="utf-8">
   <style>
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; padding: 20px; font-size: 12px; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; padding: 20px; font-size: 11px; }
     .header { border-bottom: 4px solid #0A2540; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }
-    .section-title { background: #0A2540; color: #fff; padding: 8px 12px; margin-top: 25px; margin-bottom: 10px; font-size: 14px; font-weight: bold; }
+    .section-title { background: #0A2540; color: #fff; padding: 6px 10px; margin-top: 20px; margin-bottom: 10px; font-size: 12px; font-weight: bold; }
     table { width: 100%; border-collapse: collapse; }
     b { color: #0A2540; }
     .status-badge { display: inline-block; padding: 4px 8px; font-weight: bold; color: white; border-radius: 3px; }
     .bg-success { background-color: #16a34a; }
     .bg-error { background-color: #dc2626; }
     .bg-warning { background-color: #f59e0b; }
-    .signature-box { border: 1px solid #ddd; height: 80px; margin-top: 5px; background: #fafafa; }
-    .img-sig { height: 70px; display: block; margin: 5px auto; }
+    .signature-box { border: 1px solid #ddd; height: 70px; margin-top: 5px; background: #fafafa; }
+    .img-sig { height: 60px; display: block; margin: 5px auto; }
   </style>
 </head>
 <body>
@@ -111,7 +171,7 @@ export const generateConsolidatedReportHtml = (data: ReportData, lang: 'es' | 'z
   <div class="section-title">${t.sectionInspection}</div>
   <table style="width:100%;border-collapse:collapse;margin-bottom:15px;">
     <tr>
-      <td style="padding:8px;border:1px solid #ddd;background:#f9fafb;width:30%;"><b>${t.result}</b></td>
+      <td style="padding:8px;border:1px solid #ddd;background:#f9fafb;width:30%;"><b>${t.resultLabel}</b></td>
       <td style="padding:8px;border:1px solid #ddd;">
         <span class="status-badge ${i.status_general === 'bueno' ? 'bg-success' : 'bg-error'}">${i.status_general === 'bueno' ? t.good : t.bad}</span>
       </td>
@@ -125,18 +185,24 @@ export const generateConsolidatedReportHtml = (data: ReportData, lang: 'es' | 'z
     <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${t.inspector}</b></td><td style="padding:8px;border:1px solid #ddd;">${i.inspector_nombre}</td></tr>
   </table>
 
-  <table style="width:100%;border-collapse:collapse;">
+  <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
     <tr style="background:#f1f5f9; font-weight:bold;">
       <td style="padding:5px;border:1px solid #ddd;width:30px;">#</td>
-      <td style="padding:5px;border:1px solid #ddd;">${isZh ? '检查点' : 'Punto'}</td>
+      <td style="padding:5px;border:1px solid #ddd;">${t.point}</td>
       <td style="padding:5px;border:1px solid #ddd;width:80px;">${t.status}</td>
       <td style="padding:5px;border:1px solid #ddd;">${t.comments}</td>
     </tr>
     ${inspectionRows}
   </table>
 
-  <div class="section-title">${t.sectionShipping}</div>
-  ${embarqueHtml}
+  ${inspectionPhotosHtml ? `
+    <div style="margin-top:10px; margin-bottom:20px;">
+      <p style="font-weight:bold; color:#0A2540; margin-bottom:5px;">${t.photos} (INSPECCIÓN)</p>
+      ${inspectionPhotosHtml}
+    </div>
+  ` : ''}
+
+  ${shippingSection}
 
   <div style="margin-top:30px;">
     <table style="width:100%; border-collapse:collapse;">

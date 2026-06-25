@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Image } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import Signature from 'react-native-signature-canvas';
+import Signature from '@/src/components/SignaturePad';
 import { useTranslation } from 'react-i18next';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
@@ -16,6 +16,7 @@ export default function EmbarqueNuevo() {
   const { token, user } = useAuth();
   const params = useLocalSearchParams<{
     inspection_id?: string;
+    record_id?: string;
     compania?: string;
     placas?: string;
     trailer?: string;
@@ -74,9 +75,35 @@ export default function EmbarqueNuevo() {
     setSaving(true);
     try {
       const created = await apiCall<any>('/shipping-tickets', { method: 'POST', body: form, token });
-      router.replace(`/embarque/${created.id}`);
-    } catch (e: any) { alert(e.message); }
-    finally { setSaving(false); }
+
+      const nextStep = () => {
+        if (params.record_id) {
+          router.replace(`/caseta/${params.record_id}`);
+        } else {
+          router.replace(`/embarque/${created.id}`);
+        }
+      };
+
+      if (Platform.OS === 'web') {
+        const proceed = window.confirm("Ticket de Embarque Guardado. ¿Desea proceder a registrar la SALIDA de la unidad?");
+        if (proceed) nextStep();
+        else router.replace(`/embarque/${created.id}`);
+        return;
+      }
+
+      Alert.alert(
+        "Ticket Guardado",
+        "¿Desea proceder a registrar la SALIDA de la unidad ahora?",
+        [
+          { text: "Ver Ticket", onPress: () => router.replace(`/embarque/${created.id}`) },
+          { text: "SÍ, REGISTRAR SALIDA", onPress: nextStep }
+        ]
+      );
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

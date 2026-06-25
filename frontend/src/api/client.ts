@@ -1,6 +1,11 @@
 // Fallback for local development if environment variable is not set
-const DEFAULT_URL = 'http://10.0.2.2:8000'; // Standard Android emulator host IP
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || DEFAULT_URL;
+const DEFAULT_URL = 'https://ctpat.onrender.com';
+let BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || DEFAULT_URL;
+
+// Corrección automática si la URL de Vercel es incorrecta (ctpat-1 vs ctpat)
+if (BACKEND_URL.includes('ctpat-1.onrender.com')) {
+  BACKEND_URL = BACKEND_URL.replace('ctpat-1', 'ctpat');
+}
 const API_BASE = BACKEND_URL.endsWith('/')
   ? `${BACKEND_URL}api`
   : `${BACKEND_URL}/api`;

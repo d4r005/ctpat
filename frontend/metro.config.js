@@ -22,4 +22,17 @@ config.cacheStores = [
 // Reduce the number of workers to decrease resource usage
 config.maxWorkers = 2;
 
+// Enable experimental top-level-await for faster web performance
+config.transformer = {
+  ...config.transformer,
+  minifierConfig: {
+    mangle: {
+      keep_fnames: true,
+    },
+    compress: {
+      drop_console: true,
+    },
+  },
+};
+
 module.exports = config;

@@ -1,16 +1,17 @@
 import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors } from '@/src/constants/theme';
 import { View, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function AppLayout() {
   const { token, loading, user } = useAuth();
-  const { t } = useTranslation();
   const router = useRouter();
-  const isSupervisor = user?.role === 'supervisor' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+  const insets = useSafeAreaInsets();
+  const isAdmin = user?.email === 'd.trujillo@brancoindustries.com';
+  const isSupervisor = user?.role === 'supervisor' || isAdmin;
 
   useEffect(() => {
     if (!loading && !token) router.replace('/login');
@@ -30,13 +31,15 @@ export default function AppLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.brandPrimary,
         tabBarInactiveTintColor: colors.muted,
+        animation: 'none', // Desactiva animaciones pesadas en web
+        lazy: true,        // Solo carga el panel cuando lo tocas
         tabBarStyle: {
           backgroundColor: colors.surfaceSecondary,
           borderTopWidth: 2,
           borderTopColor: colors.borderStrong,
-          height: 84,
+          height: 64 + (insets.bottom > 0 ? insets.bottom - 8 : 0),
           paddingTop: 6,
-          paddingBottom: 20,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
         },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
       }}
@@ -44,42 +47,42 @@ export default function AppLayout() {
       <Tabs.Screen
         name="inicio"
         options={{
-          title: t('inicio'),
+          title: 'Inicio',
           tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="historico"
         options={{
-          title: t('historico'),
+          title: 'Histórico',
           tabBarIcon: ({ color, size }) => <Ionicons name="list" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="caseta"
         options={{
-          title: t('caseta'),
+          title: 'Caseta',
           tabBarIcon: ({ color, size }) => <Ionicons name="business" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="nueva"
-        options={{
-          title: t('inspeccion'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="clipboard" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="embarque"
         options={{
-          title: t('embarque'),
+          title: 'Embarque',
           tabBarIcon: ({ color, size }) => <Ionicons name="cube" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="nueva"
+        options={{
+          title: 'Inspección',
+          tabBarIcon: ({ color, size }) => <Ionicons name="add-circle" size={size + 4} color={color} />,
         }}
       />
       <Tabs.Screen
         name="supervisor"
         options={{
-          title: t('panel'),
+          title: 'Panel',
           href: isSupervisor ? '/(app)/supervisor' : null,
           tabBarIcon: ({ color, size }) => <Ionicons name="shield-checkmark" size={size} color={color} />,
         }}
@@ -99,7 +102,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="perfil"
         options={{
-          title: t('perfil'),
+          title: 'Perfil',
           tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
         }}
       />
