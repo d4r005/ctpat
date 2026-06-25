@@ -305,39 +305,74 @@ def flatten_dict(d, parent_key='', sep='_'):
             items.append((new_key, v))
     return dict(items)
 
-async def sync_to_appsheet(table_name: str, data: Dict[str, Any]):
-    app_id = os.environ.get("APPSHEET_APP_ID")
-    access_key = os.environ.get("APPSHEET_ACCESS_KEY")
+async def sync_to_google_sheets(process_type: str, data: Dict[str, Any]):
+    """
+    Envía los datos a Google Sheets para seguimiento en tiempo real.
+    process_type: 'entrada' | 'inspeccion' | 'embarque' | 'salida'
+    """
     webhook_url = os.environ.get("GOOGLE_SHEET_WEBHOOK_URL")
+    if not webhook_url:
+        return
 
-    # Special handling for points to include state and photos individually
-    data_to_flatten = data.copy()
-    if "points" in data_to_flatten:
-        points = data_to_flatten.pop("points")
-        data_to_flatten["total_puntos"] = len(points)
-        data_to_flatten["fallas"] = sum(1 for p in points if p.get("estado") == "malo")
-        for p in points:
-            p_num = p.get("number")
-            data_to_flatten[f"punto_{p_num}_estado"] = p.get("estado")
-            data_to_flatten[f"punto_{p_num}_comentarios"] = p.get("comentarios", "")
-            # Añadir marca de agua si hay foto
-            p_photo = p.get("photo", "")
-            if p_photo and "data:image" in p_photo:
-                data_to_flatten[f"punto_{p_num}_foto"] = add_watermark(p_photo)
-            else:
-                data_to_flatten[f"punto_{p_num}_foto"] = p_photo
+    try:
+        # Preparar payload unificado para seguimiento
+        payload = {
+            "proceso": process_type.upper(),
+            "fecha_servidor": datetime.now(timezone.utc).isoformat(),
+            "placas": "",
+            "chofer": "",
+            "compania": "",
+            "trailer": "",
+            "estado_inspeccion": "",
+            "aprobacion": "",
+            "cliente": "",
+            "pallets": "",
+            "inspector": "",
+            "supervisor": "",
+            "id_vinculo": data.get("id", "")
+        }
 
-    flattened = flatten_dict(data_to_flatten)
+        # Extraer datos específicos según el proceso
+        if process_type == 'entrada':
+            entry = data.get("entry", {})
+            payload.update({
+                "placas": entry.get("placas_unidad"),
+                "chofer": entry.get("chofer_nombre"),
+                "compania": entry.get("compania_transporte"),
+                "trailer": entry.get("numero_caja"),
+                "inspector": data.get("user_id") # Guardia que recibe
+            })
+        elif process_type == 'inspeccion':
+            payload.update({
+                "placas": data.get("placas_unidad"),
+                "compania": data.get("compania_transportista"),
+                "trailer": data.get("numero_trailer"),
+                "estado_inspeccion": data.get("status_general"),
+                "aprobacion": data.get("approval_status"),
+                "inspector": data.get("inspector_nombre"),
+                "supervisor": data.get("approved_by_name")
+            })
+        elif process_type == 'embarque':
+            payload.update({
+                "placas": data.get("placas_unidad"),
+                "cliente": data.get("cliente"),
+                "pallets": data.get("numero_pallets"),
+                "chofer": data.get("operador"),
+                "inspector": data.get("almacenista")
+            })
+        elif process_type == 'salida':
+            entry = data.get("entry", {})
+            exit = data.get("exit", {})
+            payload.update({
+                "placas": entry.get("placas_unidad"),
+                "chofer": entry.get("chofer_nombre"),
+                "trailer": exit.get("numero_caja_salida") or entry.get("numero_caja"),
+                "inspector": exit.get("guardia_salida_nombre")
+            })
 
-    # Aplicar marca de agua a fotos conocidas en Caseta y otras tablas
-    photo_fields = [
-        "entry_foto_frente_unidad", "entry_foto_atras_caja", "entry_foto_id_chofer",
-        "exit_sello_vvtt_foto",
-        "foto_inicio_carga", "foto_media_carga", "foto_final_carga"
-    ]
-    for field in photo_fields:
-        if field in flattened and isinstance(flattened[field], str) and "data:image" in flattened[field]:
-            flattened[field] = add_watermark(flattened[field])
+        requests.post(webhook_url, json=payload, timeout=5)
+    except Exception as e:
+        logger.error(f"Error en sincronización Excel: {e}")
 
     # Convert everything to string for AppSheet compatibility if it's not a basic type
     for k, v in flattened.items():
@@ -610,9 +645,9 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
         status_general
     )
 
-    # Sync to AppSheet
+    # Sync to Google Sheets
     try:
-        await sync_to_appsheet("Inspecciones", doc)
+        await sync_to_google_sheets("inspeccion", doc)
     except: pass
 
     return _serialize_inspection(doc)
@@ -869,9 +904,9 @@ async def approve_inspection(
         inspection_id=inspection_id,
     )
 
-    # Sync update to AppSheet
+    # Sync update to Google Sheets
     try:
-        await sync_to_appsheet("Inspecciones", doc)
+        await sync_to_google_sheets("inspeccion", doc)
     except: pass
 
     return _serialize_inspection(doc)
@@ -927,9 +962,9 @@ async def reject_inspection(
     except Exception as e:
         logger.error(f"Error enviando alerta de rechazo: {e}")
 
-    # Sync update to AppSheet
+    # Sync update to Google Sheets
     try:
-        await sync_to_appsheet("Inspecciones", doc)
+        await sync_to_google_sheets("inspeccion", doc)
     except: pass
 
     return _serialize_inspection(doc)
@@ -1261,9 +1296,9 @@ async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any]
         "entrada"
     )
 
-    # Sync to AppSheet
+    # Sync to Google Sheets
     try:
-        await sync_to_appsheet("Caseta", doc)
+        await sync_to_google_sheets("entrada", doc)
     except: pass
 
     return VehicleRecord(**{k: v for k, v in doc.items() if k != "_id"})
@@ -1356,9 +1391,9 @@ async def update_vehicle_record(
     await db.vehicle_records.update_one({"id": rec_id}, {"$set": update_data})
     updated_doc = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
 
-    # Sync to AppSheet
+    # Sync to Google Sheets
     try:
-        await sync_to_appsheet("Caseta", updated_doc)
+        await sync_to_google_sheets("salida", updated_doc)
     except: pass
 
     return VehicleRecord(**updated_doc)
@@ -1391,8 +1426,8 @@ async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[
     # Intentar enviar reporte automático al finalizar la salida
     try:
         await _trigger_automatic_report(rec_id)
-        # Sync update to AppSheet
-        await sync_to_appsheet("Caseta", doc)
+        # Sync update to Google Sheets
+        await sync_to_google_sheets("salida", doc)
     except Exception as e:
         print(f"Error al disparar reporte o sync: {e}")
 
@@ -1753,9 +1788,9 @@ async def create_ticket(body: ShippingTicketCreate, current_user: Dict[str, Any]
         "embarque"
     )
 
-    # Sync to AppSheet
+    # Sync to Google Sheets
     try:
-        await sync_to_appsheet("Embarque", doc)
+        await sync_to_google_sheets("embarque", doc)
     except: pass
 
     return ShippingTicket(**{k: v for k, v in doc.items() if k != "_id"})
