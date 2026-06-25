@@ -1421,7 +1421,9 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
                 <div style="background-color: {"#f0fdf4" if inspection.get("status_general") == "bueno" else "#fef2f2"}; padding: 15px; border-radius: 5px; border-left: 5px solid {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"}; margin-bottom: 10px;">
                     <p style="margin: 0;">Estado General: <b style="color: {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">{inspection.get('status_general', 'N/A').upper()}</b></p>
                     <p style="margin: 5px 0 0 0;">Inspector: {inspection.get('inspector_nombre', 'N/A')}</p>
-                    <p style="margin: 5px 0 0 0;">Aprobación: <b>{inspection.get('approval_status', 'pendiente').upper()}</b></p>
+                    <p style="margin: 5px 0 0 0;">Estado Aprobación: <b>{inspection.get('approval_status', 'pendiente').upper()}</b></p>
+                    <p style="margin: 5px 0 0 0;">Autorizado por: {inspection.get('approved_by_name', 'N/A')}</p>
+                    {f'<div style="margin-top:10px;"><p style="font-size:8px; margin:0; color:#666;">FIRMA AUTORIZACIÓN:</p><img src="{inspection["approved_by_signature"]}" style="height:70px; border-bottom:1px solid #0A2540;" /></div>' if inspection.get("approved_by_signature") else ''}
                 </div>
                 <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
                     <tr style="background: #f1f5f9; font-weight: bold;">
@@ -1444,7 +1446,9 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
                     <tr><td style="padding: 8px; font-weight: bold; width: 30%;">Cliente:</td><td style="padding: 8px;">{ticket.get('cliente', 'N/A')}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold;">Pallets:</td><td style="padding: 8px;">{ticket.get('numero_pallets', 'N/A')}</td></tr>
                     <tr><td style="padding: 8px; font-weight: bold;">Sellos:</td><td style="padding: 8px;">{ticket.get('sellos', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Almacenista:</td><td style="padding: 8px;">{ticket.get('almacenista', 'N/A')}</td></tr>
                 </table>
+                {f'<div style="margin-top:15px;"><p style="font-size:8px; margin:0; color:#666;">FIRMA ALMACENISTA:</p><img src="{ticket["firma_almacenista"]}" style="height:70px; border-bottom:1px solid #0A2540;" /></div>' if ticket.get("firma_almacenista") else ''}
                 <div style="margin-top: 10px;">{ticket_photos_html}</div>
                 ''' if ticket else "<p style='color: #666; font-style: italic;'>No se generó ticket de embarque para este movimiento.</p>"}
             </div>
