@@ -20,6 +20,8 @@ const TOTAL_STEPS = 4;
 
 export default function Nueva() {
   const router = useRouter();
+  const { user, token } = useAuth();
+  const { saveInspection } = useInspections();
   const { t } = useTranslation();
   const params = useLocalSearchParams<{ record_id?: string; compania?: string; placas?: string; trailer?: string; sello?: string; type?: string }>();
 
@@ -39,14 +41,13 @@ export default function Nueva() {
   };
 
   React.useEffect(() => {
-    if (showTypeSelector) fetchPending();
+    if (showTypeSelector && token) fetchPending();
   }, [showTypeSelector, token]);
 
   const inspectionType = (selectedType === '9_puntos_contenedor' ? '9_puntos_contenedor' : '19_puntos') as '19_puntos' | '9_puntos_contenedor';
   const pointsDef = getInspectionPoints(inspectionType);
   const totalPoints = pointsDef.length;
-  const { user, token } = useAuth();
-  const { saveInspection } = useInspections();
+
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
 
