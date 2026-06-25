@@ -766,7 +766,8 @@ async def export_csv(
 @api_router.get("/inspections/{inspection_id}", response_model=Inspection)
 async def get_inspection(inspection_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     filt: Dict[str, Any] = {"id": inspection_id}
-    if current_user.get("role") != "supervisor":
+    # Permitir que supervisores y admins vean cualquier inspección
+    if current_user.get("role") not in ["supervisor", "admin"] and not is_admin(current_user):
         filt["user_id"] = current_user["id"]
     doc = await db.inspections.find_one(filt, {"_id": 0, "client_uuid": 0})
     if not doc:
@@ -777,7 +778,7 @@ async def get_inspection(inspection_id: str, current_user: Dict[str, Any] = Depe
 @api_router.put("/inspections/{inspection_id}", response_model=Inspection)
 async def update_inspection(
     inspection_id: str, body: Dict[str, Any],
-    current_user: Dict[str, Any] = Depends(require_supervisor),
+    current_user: Dict[str, Any] = Depends(require_admin),
 ):
     doc = await db.inspections.find_one({"id": inspection_id}, {"_id": 0})
     if not doc:
@@ -1393,7 +1394,8 @@ async def list_vehicle_records(
 @api_router.get("/vehicle-records/{rec_id}", response_model=VehicleRecord)
 async def get_vehicle_record(rec_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     filt: Dict[str, Any] = {"id": rec_id}
-    if current_user.get("role") != "supervisor":
+    # Permitir que supervisores y admins vean cualquier registro
+    if current_user.get("role") not in ["supervisor", "admin"] and not is_admin(current_user):
         filt["user_id"] = current_user["id"]
     doc = await db.vehicle_records.find_one(filt, {"_id": 0})
     if not doc:
@@ -1404,7 +1406,7 @@ async def get_vehicle_record(rec_id: str, current_user: Dict[str, Any] = Depends
 @api_router.put("/vehicle-records/{rec_id}", response_model=VehicleRecord)
 async def update_vehicle_record(
     rec_id: str, body: Dict[str, Any],
-    current_user: Dict[str, Any] = Depends(require_supervisor),
+    current_user: Dict[str, Any] = Depends(require_admin),
 ):
     doc = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
     if not doc:
@@ -1845,7 +1847,8 @@ async def list_tickets(current_user: Dict[str, Any] = Depends(get_current_user))
 @api_router.get("/shipping-tickets/{ticket_id}", response_model=ShippingTicket)
 async def get_ticket(ticket_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     filt: Dict[str, Any] = {"id": ticket_id}
-    if current_user.get("role") != "supervisor":
+    # Permitir que supervisores y admins vean cualquier ticket
+    if current_user.get("role") not in ["supervisor", "admin"] and not is_admin(current_user):
         filt["user_id"] = current_user["id"]
     doc = await db.shipping_tickets.find_one(filt, {"_id": 0})
     if not doc:
@@ -1856,7 +1859,7 @@ async def get_ticket(ticket_id: str, current_user: Dict[str, Any] = Depends(get_
 @api_router.put("/shipping-tickets/{ticket_id}", response_model=ShippingTicket)
 async def update_shipping_ticket(
     ticket_id: str, body: Dict[str, Any],
-    current_user: Dict[str, Any] = Depends(require_supervisor),
+    current_user: Dict[str, Any] = Depends(require_admin),
 ):
     doc = await db.shipping_tickets.find_one({"id": ticket_id}, {"_id": 0})
     if not doc:
