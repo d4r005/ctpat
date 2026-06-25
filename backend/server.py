@@ -590,6 +590,15 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
     }
     await db.inspections.insert_one(doc)
 
+    # Log Activity
+    await _log_activity(
+        "inspection", insp_id,
+        f"Nueva Inspección: {body.placas_unidad}",
+        f"Realizada por {body.inspector_nombre}",
+        current_user["name"],
+        status_general
+    )
+
     # Sync to AppSheet
     try:
         await sync_to_appsheet("Inspecciones", doc)
@@ -808,6 +817,15 @@ async def approve_inspection(
     }
     await db.inspections.update_one({"id": inspection_id}, {"$set": update})
     doc.update(update)
+
+    await _log_activity(
+        "inspection", inspection_id,
+        f"Inspección Rechazada: {doc.get('placas_unidad')}",
+        f"Rechazada por {body.name or current_user['name']}",
+        current_user["name"],
+        "malo"
+    )
+
     await _create_notification(
         user_id=doc["user_id"],
         title="Inspección aprobada",
@@ -840,6 +858,15 @@ async def reject_inspection(
     }
     await db.inspections.update_one({"id": inspection_id}, {"$set": update})
     doc.update(update)
+
+    await _log_activity(
+        "inspection", inspection_id,
+        f"Inspección Rechazada: {doc.get('placas_unidad')}",
+        f"Rechazada por {body.name or current_user['name']}",
+        current_user["name"],
+        "malo"
+    )
+
     await _create_notification(
         user_id=doc["user_id"],
         title="Inspección rechazada",
@@ -877,6 +904,19 @@ async def _create_notification(user_id: str, title: str, message: str, inspectio
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.notifications.insert_one(doc)
+
+async def _log_activity(type: str, item_id: str, title: str, subtitle: str, user_name: str, status: str = ""):
+    """Registra actividad para el panel de inicio"""
+    doc = {
+        "id": item_id,
+        "type": type, # inspection | caseta | embarque
+        "title": title,
+        "subtitle": subtitle,
+        "user_name": user_name,
+        "status": status,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.activities.insert_one(doc)
 
 
 # ========== Email Utility ==========
@@ -918,6 +958,17 @@ async def list_notifications(current_user: Dict[str, Any] = Depends(get_current_
         {"user_id": current_user["id"]}, {"_id": 0}
     ).sort("created_at", -1).to_list(200)
     return [Notification(**d) for d in docs]
+
+@api_router.get("/activities")
+async def list_activities(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Lista actividad reciente global (para supervisores) o propia"""
+    filt = {}
+    # Supervisores ven todo el movimiento de la planta
+    if current_user.get("role") not in ["supervisor", "admin"] and not is_admin(current_user):
+        filt["user_name"] = current_user["name"]
+
+    docs = await db.activities.find(filt, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return docs
 
 
 @api_router.post("/test-appsheet")
@@ -996,6 +1047,14 @@ async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any]
     }
     await db.vehicle_records.insert_one(doc)
 
+    await _log_activity(
+        "caseta", rec_id,
+        f"Entrada Vehículo: {body.placas_unidad}",
+        f"Conductor: {body.chofer_nombre}",
+        current_user["name"],
+        "entrada"
+    )
+
     # Sync to AppSheet
     try:
         await sync_to_appsheet("Caseta", doc)
@@ -1071,6 +1130,14 @@ async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[
     )
     doc["exit"] = exit_data
     doc["status"] = "salida"
+
+    await _log_activity(
+        "caseta", rec_id,
+        f"Salida Vehículo: {doc['entry']['placas_unidad']}",
+        f"Destino: {exit_data.get('destino')}",
+        current_user["name"],
+        "salida"
+    )
 
     # Intentar enviar reporte automático al finalizar la salida
     try:
@@ -1271,6 +1338,14 @@ async def create_ticket(body: ShippingTicketCreate, current_user: Dict[str, Any]
     doc["fecha"] = doc.get("fecha") or now
     doc["created_at"] = now
     await db.shipping_tickets.insert_one(doc)
+
+    await _log_activity(
+        "embarque", tid,
+        f"Ticket Embarque: {body.placas_unidad}",
+        f"Cliente: {body.cliente}",
+        current_user["name"],
+        "embarque"
+    )
 
     # Sync to AppSheet
     try:

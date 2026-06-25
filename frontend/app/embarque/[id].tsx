@@ -57,7 +57,12 @@ export default function EmbarqueDetail() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']} testID="embarque-detail">
       <View style={styles.topBar}>
-        <Pressable onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} /></Pressable>
+        <Pressable
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/(app)/supervisor')}
+          style={{ padding: 10, marginLeft: -10 }}
+        >
+          <Ionicons name="arrow-back" size={28} color={colors.onBrandPrimary} />
+        </Pressable>
         <Text style={styles.topTitle}>Ticket Embarque</Text>
         {isAdmin && (
           <Pressable onPress={() => editMode ? handleUpdate() : setEditMode(true)} style={styles.editBtn}>

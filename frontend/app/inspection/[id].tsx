@@ -216,8 +216,12 @@ export default function InspectionDetail() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="inspection-detail">
       <View style={styles.topBar}>
-        <Pressable onPress={() => router.back()} testID="detail-back">
-          <Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} />
+        <Pressable
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/(app)/supervisor')}
+          style={{ padding: 10, marginLeft: -10 }}
+          testID="detail-back"
+        >
+          <Ionicons name="arrow-back" size={28} color={colors.onBrandPrimary} />
         </Pressable>
         <Text style={styles.topTitle}>{isEditing ? 'Editar Inspección' : 'Inspección'}</Text>
         {isEditing ? (

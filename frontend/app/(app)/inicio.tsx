@@ -8,6 +8,7 @@ import { useAuth } from '@/src/context/AuthContext';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useNotifications } from '@/src/context/NotificationsContext';
 import NotificationsPanel from '@/src/components/NotificationsPanel';
+import * as Haptics from 'expo-haptics';
 import { colors, spacing, radius, typography } from '@/src/constants/theme';
 import { apiCall } from '@/src/api/client';
 
@@ -20,33 +21,50 @@ export default function Inicio() {
   const router = useRouter();
 
   const [activities, setActivities] = useState<any[]>([]);
+  const [lastActivityId, setLastActivityId] = useState<string | null>(null);
   const [loadingActivities, setLoadingActivities] = useState(false);
 
-  const loadActivities = useCallback(async () => {
+  const loadActivities = useCallback(async (isInitial = false) => {
     if (!token) return;
-    setLoadingActivities(true);
+    if (isInitial) setLoadingActivities(true);
     try {
       const data = await apiCall<any[]>('/activities', { token });
-      setActivities(Array.isArray(data) ? data : []);
+      const newActivities = Array.isArray(data) ? data : [];
+
+      // Lógica de notificación (Sonido/Vibración) si hay actividad nueva
+      if (!isInitial && newActivities.length > 0) {
+        const latest = newActivities[0];
+        if (latest.id !== lastActivityId) {
+          setLastActivityId(latest.id);
+          // Vibración
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          // El sonido usualmente requiere expo-av, pero la vibración táctil
+          // es inmediata para el usuario en el panel maestro.
+        }
+      } else if (isInitial && newActivities.length > 0) {
+        setLastActivityId(newActivities[0].id);
+      }
+
+      setActivities(newActivities);
     } catch (e) {
       console.error('Error fetching activities:', e);
       setActivities([]);
     } finally {
-      setLoadingActivities(false);
+      if (isInitial) setLoadingActivities(false);
     }
-  }, [token]);
+  }, [token, lastActivityId]);
 
   const refreshAll = async () => {
     await Promise.all([
       refreshInspections(),
       refreshNotifications(),
-      loadActivities()
+      loadActivities(true)
     ]);
   };
 
   useEffect(() => {
-    loadActivities();
-    const interval = setInterval(loadActivities, 30000); // refresh activities every 30s
+    loadActivities(true);
+    const interval = setInterval(() => loadActivities(false), 8000); // Polling cada 8 segundos para "tiempo real"
     return () => clearInterval(interval);
   }, [loadActivities]);
 

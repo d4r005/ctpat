@@ -125,7 +125,12 @@ export default function CasetaDetail() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="caseta-detail">
       <View style={styles.topBar}>
-        <Pressable onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} /></Pressable>
+        <Pressable
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/(app)/supervisor')}
+          style={{ padding: 10, marginLeft: -10 }}
+        >
+          <Ionicons name="arrow-back" size={28} color={colors.onBrandPrimary} />
+        </Pressable>
         <Text style={styles.topTitle}>Registro {e.placas_unidad}</Text>
         <View style={[styles.statusChip, { backgroundColor: STATUS_COLOR[rec.status] }]}>
           <Text style={styles.statusChipText}>{rec.status.toUpperCase()}</Text>
