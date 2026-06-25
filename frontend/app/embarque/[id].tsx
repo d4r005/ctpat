@@ -120,13 +120,6 @@ export default function EmbarqueDetail() {
         <Section title="FOTOGRAFÍAS DE CARGA">
           <View style={styles.photoGrid}>
             <PhotoBox
-              label="PLANO CARGA"
-              uri={editMode ? form.plano_carga : t.plano_carga}
-              onPress={() => pickPhoto('plano_carga')}
-              onRemove={() => setForm({...form, plano_carga: ''})}
-              isEdit={editMode}
-            />
-            <PhotoBox
               label="INICIO CARGA"
               uri={editMode ? form.foto_inicio_carga : t.foto_inicio_carga}
               onPress={() => pickPhoto('foto_inicio_carga')}

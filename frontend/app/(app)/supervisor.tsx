@@ -89,20 +89,21 @@ export default function Supervisor() {
     try {
       const record = allRecords.find(r => r.id === recordId);
       const cleanPlates = plates.trim().toUpperCase();
+      const normalize = (s: string) => s?.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() || '';
+      const normPlates = normalize(cleanPlates);
 
-      // Búsqueda mucho más flexible y robusta
+      // Búsqueda mucho más flexible y robusta (incluye normalización de caracteres)
       const insp = allInspections.find(i =>
         (record?.inspection_id && i.id === record.inspection_id) ||
-        (i.placas_unidad?.trim().toUpperCase() === cleanPlates) ||
-        (i.numero_trailer?.trim().toUpperCase() === cleanPlates) // Respaldo por si se confundió trailer con placa
+        (normalize(i.placas_unidad) === normPlates) ||
+        (normalize(i.numero_trailer) === normPlates)
       );
 
-      const ticket = allTickets.find(t => t.placas_unidad?.trim().toUpperCase() === cleanPlates);
+      const ticket = allTickets.find(t => normalize(t.placas_unidad) === normPlates);
 
       if (!insp) {
-          console.log("Debug - Placas buscadas:", cleanPlates);
-          console.log("Debug - Inspecciones disponibles:", allInspections.map(ins => ins.placas_unidad));
-          throw new Error('No se encontró inspección digital vinculada. Verifique que las placas coincidan exactamente.');
+          console.log("Debug - Placas buscadas (norm):", normPlates);
+          throw new Error('No se encontró inspección digital vinculada. Verifique que las placas coincidan.');
       }
 
       const html = generateConsolidatedReportHtml({ inspection: insp, caseta: record, embarque: ticket }, 'es');
@@ -219,6 +220,14 @@ export default function Supervisor() {
             <Pressable style={[styles.masterBtn, { backgroundColor: colors.info + '22' }]} onPress={() => setLinkingMode(!linkingMode)}>
               <Ionicons name="link" size={14} color={colors.info} />
               <Text style={[styles.masterBtnText, { color: colors.info }]}>{t('vincular_registros')}</Text>
+            </Pressable>
+            <Pressable style={[styles.masterBtn, { backgroundColor: colors.brandPrimary + '22' }]} onPress={() => router.push('/usuarios')}>
+              <Ionicons name="people" size={14} color={colors.brandPrimary} />
+              <Text style={[styles.masterBtnText, { color: colors.brandPrimary }]}>USUARIOS</Text>
+            </Pressable>
+            <Pressable style={[styles.masterBtn, { backgroundColor: '#7c3aed22' }]} onPress={() => router.push('/analitica')}>
+              <Ionicons name="stats-chart" size={14} color="#7c3aed" />
+              <Text style={[styles.masterBtnText, { color: '#7c3aed' }]}>KPIs / ANALÍTICA</Text>
             </Pressable>
           </View>
         </View>

@@ -126,7 +126,6 @@ export const generateConsolidatedReportHtml = (data: ReportData, lang: 'es' | 'z
       <tr><td style="padding:8px;border:1px solid #ddd;background:#f9fafb;"><b>${t.destination}</b></td><td style="padding:8px;border:1px solid #ddd;">${embarque.observaciones?.replace('Destino: ', '') || '-'}</td></tr>
     </table>
     <div style="margin-bottom:20px;">
-      ${getPhotoHtml(embarque.plano_carga, 'PLANO CARGA')}
       ${getPhotoHtml(embarque.foto_inicio_carga, t.inicioCarga)}
       ${getPhotoHtml(embarque.foto_media_carga, t.mediaCarga)}
       ${getPhotoHtml(embarque.foto_final_carga, t.finalCarga)}
