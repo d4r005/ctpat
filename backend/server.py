@@ -897,18 +897,35 @@ async def reject_inspection(
 
     await _log_activity(
         "inspection", inspection_id,
-        f"Inspección Aprobada: {doc.get('placas_unidad')}",
-        f"Aprobada por {body.name or current_user['name']}",
+        f"Inspección RECHAZADA: {doc.get('placas_unidad')}",
+        f"Rechazada por {body.name or current_user['name']}. Motivo: {body.note}",
         current_user["name"],
-        "bueno"
+        "malo"
     )
 
     await _create_notification(
         user_id=doc["user_id"],
-        title="Inspección rechazada",
-        message=f"Tu inspección {doc.get('placas_unidad','')} fue RECHAZADA por {current_user['name']}." + (f" Motivo: {body.note}" if body.note else ""),
+        title="Inspección RECHAZADA",
+        message=f"Atención: La unidad {doc.get('placas_unidad','')} fue RECHAZADA por {current_user['name']}. Motivo: {body.note}",
         inspection_id=inspection_id,
     )
+
+    # ALERTA AUTOMÁTICA POR RECHAZO (Seguridad)
+    try:
+        # Buscamos si hay un registro de caseta para enviar el reporte consolidado,
+        # sino enviamos solo el reporte de la inspección.
+        record = await db.vehicle_records.find_one({"inspection_id": inspection_id})
+        if record:
+            await _trigger_automatic_report(record["id"])
+        else:
+            # Si no hay registro vinculado aún, enviamos la alerta de inspección
+            await send_automatic_report(
+                f"ALERTA DE SEGURIDAD: Inspección RECHAZADA - {doc.get('placas_unidad')}",
+                os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com"),
+                f"La inspección para la unidad <b>{doc.get('placas_unidad')}</b> ha sido RECHAZADA.<br/>Motivo: {body.note}"
+            )
+    except Exception as e:
+        logger.error(f"Error enviando alerta de rechazo: {e}")
 
     # Sync update to AppSheet
     try:
