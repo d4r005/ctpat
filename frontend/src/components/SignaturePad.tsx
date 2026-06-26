@@ -38,7 +38,8 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
     readSignature: () => {
       if (Platform.OS === 'web') {
         if (webRef.current && !webRef.current.isEmpty()) {
-          const base64 = webRef.current.getTrimmedCanvas().toDataURL('image/png');
+          // Cambiado a JPEG con calidad 0.5 para que la generación sea instantánea y el peso mínimo
+          const base64 = webRef.current.getTrimmedCanvas().toDataURL('image/jpeg', 0.5);
           props.onOK(base64);
         } else {
           props.onOK('');

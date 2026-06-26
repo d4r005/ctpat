@@ -952,22 +952,22 @@ async def reject_inspection(
         inspection_id=inspection_id,
     )
 
-    # ALERTA AUTOMÁTICA POR RECHAZO (Seguridad)
-    try:
-        # Buscamos si hay un registro de caseta para enviar el reporte consolidado,
-        # sino enviamos solo el reporte de la inspección.
-        record = await db.vehicle_records.find_one({"inspection_id": inspection_id})
-        if record:
-            await _trigger_automatic_report(record["id"])
-        else:
-            # Si no hay registro vinculado aún, enviamos la alerta de inspección
-            await send_automatic_report(
-                f"ALERTA DE SEGURIDAD: Inspección RECHAZADA - {doc.get('placas_unidad')}",
-                os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com"),
-                f"La inspección para la unidad <b>{doc.get('placas_unidad')}</b> ha sido RECHAZADA.<br/>Motivo: {body.note}"
-            )
-    except Exception as e:
-        logger.error(f"Error enviando alerta de rechazo: {e}")
+    # ALERTA AUTOMÁTICA POR RECHAZO (Seguridad) - En segundo plano
+    async def bg_reject_alert():
+        try:
+            record = await db.vehicle_records.find_one({"inspection_id": inspection_id})
+            if record:
+                await _trigger_automatic_report(record["id"])
+            else:
+                await send_automatic_report(
+                    f"ALERTA DE SEGURIDAD: Inspección RECHAZADA - {doc.get('placas_unidad')}",
+                    os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com"),
+                    f"La inspección para la unidad <b>{doc.get('placas_unidad')}</b> ha sido RECHAZADA.<br/>Motivo: {body.note}"
+                )
+        except Exception as e:
+            logger.error(f"Error enviando alerta de rechazo: {e}")
+
+    asyncio.create_task(bg_reject_alert())
 
     # Sync update to Google Sheets
     try:
@@ -1454,13 +1454,15 @@ async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[
         "salida"
     )
 
-    # Intentar enviar reporte automático al finalizar la salida
-    try:
-        await _trigger_automatic_report(rec_id)
-        # Sync update to Google Sheets
-        await sync_to_google_sheets("salida", doc)
-    except Exception as e:
-        print(f"Error al disparar reporte o sync: {e}")
+    # Ejecutar en segundo plano para no demorar la respuesta a la App
+    async def bg_report():
+        try:
+            await _trigger_automatic_report(rec_id)
+            await sync_to_google_sheets("salida", doc)
+        except Exception as e:
+            logger.error(f"Error en reporte/sync background: {e}")
+
+    asyncio.create_task(bg_report())
 
     return VehicleRecord(**doc)
 

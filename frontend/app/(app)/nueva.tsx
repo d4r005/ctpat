@@ -601,7 +601,7 @@ function SignatureModal({ onClose, onSave, title, t }: { onClose: () => void; on
             confirmText={t('guardar')}
             webStyle={style}
             autoClear={false}
-            imageType="image/png"
+            imageType="image/jpeg"
           />
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>

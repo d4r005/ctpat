@@ -253,7 +253,7 @@ function SignatureModal({ sigTarget, onClose, sigRef, onOK, t }: any) {
             onOK={onOK}
             webStyle={`.m-signature-pad--footer{display:none;}.m-signature-pad{box-shadow:none;border:2px solid #09090B;}body,html{background:#FFF;height:100%;}`}
             autoClear={false}
-            imageType="image/png"
+            imageType="image/jpeg"
             descriptionText={t('firme_dentro_desc')}
             clearText={t('borrar')}
             confirmText={t('guardar')}

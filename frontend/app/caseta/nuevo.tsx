@@ -384,7 +384,7 @@ export default function CasetaNuevo() {
                 onOK={(sig) => { setFirmaOperador(sig); setShowSig(false); }}
                 webStyle={`.m-signature-pad--footer{display:none;}.m-signature-pad{box-shadow:none;border:2px solid #09090B;}body,html{background:#FFF;height:100%;}`}
                 autoClear={false}
-                imageType="image/png"
+                imageType="image/jpeg"
               />
             </View>
             <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
