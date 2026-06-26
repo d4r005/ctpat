@@ -523,6 +523,7 @@ export default function InspectionDetail() {
           onClose={() => setShowSigModal(false)}
           onSave={(sig) => { sigModalConfig.onSave(sig); setShowSigModal(false); }}
           title={sigModalConfig.title}
+          t={t}
         />
       )}
     </SafeAreaView>

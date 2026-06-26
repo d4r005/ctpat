@@ -8,6 +8,7 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import { apiCall, API_BASE } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
+import { useTranslation } from 'react-i18next';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
 interface Analytics {
@@ -22,6 +23,7 @@ interface Analytics {
 export default function Analitica({ nested = false }: { nested?: boolean }) {
   const { user, token } = useAuth();
   const router = useRouter();
+  const { t } = useTranslation();
   const [data, setData] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
@@ -83,7 +85,6 @@ ${data.by_inspector.map((i) => `<tr><td style="padding:8px;border:1px solid #999
 <table style="width:100%;border-collapse:collapse;">
 ${data.top_failed_points.length ? data.top_failed_points.map((p) => `<tr><td style="padding:8px;border:1px solid #999;">${p.name}</td><td style="padding:8px;border:1px solid #999;font-weight:bold;color:#DC2626;text-align:right;">${p.count}</td></tr>`).join('') : `<tr><td style="padding:8px;border:1px solid #999;color:#666;font-style:italic;">${t('sin_fallas_registradas')}</td></tr>`}
 </table>
-</body></html>`;
 </body></html>`;
     try {
       const result = await Print.printToFileAsync({ html, base64: false });
