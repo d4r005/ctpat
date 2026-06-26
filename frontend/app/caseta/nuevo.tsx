@@ -177,14 +177,15 @@ export default function CasetaNuevo() {
         if (proceed) {
           router.replace(`/(app)/nueva?${nextParams}`);
         } else {
-          router.replace(`/caseta/${created.id}`);
+          // Regresar al panel de Caseta en lugar de quedarse en el detalle
+          router.replace('/(app)/caseta');
         }
       } else {
         Alert.alert(
           "✅ Entrada Registrada",
           "¿Desea proceder con la inspección de 19 puntos ahora?",
           [
-            { text: "MÁS TARDE", onPress: () => router.replace(`/caseta/${created.id}`) },
+            { text: "MÁS TARDE (REGRESAR)", onPress: () => router.replace('/(app)/caseta') },
             { text: "SÍ, INICIAR", onPress: () => router.replace(`/(app)/nueva?${nextParams}`) }
           ]
         );

@@ -99,7 +99,7 @@ export default function EmbarqueNuevo() {
       if (Platform.OS === 'web') {
         const proceed = window.confirm("Ticket de Embarque Guardado. ¿Desea proceder a registrar la SALIDA de la unidad?");
         if (proceed) nextStep();
-        else router.replace(`/embarque/${created.id}`);
+        else router.replace('/(app)/embarque'); // Regresar al panel de embarque
         return;
       }
 
@@ -107,7 +107,7 @@ export default function EmbarqueNuevo() {
         "Ticket Guardado",
         "¿Desea proceder a registrar la SALIDA de la unidad ahora?",
         [
-          { text: "Ver Ticket", onPress: () => router.replace(`/embarque/${created.id}`) },
+          { text: "REGRESAR AL PANEL", onPress: () => router.replace('/(app)/embarque') },
           { text: "SÍ, REGISTRAR SALIDA", onPress: nextStep }
         ]
       );

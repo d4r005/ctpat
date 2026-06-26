@@ -88,9 +88,9 @@ export default function InspectionDetail() {
     setActing(true);
     try {
       await approveInspection(id, approvalNote.trim(), approvalName.trim(), approvalSignature);
-      setInsp(getById(id));
-      setApprovalNote('');
-      setApprovalSignature('');
+      alert('Inspección aprobada correctamente');
+      // Redirigir al panel de supervisor para continuar con otras tareas
+      router.replace('/(app)/supervisor');
     } catch (e: any) { alert(e.message); }
     finally { setActing(false); }
   };
@@ -108,9 +108,9 @@ export default function InspectionDetail() {
     setActing(true);
     try {
       await rejectInspection(id, approvalNote.trim(), approvalName.trim(), approvalSignature);
-      setInsp(getById(id));
-      setApprovalNote('');
-      setApprovalSignature('');
+      alert('Inspección rechazada');
+      // Redirigir al panel de supervisor
+      router.replace('/(app)/supervisor');
     } catch (e: any) { alert(e.message); }
     finally { setActing(false); }
   };

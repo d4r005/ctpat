@@ -199,7 +199,8 @@ export default function Nueva() {
           });
           router.replace(`/embarque/nuevo?${queryParams.toString()}`);
         } else {
-          router.replace(`/inspection/${created.id}${params.record_id ? `?record_id=${params.record_id}` : ''}`);
+          // Regresar al panel de Histórico en lugar de quedarse en el detalle
+          router.replace('/(app)/historico');
         }
         return;
       }
@@ -209,8 +210,8 @@ export default function Nueva() {
         t('desea_generar_ticket'),
         [
           {
-            text: t('ver_detalle'),
-            onPress: () => router.replace(`/inspection/${created.id}${params.record_id ? `?record_id=${params.record_id}` : ''}`)
+            text: "REGRESAR AL PANEL",
+            onPress: () => router.replace('/(app)/historico')
           },
           {
             text: t('si_generar_ticket_caps'),
