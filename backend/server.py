@@ -300,17 +300,6 @@ async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dic
     return user
 
 
-# ========== AppSheet Sync Utility ==========
-def flatten_dict(d, parent_key='', sep='_'):
-    items = []
-    for k, v in d.items():
-        new_key = f"{parent_key}{sep}{k}" if parent_key else k
-        if isinstance(v, dict):
-            items.extend(flatten_dict(v, new_key, sep=sep).items())
-        else:
-            items.append((new_key, v))
-    return dict(items)
-
 import asyncio
 
 async def sync_to_google_sheets(process_type: str, data: Dict[str, Any]):
@@ -385,45 +374,6 @@ async def sync_to_google_sheets(process_type: str, data: Dict[str, Any]):
 
     # Ejecutar en un hilo separado para no bloquear la respuesta principal del servidor
     asyncio.create_task(asyncio.to_thread(send_request))
-
-    # Convert everything to string for AppSheet compatibility if it's not a basic type
-    for k, v in flattened.items():
-        if isinstance(v, (list, dict)):
-            flattened[k] = str(v)
-
-    if app_id and access_key:
-        try:
-            url = f"https://www.appsheet.com/api/v2/apps/{app_id}/tables/{table_name}/Action"
-            payload = {
-                "Action": "Add",
-                "Properties": { "Locale": "es-MX", "Timezone": "Central Standard Time" },
-                "Rows": [flattened]
-            }
-            headers = { "ApplicationAccessKey": access_key, "Content-Type": "application/json" }
-            response = requests.post(url, json=payload, headers=headers, timeout=10)
-            if response.status_code == 200:
-                logger.info(f"Successfully synced {table_name} to AppSheet API")
-                return
-            else:
-                logger.error(f"AppSheet API Error ({table_name}): {response.text}")
-        except Exception as e:
-            logger.error(f"Error syncing to AppSheet API ({table_name}): {e}")
-
-    # Option 2: Fallback to Google Sheets Webhook
-    if webhook_url:
-        try:
-            payload = {
-                "table": table_name,
-                "data": flattened,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
-            response = requests.post(webhook_url, json=payload, timeout=10)
-            if response.status_code == 200:
-                print(f"Successfully synced {table_name} to Google Sheets Webhook")
-            else:
-                print(f"Failed to sync to Webhook: {response.text}")
-        except Exception as e:
-            print(f"Error syncing to Webhook: {e}")
 
 
 # ========== Auth Routes ==========
