@@ -531,26 +531,56 @@ def ensure_clean_image(base64_str: str) -> str:
     if not base64_str or not isinstance(base64_str, str) or not base64_str.startswith('data:image'):
         return base64_str
 
-    # Si ya parece ser un JPEG sin transparencia, devolvemos rápido
-    if "image/jpeg" in base64_str and ";base64," in base64_str:
-        # Podríamos optimizar más, pero por ahora lo dejamos así para velocidad
+    # Marcador para evitar re-procesar imágenes ya limpiadas por esta función
+    if "clean=true" in base64_str:
         return base64_str
 
-    return add_watermark(base64_str)
+    try:
+        # Extraer base64
+        header, encoded = base64_str.split(",", 1) if "," in base64_str else ("data:image/jpeg;base64", base64_str)
+        img = Image.open(io.BytesIO(base64.b64decode(encoded)))
+
+        # 1. Detectar si necesita reparación (cuadros negros o transparencia)
+        needs_fix = img.mode in ('RGBA', 'LA', 'P')
+
+        if not needs_fix and img.mode == 'RGB':
+            # Análisis de brillo: si la imagen es casi negra total, es un error de renderizado
+            stat = img.convert('L').getdata()
+            # Muestreo rápido (cada 10 pixeles) para velocidad
+            sample = list(stat)[::10]
+            avg_brightness = sum(sample) / len(sample)
+            if avg_brightness < 12: # Casi negro sólido
+                needs_fix = True
+
+        if needs_fix:
+            # Re-dibujar sobre fondo blanco puro
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'RGBA':
+                background.paste(img, mask=img.split()[3])
+            else:
+                background.paste(img.convert('RGBA'))
+            img = background
+
+        # 2. Redimensión preventiva (firmas no necesitan ser gigantes)
+        if img.width > 800:
+            img.thumbnail((800, 800), Image.Resampling.LANCZOS)
+
+        # 3. Guardar como JPEG eficiente
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=70, optimize=True)
+        new_encoded = base64.b64encode(buf.getvalue()).decode()
+
+        # Inyectar marcador de limpieza en el header
+        return f"data:image/jpeg;base64,clean=true,{new_encoded}"
+    except Exception as e:
+        logger.error(f"Error limpiando imagen: {e}")
+        return base64_str
 
 def _serialize_inspection(doc: Dict[str, Any]) -> Inspection:
-    # Si doc tiene fotos o firmas, las "limpiamos" para evitar cuadros negros en PDF
-    if doc.get("inspector_firma"):
-        doc["inspector_firma"] = ensure_clean_image(doc["inspector_firma"])
-    if doc.get("verificador_firma"):
-        doc["verificador_firma"] = ensure_clean_image(doc["verificador_firma"])
-    if doc.get("approved_by_signature"):
-        doc["approved_by_signature"] = ensure_clean_image(doc["approved_by_signature"])
-
-    if "points" in doc:
-        for p in doc["points"]:
-            if p.get("photo"):
-                p["photo"] = ensure_clean_image(p["photo"])
+    # Reparar solo las firmas para no alentar el listado general
+    for f in ["inspector_firma", "verificador_firma", "approved_by_signature"]:
+        if doc.get(f):
+            doc[f] = ensure_clean_image(doc[f])
 
     return Inspection(
         id=doc["id"],
