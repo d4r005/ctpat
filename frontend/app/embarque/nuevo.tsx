@@ -84,16 +84,11 @@ export default function EmbarqueNuevo() {
     }
     setSaving(true);
     try {
-      const created = await apiCall<any>('/shipping-tickets', { method: 'POST', body: form, token });
-
-      // Vincular ticket al registro de caseta si existe
-      if (params.record_id && token) {
-        try {
-          await apiCall(`/vehicle-records/${params.record_id}/link-ticket?ticket_id=${created.id}`, { method: 'PATCH', token });
-        } catch (linkErr) {
-          console.error('Error linking ticket to record:', linkErr);
-        }
-      }
+      const payload = {
+        ...form,
+        record_id: params.record_id || '' // Enviar record_id para vínculo atómico
+      };
+      const created = await apiCall<any>('/shipping-tickets', { method: 'POST', body: payload, token });
 
       const nextStep = () => {
         if (params.record_id) {

@@ -175,13 +175,8 @@ export default function Nueva() {
         fecha_hora: new Date().toISOString(),
         client_uuid: '',
         inspection_type: inspectionType,
+        record_id: params.record_id || '', // Enviar record_id para vínculo atómico
       } as any);
-      // Link inspection to caseta record if came from there
-      if (params.record_id && token) {
-        try {
-          await apiCall(`/vehicle-records/${params.record_id}/link-inspection?inspection_id=${created.id}`, { method: 'PATCH', token });
-        } catch {}
-      }
 
       if (Platform.OS === 'web') {
         const proceed = window.confirm(`${t('inspeccion_guardada')}. ${t('desea_generar_ticket')}`);

@@ -17,7 +17,7 @@ export interface InspectionPoint {
 }
 
 export interface InspectionPayload {
-  inspection_type?: string;
+  inspection_type: string;
   compania_transportista: string;
   placas_unidad: string;
   numero_trailer: string;
@@ -30,6 +30,7 @@ export interface InspectionPayload {
   inspector_firma: string;
   fecha_hora: string;
   client_uuid: string;
+  record_id?: string;
 }
 
 export interface Inspection extends InspectionPayload {

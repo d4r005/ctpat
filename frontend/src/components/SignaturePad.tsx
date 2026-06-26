@@ -97,7 +97,7 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
       descriptionText={props.descriptionText}
       clearText={props.clearText}
       confirmText={props.confirmText}
-      webStyle={props.webStyle}
+      webStyle={props.webStyle || `.m-signature-pad { background-color: #FFFFFF; }`}
       autoClear={props.autoClear}
       imageType={props.imageType}
     />
