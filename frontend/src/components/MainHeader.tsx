@@ -14,6 +14,7 @@ interface MainHeaderProps {
 const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack }) => {
   const { user } = useAuth();
   const router = useRouter();
+  const [showNotifs, setShowNotifs] = React.useState(false);
 
   return (
     <View style={styles.brandHeader}>
@@ -30,13 +31,20 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack }) =>
           </Text>
         </View>
       </View>
-      <View style={styles.userContainer}>
-        <View style={styles.avatarCircle}>
-          <Text style={styles.avatarText}>{user?.name?.charAt(0).toUpperCase() || 'D'}</Text>
-          <View style={styles.onlineIndicator} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+        <Pressable onPress={() => setShowNotifs(true)} style={styles.notifBtn}>
+          <Ionicons name="notifications" size={24} color="#FFF" />
+          <View style={styles.notifBadge} />
+        </Pressable>
+        <View style={styles.userContainer}>
+          <View style={styles.avatarCircle}>
+            <Text style={styles.avatarText}>{user?.name?.charAt(0).toUpperCase() || 'D'}</Text>
+            <View style={styles.onlineIndicator} />
+          </View>
+          <Text style={styles.onlineStatusText}>● ON LINE</Text>
         </View>
-        <Text style={styles.onlineStatusText}>● ON LINE</Text>
       </View>
+      <NotificationsPanel visible={showNotifs} onClose={() => setShowNotifs(false)} />
     </View>
   );
 };
@@ -48,6 +56,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingBottom: spacing.xl,
+  },
+  notifBtn: {
+    padding: 8,
+    position: 'relative',
+  },
+  notifBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.error,
+    borderWidth: 2,
+    borderColor: colors.brandPrimary,
   },
   backBtn: {
     marginRight: spacing.md,
