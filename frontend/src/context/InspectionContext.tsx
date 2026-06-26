@@ -101,8 +101,11 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     if (!token) return;
     setLoading(true);
     try {
-      // Use summary=true to avoid loading heavy base64 photos in lists
-      const data = await apiCall<Inspection[]>('/inspections?summary=true', { token });
+      // Si es admin o supervisor, cargar todo por defecto para que el histórico no se vea vacío
+      const isAdmin = user?.role === 'admin' || user?.email === 'd.trujillo@brancoindustries.com';
+      const scope = (isAdmin || user?.role === 'supervisor') ? 'all' : 'mine';
+
+      const data = await apiCall<Inspection[]>(`/inspections?summary=true&scope=${scope}`, { token });
       setInspections((prev) => {
         const pending = prev.filter((p) => p._pending);
         const merged = [...pending, ...data];
@@ -110,7 +113,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
         return merged;
       });
     } catch {} finally { setLoading(false); }
-  }, [token]);
+  }, [token, user]);
 
   const refreshAll = useCallback(async () => {
     if (!token || (user?.role !== 'supervisor' && user?.role !== 'admin')) return;

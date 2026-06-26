@@ -24,6 +24,7 @@ export default function Inicio() {
   const router = useRouter();
 
   const [activities, setActivities] = useState<any[]>([]);
+  const [inProcessUnits, setInProcessUnits] = useState<any[]>([]);
   const [lastActivityId, setLastActivityId] = useState<string | null>(null);
   const [loadingActivities, setLoadingActivities] = useState(false);
 
@@ -31,8 +32,14 @@ export default function Inicio() {
     if (!token) return;
     if (isInitial) setLoadingActivities(true);
     try {
-      const actData = await apiCall<any[]>('/activities', { token });
+      const [actData, recData] = await Promise.all([
+        apiCall<any[]>('/activities', { token }),
+        apiCall<any[]>('/vehicle-records?status=entrada', { token })
+      ]);
+
       const newActivities = Array.isArray(actData) ? actData : [];
+      setActivities(newActivities);
+      setInProcessUnits(Array.isArray(recData) ? recData : []);
 
       if (!isInitial && newActivities.length > 0) {
         const latest = newActivities[0];
@@ -43,7 +50,6 @@ export default function Inicio() {
       } else if (isInitial && newActivities.length > 0) {
         setLastActivityId(newActivities[0].id);
       }
-      setActivities(newActivities);
     } catch (e) {
       setActivities([]);
     } finally {
@@ -127,22 +133,41 @@ export default function Inicio() {
   const ListFooter = () => (
     <>
       <View style={styles.processHeader}>
-        <Text style={styles.processTitle}>Flujo de Proceso</Text>
-        <Ionicons name="chevron-up" size={20} color={colors.onSurface} />
+        <Text style={styles.processTitle}>Unidades en Seguimiento (Patio)</Text>
+        <Ionicons name="refresh-circle" size={24} color={colors.brandPrimary} onPress={() => loadActivities(true)} />
       </View>
 
-      <View style={styles.timelineContainer}>
-        <View style={styles.timelineLine} />
-        {activities.slice(0, 6).map((a) => (
-          <View key={`timeline-${a.id}`} style={styles.timelineItem}>
-            <View style={[styles.timelineDot, { backgroundColor: a.status === 'malo' ? colors.error : colors.success }]} />
-            <View style={{ flex: 1, marginLeft: spacing.lg, paddingBottom: spacing.lg }}>
-              <Text style={styles.timelineTitle}>{a.title}</Text>
-              <Text style={styles.timelineMeta}>{formatTime(a.created_at)} • {a.user_name}</Text>
-            </View>
-          </View>
-        ))}
-      </View>
+      {inProcessUnits.length === 0 ? (
+        <View style={styles.emptyInline}>
+          <Text style={{ color: colors.muted, fontSize: 12 }}>No hay unidades activas en patio</Text>
+        </View>
+      ) : (
+        <View style={styles.timelineContainer}>
+          {inProcessUnits.map((r) => {
+            const steps = {
+              entry: true,
+              inspection: !!r.inspection_id,
+              shipping: !!r.has_shipping_ticket,
+              exit: r.status === 'salida'
+            };
+            return (
+              <Pressable
+                key={`track-${r.id}`}
+                style={styles.trackingCard}
+                onPress={() => router.push(`/caseta/${r.id}`)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.trackingTitle}>{r.entry.placas_unidad}</Text>
+                  <Text style={styles.trackingSub}>{r.entry.chofer_nombre}</Text>
+                </View>
+                <ProcessTracker steps={steps} compact />
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+
+      <View style={{ height: 40 }} />
     </>
   );
 
@@ -199,4 +224,17 @@ const styles = StyleSheet.create({
   timelineMeta: { fontSize: 11, color: colors.muted, marginTop: 2 },
   offlineBanner: { backgroundColor: colors.warning, padding: 4, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 },
   offlineText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
+  trackingCard: {
+    backgroundColor: colors.surfaceSecondary,
+    borderWidth: 2,
+    borderColor: colors.borderStrong,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md
+  },
+  trackingTitle: { fontWeight: '900', fontSize: 14, color: colors.onSurface },
+  trackingSub: { fontSize: 11, color: colors.muted, marginTop: 2 },
+  emptyInline: { alignItems: 'center', padding: spacing.xl, borderStyle: 'dashed', borderWidth: 2, borderColor: colors.border },
 });
