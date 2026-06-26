@@ -191,6 +191,7 @@ class VehicleRecord(BaseModel):
     entry: VehicleEntry
     exit: Optional[VehicleExit] = None
     inspection_id: Optional[str] = None
+    shipping_ticket_id: Optional[str] = None
     has_shipping_ticket: bool = False
     created_at: str
 
@@ -1499,7 +1500,7 @@ def compress_image_base64(base64_str: str, max_size=(600, 600)) -> str:
 async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[str] = None):
     logger.info(f"Generando reporte consolidado para ID: {rec_id}")
     record = await db.vehicle_records.find_one({"id": rec_id})
-    if not record:
+    if (!record) {
         logger.error(f"Reporte cancelado: No existe el registro {rec_id}")
         return False
 
@@ -1510,7 +1511,49 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
     if record.get("inspection_id"):
         inspection = await db.inspections.find_one({"id": record["inspection_id"]})
 
+    # Buscar ticket de embarque vinculado
+    ticket = None
+    if record.get("shipping_ticket_id"):
+        ticket = await db.shipping_tickets.find_one({"id": record["shipping_ticket_id"]})
+
     if not inspection and placas:
+        # Intentar búsqueda exacta primero
+        inspection = await db.inspections.find_one(
+            {"placas_unidad": placas},
+            sort=[("created_at", -1)]
+        )
+        if not inspection:
+            # Búsqueda flexible (solo letras y números)
+            norm_placas = re.sub(r'[^a-zA-Z0-9]', '', placas)
+            if norm_placas:
+                flex_regex = ".*".join(list(norm_placas))
+                inspection = await db.inspections.find_one(
+                    {"placas_unidad": {"$regex": flex_regex, "$options": "i"}},
+                    sort=[("created_at", -1)]
+                )
+
+    # Buscar ticket de embarque con búsqueda flexible si no hay vínculo directo
+    if not ticket and placas:
+        fecha_inicio = record["created_at"]
+        fecha_fin = record.get("exit", {}).get("fecha_salida") or datetime.now(timezone.utc).isoformat()
+        # Expandimos rango de búsqueda a 3 horas para mayor seguridad
+        start_dt = datetime.fromisoformat(fecha_inicio.replace('Z', '+00:00')) - timedelta(hours=3)
+        end_dt = datetime.fromisoformat(fecha_fin.replace('Z', '+00:00')) + timedelta(hours=3)
+
+        # Intento exacto
+        ticket = await db.shipping_tickets.find_one({
+            "placas_unidad": placas,
+            "created_at": {"$gte": start_dt.isoformat(), "$lte": end_dt.isoformat()}
+        })
+        if not ticket:
+            # Intento flexible
+            norm_placas = re.sub(r'[^a-zA-Z0-9]', '', placas)
+            if norm_placas:
+                flex_regex = ".*".join(list(norm_placas))
+                ticket = await db.shipping_tickets.find_one({
+                    "placas_unidad": {"$regex": flex_regex, "$options": "i"},
+                    "created_at": {"$gte": start_dt.isoformat(), "$lte": end_dt.isoformat()}
+                })
         # Intentar búsqueda exacta primero
         inspection = await db.inspections.find_one(
             {"placas_unidad": placas},
@@ -1737,6 +1780,19 @@ async def link_inspection(rec_id: str, inspection_id: str, current_user: Dict[st
     await db.vehicle_records.update_one(
         {"id": rec_id},
         {"$set": {"inspection_id": inspection_id, "status": new_status}},
+    )
+    return {"ok": True}
+
+
+@api_router.patch("/vehicle-records/{rec_id}/link-ticket")
+async def link_shipping_ticket(rec_id: str, ticket_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    doc = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+
+    await db.vehicle_records.update_one(
+        {"id": rec_id},
+        {"$set": {"shipping_ticket_id": ticket_id, "has_shipping_ticket": True}},
     )
     return {"ok": True}
 
