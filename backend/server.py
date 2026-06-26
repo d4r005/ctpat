@@ -527,38 +527,45 @@ async def create_inspector(body: UserRegister, current_user: Dict[str, Any] = De
 
 # ========== Inspections ==========
 def ensure_clean_image(base64_str: str) -> str:
-    """Solución definitiva para cuadros negros: Fuerza fondo blanco y formato JPEG"""
-    if not base64_str or not isinstance(base64_str, str) or not base64_str.startswith('data:image'):
+    """Solución definitiva para cuadros negros: Fuerza fondo blanco y formato JPEG.
+    Ahora también maneja firmas antiguas que podrían no tener el encabezado data:image."""
+    if not base64_str or not isinstance(base64_str, str) or len(base64_str) < 10:
         return base64_str
+
+    # Si no tiene el encabezado, intentamos agregarlo para procesarla
+    processed_b64 = base64_str
+    if not base64_str.startswith('data:image'):
+        processed_b64 = f"data:image/png;base64,{base64_str}"
 
     try:
         # 1. Extraer el contenido base64 puro
-        pure_base64 = base64_str.split(",")[-1]
+        pure_base64 = processed_b64.split(",")[-1]
         img_data = base64.b64decode(pure_base64)
         img = Image.open(io.BytesIO(img_data))
 
         # 2. Crear una imagen nueva BLANCA (esto mata cualquier transparencia que se vea negra)
-        # Usamos RGB (sin canal Alpha) para garantizar compatibilidad con PDF
         clean_img = Image.new("RGB", img.size, (255, 255, 255))
 
-        # 3. Pegar la firma/foto encima. Si tiene transparencia, Pillow la usará como máscara.
+        # 3. Pegar la firma/foto encima.
         if img.mode == 'RGBA':
             clean_img.paste(img, mask=img.split()[3])
-        else:
-            # Para otros modos (P, L), convertimos a RGBA para manejar posible transparencia oculta
+        elif img.mode in ('P', 'L'):
             temp_rgba = img.convert('RGBA')
             clean_img.paste(temp_rgba, mask=temp_rgba.split()[3])
+        else:
+            clean_img.paste(img)
 
-        # 4. Guardar como JPEG ligero para velocidad máxima en el reporte
+        # 4. Guardar como JPEG ligero
         buf = io.BytesIO()
-        clean_img.save(buf, format="JPEG", quality=75)
+        clean_img.save(buf, format="JPEG", quality=85) # Un poco más de calidad para firmas
         new_encoded = base64.b64encode(buf.getvalue()).decode()
 
         return f"data:image/jpeg;base64,{new_encoded}"
     except Exception as e:
-        logger.error(f"Error reparando imagen: {e}")
-        # Si falla el proceso, al menos intentamos quitar el marcador de transparencia del header
-        return base64_str.replace("image/png", "image/jpeg")
+        logger.error(f"Error reparando imagen/firma: {e}")
+        # Si falló y no tenía encabezado, al menos devolvemos el intento con encabezado
+        # para que el <img> lo intente renderizar
+        return processed_b64
 
 def _serialize_inspection(doc: Dict[str, Any]) -> Inspection:
     # Reparar solo las firmas para no alentar el listado general
@@ -1624,6 +1631,24 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
 
     logger.info(f"Datos encontrados - Inspección: {'SI' if inspection else 'NO'}, Ticket: {'SI' if ticket else 'NO'}")
 
+    # PRE-PROCESAR FIRMAS PARA EVITAR CUADROS NEGROS Y ASEGURAR VISIBILIDAD DE FIRMAS ANTIGUAS
+    f_operador = ensure_clean_image(record["entry"].get("firma_operador", ""))
+    f_guardia_salida = ""
+    if record.get("exit"):
+        f_guardia_salida = ensure_clean_image(record["exit"].get("firma_guardia", ""))
+
+    f_inspector = ""
+    f_supervisor = ""
+    if inspection:
+        f_inspector = ensure_clean_image(inspection.get("inspector_firma", ""))
+        f_supervisor = ensure_clean_image(inspection.get("approved_by_signature", ""))
+
+    f_almacenista = ""
+    f_guardia_embarque = ""
+    if ticket:
+        f_almacenista = ensure_clean_image(ticket.get("firma_almacenista", ""))
+        f_guardia_embarque = ensure_clean_image(ticket.get("firma_guardia", ""))
+
     subject = f"REPORTE CONSOLIDADO SRIUC - UNIDAD: {placas}"
     recipient = recipient_override or os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com")
 
@@ -1727,8 +1752,8 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
                 </div>
 
                 <div style="margin-top: 15px; display: flex; gap: 20px;">
-                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA CONDUCTOR (ENTRADA) / 司机签字:</p><img src="{record["entry"]["firma_operador"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if record["entry"].get("firma_operador") else ''}
-                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA GUARDIA (SALIDA) / 警卫签字:</p><img src="{record["exit"]["firma_guardia"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if record.get("exit") and record["exit"].get("firma_guardia") else ''}
+                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA CONDUCTOR (ENTRADA) / 司机签字:</p><img src="{f_operador}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if f_operador else ''}
+                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA GUARDIA (SALIDA) / 警卫签字:</p><img src="{f_guardia_salida}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if f_guardia_salida else ''}
                 </div>
                 <div style="margin-top: 10px;">{caseta_photos_html}</div>
 
@@ -1742,12 +1767,12 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
                             <td style="width: 50%; vertical-align: top;">
                                 <p style="margin: 0; font-weight: bold;">Inspector / 检查员:</p>
                                 <p style="margin: 2px 0;">{inspection.get('inspector_nombre', 'N/A')}</p>
-                                {f'<img src="{inspection.get("inspector_firma")}" style="height:45px; border-bottom:1px solid #0A2540;" />' if inspection.get("inspector_firma") else ''}
+                                {f'<img src="{f_inspector}" style="height:45px; border-bottom:1px solid #0A2540;" />' if f_inspector else ''}
                             </td>
                             <td style="width: 50%; vertical-align: top;">
                                 <p style="margin: 0; font-weight: bold;">Supervisor / 主管:</p>
                                 <p style="margin: 2px 0;">{inspection.get('approved_by_name', 'N/A')}</p>
-                                {f'<img src="{inspection.get("approved_by_signature")}" style="height:45px; border-bottom:1px solid #0A2540;" />' if inspection.get("approved_by_signature") else ''}
+                                {f'<img src="{f_supervisor}" style="height:45px; border-bottom:1px solid #0A2540;" />' if f_supervisor else ''}
                             </td>
                         </tr>
                     </table>
@@ -1777,8 +1802,8 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
                     <tr><td style="padding: 8px; font-weight: bold;">Guardia / 警卫:</td><td style="padding: 8px;">{ticket.get('nombre_guardia', 'N/A')}</td></tr>
                 </table>
                 <div style="margin-top: 15px; display: flex; gap: 20px;">
-                    {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA ALMACENISTA / 仓管员签字:</p><img src="{ticket["firma_almacenista"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if ticket.get("firma_almacenista") else ''}
-                    {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA GUARDIA / 警卫签字:</p><img src="{ticket["firma_guardia"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if ticket.get("firma_guardia") else ''}
+                    {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA ALMACENISTA / 仓管员签字:</p><img src="{f_almacenista}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if f_almacenista else ''}
+                    {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA GUARDIA / 警卫签字:</p><img src="{f_guardia_embarque}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if f_guardia_embarque else ''}
                 </div>
                 <div style="margin-top: 10px;">{ticket_photos_html}</div>
                 ''' if ticket else "<p style='color: #666; font-style: italic;'>No se generó ticket de embarque para este movimiento / 本次操作未生成运输单。</p>"}
