@@ -27,6 +27,10 @@ export default function InspectionDetail() {
   const [approvalSignature, setApprovalSignature] = useState('');
   const [showSigModal, setShowSigModal] = useState(false);
   const [acting, setActing] = useState(false);
+  const [sigModalConfig, setSigModalConfig] = useState<{ title: string, onSave: (sig: string) => void }>({
+    title: 'Firma del Supervisor',
+    onSave: (sig) => setApprovalSignature(sig)
+  });
   const isSupervisor = user?.role === 'supervisor';
 
   const canEdit = isAdmin; // Solo administrador puede editar/modificar/borrar
@@ -403,20 +407,87 @@ export default function InspectionDetail() {
 
         <Section title="FIRMAS">
           <Text style={styles.label}>INSPECTOR</Text>
-          <Text style={styles.value}>{insp.inspector_nombre}</Text>
-          {insp.inspector_firma ? (
-            <View style={styles.firmaWrap}>
-              <Image source={{ uri: insp.inspector_firma }} style={{ width: '100%', height: 100, resizeMode: 'contain', backgroundColor: '#fff' }} />
-              <Text style={[styles.firmaLabel, { marginTop: 4 }]}>FIRMA INSPECTOR</Text>
-            </View>
-          ) : null}
-          {insp.approved_by_signature ? (
+          {isEditing ? (
+            <TextInput
+              style={[styles.value, { borderBottomWidth: 1, borderBottomColor: colors.border }]}
+              value={editData.inspector_nombre || insp.inspector_nombre}
+              onChangeText={(v) => setEditData({ ...editData, inspector_nombre: v })}
+            />
+          ) : (
+            <Text style={styles.value}>{insp.inspector_nombre}</Text>
+          )}
+
+          <View style={styles.firmaWrap}>
+            { (isEditing ? (editData.inspector_firma || insp.inspector_firma) : insp.inspector_firma) ? (
+              <Image
+                source={{ uri: isEditing ? (editData.inspector_firma || insp.inspector_firma) : insp.inspector_firma }}
+                style={{ width: '100%', height: 100, resizeMode: 'contain', backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border }}
+              />
+            ) : (
+              <View style={[styles.firmaWrap, { borderStyle: 'dashed', borderWidth: 1, height: 100, justifyContent: 'center', alignItems: 'center' }]}>
+                <Text style={{ color: colors.muted }}>Sin firma</Text>
+              </View>
+            )}
+
+            {isEditing && (
+              <Pressable
+                style={[styles.actionBtn, { backgroundColor: colors.brandPrimary, marginTop: 8 }]}
+                onPress={() => {
+                  setSigModalConfig({
+                    title: 'Editar Firma del Inspector',
+                    onSave: (sig) => setEditData({ ...editData, inspector_firma: sig })
+                  });
+                  setShowSigModal(true);
+                }}
+              >
+                <Ionicons name="brush" size={20} color="#FFF" />
+                <Text style={styles.actionBtnText}>CAMBIAR FIRMA INSPECTOR</Text>
+              </Pressable>
+            )}
+            <Text style={[styles.firmaLabel, { marginTop: 4 }]}>FIRMA INSPECTOR</Text>
+          </View>
+
+          {(insp.approved_by_signature || isEditing) ? (
             <>
               <Text style={[styles.label, { marginTop: spacing.md }]}>APROBACIÓN / RECHAZO POR</Text>
-              <Text style={styles.value}>{insp.approved_by_name}</Text>
+              {isEditing ? (
+                <TextInput
+                  style={[styles.value, { borderBottomWidth: 1, borderBottomColor: colors.border }]}
+                  value={editData.approved_by_name || insp.approved_by_name}
+                  onChangeText={(v) => setEditData({ ...editData, approved_by_name: v })}
+                />
+              ) : (
+                <Text style={styles.value}>{insp.approved_by_name || '-'}</Text>
+              )}
+
               <View style={styles.firmaWrap}>
-                <Image source={{ uri: insp.approved_by_signature }} style={{ width: '100%', height: 100, resizeMode: 'contain', backgroundColor: '#fff', borderColor: insp.approval_status === 'aprobada' ? colors.success : colors.error, borderWidth: 1 }} />
-                <Text style={[styles.firmaLabel, { color: insp.approval_status === 'aprobada' ? colors.success : colors.error, marginTop: 4 }]}>FIRMA AUTORIZACIÓN</Text>
+                { (isEditing ? (editData.approved_by_signature || insp.approved_by_signature) : insp.approved_by_signature) ? (
+                  <Image
+                    source={{ uri: isEditing ? (editData.approved_by_signature || insp.approved_by_signature) : insp.approved_by_signature }}
+                    style={{ width: '100%', height: 100, resizeMode: 'contain', backgroundColor: '#fff', borderColor: (isEditing ? (editData.approval_status || insp.approval_status) : insp.approval_status) === 'aprobada' ? colors.success : colors.error, borderWidth: 1 }}
+                  />
+                ) : (
+                  <View style={[styles.firmaWrap, { borderStyle: 'dashed', borderWidth: 1, height: 100, justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={{ color: colors.muted }}>Sin firma de aprobación</Text>
+                  </View>
+                )}
+
+                {isEditing && (
+                  <Pressable
+                    style={[styles.actionBtn, { backgroundColor: colors.brandPrimary, marginTop: 8 }]}
+                    onPress={() => {
+                      setSigModalConfig({
+                        title: 'Editar Firma del Supervisor',
+                        onSave: (sig) => setEditData({ ...editData, approved_by_signature: sig })
+                      });
+                      setShowSigModal(true);
+                    }}
+                  >
+                    <Ionicons name="brush" size={20} color="#FFF" />
+                    <Text style={styles.actionBtnText}>CAMBIAR FIRMA SUPERVISOR</Text>
+                  </Pressable>
+                )}
+                <Text style={[styles.firmaLabel, { color: (isEditing ? (editData.approval_status || insp.approval_status) : insp.approval_status) === 'aprobada' ? colors.success : colors.error, marginTop: 4 }]}>FIRMA AUTORIZACIÓN</Text>
               </View>
             </>
           ) : null}
@@ -441,8 +512,8 @@ export default function InspectionDetail() {
       {showSigModal && (
         <SignatureModal
           onClose={() => setShowSigModal(false)}
-          onSave={(sig) => { setApprovalSignature(sig); setShowSigModal(false); }}
-          title="Firma del Supervisor"
+          onSave={(sig) => { sigModalConfig.onSave(sig); setShowSigModal(false); }}
+          title={sigModalConfig.title}
         />
       )}
     </SafeAreaView>

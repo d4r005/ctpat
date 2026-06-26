@@ -665,6 +665,13 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
         status_general
     )
 
+    # Notificar a Supervisores: SE REQUIERE APROBACIÓN
+    await _notify_supervisors(
+        title="Aprobación Necesaria",
+        message=f"La unidad {body.placas_unidad} ha sido inspeccionada por {body.inspector_nombre} y requiere aprobación.",
+        inspection_id=insp_id
+    )
+
     # Sync to Google Sheets
     try:
         await sync_to_google_sheets("inspeccion", doc)
@@ -920,8 +927,8 @@ async def approve_inspection(
 
     await _create_notification(
         user_id=doc["user_id"],
-        title="Inspección aprobada",
-        message=f"Tu inspección {doc.get('placas_unidad','')} fue APROBADA por {current_user['name']}." + (f" Nota: {body.note}" if body.note else ""),
+        title="Inspección aprobada ✓",
+        message=f"¡Atención! Tu inspección de la unidad {doc.get('placas_unidad','')} ha sido APROBADA por {current_user['name']}.",
         inspection_id=inspection_id,
     )
 
@@ -961,8 +968,8 @@ async def reject_inspection(
 
     await _create_notification(
         user_id=doc["user_id"],
-        title="Inspección RECHAZADA",
-        message=f"Atención: La unidad {doc.get('placas_unidad','')} fue RECHAZADA por {current_user['name']}. Motivo: {body.note}",
+        title="Inspección RECHAZADA 🚨",
+        message=f"URGENTE: La unidad {doc.get('placas_unidad','')} ha sido RECHAZADA por {current_user['name']}. Motivo: {body.note}",
         inspection_id=inspection_id,
     )
 
@@ -1013,6 +1020,12 @@ async def _create_notification(user_id: str, title: str, message: str, inspectio
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.notifications.insert_one(doc)
+
+async def _notify_supervisors(title: str, message: str, inspection_id: Optional[str] = None):
+    """Envía una notificación a todos los supervisores y administradores"""
+    supervisors = await db.users.find({"role": {"$in": ["supervisor", "admin"]}}).to_list(100)
+    for sup in supervisors:
+        await _create_notification(sup["id"], title, message, inspection_id)
 
 async def _log_activity(type: str, item_id: str, title: str, subtitle: str, user_name: str, status: str = ""):
     """Registra actividad para el panel de inicio"""
@@ -1352,6 +1365,12 @@ async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any]
         "entrada"
     )
 
+    # Notificar proceso
+    await _notify_supervisors(
+        title="Nueva Entrada",
+        message=f"Unidad {body.placas_unidad} ha ingresado a planta (Caseta)."
+    )
+
     # Sync to Google Sheets
     try:
         await sync_to_google_sheets("entrada", doc)
@@ -1489,6 +1508,12 @@ async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[
         f"Destino: {exit_data.get('destino')}",
         current_user["name"],
         "salida"
+    )
+
+    # Notificar salida
+    await _notify_supervisors(
+        title="Salida de Unidad",
+        message=f"La unidad {doc['entry']['placas_unidad']} ha salido de planta."
     )
 
     # Ejecutar en segundo plano para no demorar la respuesta a la App
@@ -1942,6 +1967,12 @@ async def create_ticket(body: ShippingTicketCreate, current_user: Dict[str, Any]
         f"Cliente: {body.cliente}",
         current_user["name"],
         "embarque"
+    )
+
+    # Notificar embarque
+    await _notify_supervisors(
+        title="Ticket de Embarque Generado",
+        message=f"Se ha generado un ticket de embarque para la unidad {body.placas_unidad} (Cliente: {body.cliente})."
     )
 
     # Sync to Google Sheets

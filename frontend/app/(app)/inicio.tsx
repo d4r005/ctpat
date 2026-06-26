@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl, Platform, FlatList, Image } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl, Platform, FlatList, Image, Vibration } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,18 +35,24 @@ export default function Inicio() {
     try {
       const [actData, recData] = await Promise.all([
         apiCall<any[]>('/activities', { token }),
-        apiCall<any[]>('/vehicle-records?status=entrada', { token })
+        // Buscamos todas las unidades que NO han salido (están en patio)
+        apiCall<any[]>('/vehicle-records', { token })
       ]);
 
       const newActivities = Array.isArray(actData) ? actData : [];
       setActivities(newActivities);
-      setInProcessUnits(Array.isArray(recData) ? recData : []);
+
+      // Filtrar para dejar solo las que están en patio (entrada o inspeccionado)
+      const active = (Array.isArray(recData) ? recData : []).filter(r => r.status !== 'salida');
+      setInProcessUnits(active);
 
       if (!isInitial && newActivities.length > 0) {
         const latest = newActivities[0];
         if (latest.id !== lastActivityId) {
           setLastActivityId(latest.id);
+          // Vibración fuerte para nuevas actividades
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          Vibration.vibrate([0, 500, 100, 500]);
         }
       } else if (isInitial && newActivities.length > 0) {
         setLastActivityId(newActivities[0].id);
@@ -127,61 +133,91 @@ export default function Inicio() {
           <Text style={styles.statLabel}>CON FALLAS</Text>
         </View>
       </View>
-      <Text style={styles.sectionTitle}>ACTIVIDAD RECIENTE (TIEMPO REAL)</Text>
-    </>
-  );
 
-  const ListFooter = () => (
-    <>
       <View style={styles.processHeader}>
-        <Text style={styles.processTitle}>Unidades en Seguimiento (Patio)</Text>
+        <Text style={styles.processTitle}>UNIDADES EN PATIO (ACTIVO)</Text>
         <Ionicons name="refresh-circle" size={24} color={colors.brandPrimary} onPress={() => loadActivities(true)} />
       </View>
-
-      {inProcessUnits.length === 0 ? (
-        <View style={styles.emptyInline}>
-          <Text style={{ color: colors.muted, fontSize: 12 }}>No hay unidades activas en patio</Text>
-        </View>
-      ) : (
-        <View style={styles.timelineContainer}>
-          {inProcessUnits.map((r) => {
-            const steps = {
-              entry: true,
-              inspection: !!r.inspection_id,
-              shipping: !!r.has_shipping_ticket,
-              exit: r.status === 'salida'
-            };
-            return (
-              <Pressable
-                key={`track-${r.id}`}
-                style={styles.trackingCard}
-                onPress={() => router.push(`/caseta/${r.id}`)}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.trackingTitle}>{r.entry.placas_unidad}</Text>
-                  <Text style={styles.trackingSub}>{r.entry.chofer_nombre}</Text>
-                </View>
-                <ProcessTracker steps={steps} compact />
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
-
-      <View style={{ height: 40 }} />
     </>
   );
+
+  const ListEmpty = () => (
+    <View style={styles.emptyInline}>
+      <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '700' }}>No hay unidades activas en patio</Text>
+    </View>
+  );
+
+  const renderActiveUnit = ({ item: r }: { item: any }) => {
+    const steps = {
+      entry: true,
+      inspection: !!r.inspection_id,
+      shipping: !!r.has_shipping_ticket,
+      exit: r.status === 'salida'
+    };
+
+    // Determine the primary status label
+    let statusLabel = 'REGISTRADO';
+    let statusColor = colors.info;
+
+    if (r.status === 'inspeccionado') {
+      statusLabel = 'INSPECCIONADO';
+      statusColor = colors.success;
+    } else if (r.has_shipping_ticket) {
+      statusLabel = 'EN EMBARQUE';
+      statusColor = colors.brandSecondary;
+    }
+
+    return (
+      <Pressable
+        key={`track-${r.id}`}
+        style={styles.trackingCard}
+        onPress={() => router.push(`/caseta/${r.id}`)}
+      >
+        <View style={styles.activeUnitLeft}>
+          <View style={[styles.statusIndicator, { backgroundColor: statusColor }]} />
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.trackingTitle}>{r.entry.placas_unidad}</Text>
+              <Text style={[styles.miniStatusText, { color: statusColor, fontWeight: '900' }]}>{statusLabel}</Text>
+            </View>
+            <Text style={styles.trackingSub}>{r.entry.chofer_nombre} • {r.entry.compania_transporte}</Text>
+            <View style={{ marginTop: spacing.sm }}>
+               <ProcessTracker steps={steps} compact />
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.border} />
+        </View>
+      </Pressable>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <MainHeader />
       <FlatList
-        data={activities.slice(0, 10)}
-        renderItem={renderActivity}
-        keyExtractor={(item) => `${item.type}-${item.id}`}
+        data={inProcessUnits}
+        renderItem={renderActiveUnit}
+        keyExtractor={(item) => `unit-${item.id}`}
         contentContainerStyle={styles.container}
         ListHeaderComponent={ListHeader}
-        ListFooterComponent={ListFooter}
+        ListEmptyComponent={ListEmpty}
+        ListFooterComponent={() => (
+           <>
+             <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>ACTIVIDAD RECIENTE (LOG)</Text>
+             {activities.slice(0, 5).map((a) => (
+                <Pressable key={`act-${a.id}-${a.type}`} style={[styles.activityCard, { opacity: 0.8 }]} onPress={() => navigateToActivity(a)}>
+                  <View style={[styles.iconCircleSmall, { backgroundColor: a.status === 'malo' ? colors.error : colors.borderStrong }]}>
+                    <Ionicons name={getActivityIcon(a.type)} size={14} color="#FFF" />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: spacing.sm }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: colors.onSurface }}>{a.title}</Text>
+                    <Text style={{ fontSize: 10, color: colors.muted }}>{formatTime(a.created_at)} • {a.user_name}</Text>
+                  </View>
+                </Pressable>
+             ))}
+             <View style={{ height: 100 }} />
+           </>
+        )}
         refreshControl={
           <RefreshControl
             refreshing={inspectionsLoading || loadingActivities}
@@ -189,9 +225,6 @@ export default function Inicio() {
             tintColor={colors.brandPrimary}
           />
         }
-        initialNumToRender={5}
-        maxToRenderPerBatch={5}
-        windowSize={5}
       />
       <NotificationsPanel visible={showNotifs} onClose={() => setShowNotifs(false)} />
     </SafeAreaView>
@@ -207,35 +240,28 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 24, fontWeight: '900', color: colors.onSurface },
   statLabel: { fontSize: 9, fontWeight: '700', color: colors.muted, marginTop: 4 },
   sectionTitle: { fontSize: 11, fontWeight: '900', color: colors.onSurfaceTertiary, letterSpacing: 1.5, marginBottom: spacing.md, marginLeft: 4, textTransform: 'uppercase' },
-  activityCard: { backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center' },
+  activityCard: { backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, padding: spacing.sm, marginBottom: 4, flexDirection: 'row', alignItems: 'center' },
   iconCircle: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconCircleSmall: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center', borderRadius: 12 },
   cardTitleText: { fontSize: 14, fontWeight: '900', color: colors.onSurface },
   cardSubText: { fontSize: 12, color: colors.muted, marginTop: 2 },
   cardMetaText: { fontSize: 10, color: colors.muted, marginTop: 4 },
   miniStatusBadgeError: { backgroundColor: colors.error, paddingHorizontal: 6, paddingVertical: 2 },
   miniStatusBadgeSuccess: { backgroundColor: colors.success, paddingHorizontal: 6, paddingVertical: 2 },
-  miniStatusText: { color: '#FFF', fontSize: 8, fontWeight: '900' },
-  processHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.lg, marginBottom: spacing.md, paddingHorizontal: 4 },
-  processTitle: { fontSize: 16, fontWeight: '900', color: colors.onSurfaceTertiary, letterSpacing: 1 },
+  miniStatusText: { color: '#FFF', fontSize: 10, fontWeight: '900' },
+  processHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md, paddingHorizontal: 4 },
+  processTitle: { fontSize: 13, fontWeight: '900', color: colors.onSurfaceTertiary, letterSpacing: 1.5 },
   timelineContainer: { paddingLeft: 10, marginBottom: spacing.xxl },
-  timelineLine: { position: 'absolute', left: 14, top: 10, bottom: 20, width: 2, backgroundColor: colors.borderStrong },
-  timelineItem: { flexDirection: 'row', alignItems: 'flex-start' },
-  timelineDot: { width: 10, height: 10, marginTop: 6, zIndex: 1, borderWidth: 1, borderColor: colors.borderStrong },
-  timelineTitle: { fontSize: 13, fontWeight: '700', color: colors.onSurface },
-  timelineMeta: { fontSize: 11, color: colors.muted, marginTop: 2 },
-  offlineBanner: { backgroundColor: colors.warning, padding: 4, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 },
-  offlineText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
   trackingCard: {
     backgroundColor: colors.surfaceSecondary,
     borderWidth: 2,
     borderColor: colors.borderStrong,
     padding: spacing.md,
     marginBottom: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md
   },
-  trackingTitle: { fontWeight: '900', fontSize: 14, color: colors.onSurface },
-  trackingSub: { fontSize: 11, color: colors.muted, marginTop: 2 },
-  emptyInline: { alignItems: 'center', padding: spacing.xl, borderStyle: 'dashed', borderWidth: 2, borderColor: colors.border },
+  activeUnitLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  statusIndicator: { width: 4, height: '100%', borderRadius: 2 },
+  trackingTitle: { fontWeight: '900', fontSize: 16, color: colors.onSurface, letterSpacing: 0.5 },
+  trackingSub: { fontSize: 11, color: colors.muted, marginTop: 2, fontWeight: '600' },
+  emptyInline: { alignItems: 'center', padding: spacing.xl, borderStyle: 'dashed', borderWidth: 2, borderColor: colors.border, marginTop: spacing.md },
 });
