@@ -809,7 +809,9 @@ async def update_inspection(
     update_data = {k: v for k, v in body.items() if k in [
         "compania_transportista", "placas_unidad", "numero_trailer",
         "numero_precinto", "sello_alta_seguridad", "sello_verificado",
-        "actividad_sospechosa", "inspector_nombre", "verificador_nombre",
+        "actividad_sospechosa", "inspector_nombre", "inspector_firma",
+        "verificador_nombre", "verificador_firma",
+        "approved_by_name", "approved_by_signature", "approval_status", "approval_note",
         "points", "status_general", "inspection_type"
     ]}
 
