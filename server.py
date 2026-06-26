@@ -527,54 +527,40 @@ async def create_inspector(body: UserRegister, current_user: Dict[str, Any] = De
 
 # ========== Inspections ==========
 def ensure_clean_image(base64_str: str) -> str:
-    """Asegura que la imagen tenga fondo blanco y esté optimizada para PDF/Email"""
+    """Asegura que la imagen tenga fondo blanco y sea un base64 válido para PDF"""
     if not base64_str or not isinstance(base64_str, str) or not base64_str.startswith('data:image'):
         return base64_str
 
-    # Marcador para evitar re-procesar imágenes ya limpiadas por esta función
-    if "clean=true" in base64_str:
-        return base64_str
-
     try:
-        # Extraer base64
-        header, encoded = base64_str.split(",", 1) if "," in base64_str else ("data:image/jpeg;base64", base64_str)
+        # Extraer base64 limpiamente
+        if "," in base64_str:
+            header, encoded = base64_str.split(",", 1)
+            # Limpiar restos de intentos fallidos
+            encoded = encoded.replace("clean=true,", "")
+        else:
+            header, encoded = "data:image/jpeg;base64", base64_str
+
         img = Image.open(io.BytesIO(base64.b64decode(encoded)))
 
-        # 1. Detectar si necesita reparación (cuadros negros o transparencia)
-        needs_fix = img.mode in ('RGBA', 'LA', 'P')
-
-        if not needs_fix and img.mode == 'RGB':
-            # Análisis de brillo: si la imagen es casi negra total, es un error de renderizado
-            stat = img.convert('L').getdata()
-            # Muestreo rápido (cada 10 pixeles) para velocidad
-            sample = list(stat)[::10]
-            avg_brightness = sum(sample) / len(sample)
-            if avg_brightness < 12: # Casi negro sólido
-                needs_fix = True
-
-        if needs_fix:
-            # Re-dibujar sobre fondo blanco puro
+        # 1. Quitar transparencia (evita cuadros negros)
+        if img.mode in ('RGBA', 'LA', 'P'):
             background = Image.new('RGB', img.size, (255, 255, 255))
             if img.mode == 'RGBA':
                 background.paste(img, mask=img.split()[3])
             else:
                 background.paste(img.convert('RGBA'))
             img = background
+        elif img.mode != 'RGB':
+            img = img.convert('RGB')
 
-        # 2. Redimensión preventiva (firmas no necesitan ser gigantes)
-        if img.width > 800:
-            img.thumbnail((800, 800), Image.Resampling.LANCZOS)
-
-        # 3. Guardar como JPEG eficiente
+        # 2. Devolver base64 limpio y estándar
         buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=70, optimize=True)
+        img.save(buf, format="JPEG", quality=75)
         new_encoded = base64.b64encode(buf.getvalue()).decode()
-
-        # Inyectar marcador de limpieza en el header
-        return f"data:image/jpeg;base64,clean=true,{new_encoded}"
+        return f"data:image/jpeg;base64,{new_encoded}"
     except Exception as e:
-        logger.error(f"Error limpiando imagen: {e}")
-        return base64_str
+        logger.error(f"Error reparando imagen: {e}")
+        return base64_str.replace("clean=true,", "")
 
 def _serialize_inspection(doc: Dict[str, Any]) -> Inspection:
     # Reparar solo las firmas para no alentar el listado general
