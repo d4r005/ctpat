@@ -1,4 +1,5 @@
 import { Inspection } from '../context/InspectionContext';
+import { INSPECTION_POINTS_19, INSPECTION_POINTS_9 } from '../constants/inspectionPoints';
 
 interface ReportData {
   inspection: Inspection;
@@ -74,14 +75,20 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
     `;
   };
 
-  const inspectionRows = i.points.map(t => `
+  const inspectionRows = i.points.map(t => {
+    // Buscar el punto original para obtener el nombre bilingüe
+    const allDefs = [...INSPECTION_POINTS_19, ...INSPECTION_POINTS_9];
+    const def = allDefs.find(d => d.number === t.number);
+    const bilingualName = def ? `${def.name_es} / ${def.name_zh}` : t.name;
+
+    return `
     <tr>
       <td style="padding:5px;border:1px solid #ddd;width:30px;">${t.number}</td>
-      <td style="padding:5px;border:1px solid #ddd;">${t.name}</td>
+      <td style="padding:5px;border:1px solid #ddd;">${bilingualName}</td>
       <td style="padding:5px;border:1px solid #ddd;font-weight:bold;color:${t.estado === 'bueno' ? '#16a34a' : '#dc2626'}">${t.estado === 'bueno' ? p.good : (t.estado === 'malo' ? p.bad : 'N/A')}</td>
       <td style="padding:5px;border:1px solid #ddd;">${t.comentarios || '-'}</td>
     </tr>
-  `).join('');
+  `}).join('');
 
   const inspectionPhotos = i.points
     .filter(p => p.photo)

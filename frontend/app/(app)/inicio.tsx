@@ -11,6 +11,7 @@ import NotificationsPanel from '@/src/components/NotificationsPanel';
 import * as Haptics from 'expo-haptics';
 import { colors, spacing, radius, typography } from '@/src/constants/theme';
 import { apiCall } from '@/src/api/client';
+import ProcessTracker from '@/src/components/ProcessTracker';
 
 import MainHeader from '@/src/components/MainHeader';
 
