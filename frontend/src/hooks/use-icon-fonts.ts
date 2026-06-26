@@ -8,6 +8,7 @@
 
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { useFonts } from "expo-font";
+import { Platform } from "react-native";
 
 const ICON_VECTOR_VERSION = "15.0.3";
 
@@ -46,7 +47,8 @@ const iconFontMap = (): Record<string, string> =>
 
 export const useIconFonts = (): readonly [boolean, Error | null] =>
   useFonts(
-    Constants.executionEnvironment === ExecutionEnvironment.StoreClient
+    // Cargamos desde CDN tanto en Expo Go como en Web para asegurar que los iconos se vean en Cloudflare/Vercel
+    Constants.executionEnvironment === ExecutionEnvironment.StoreClient || Platform.OS === 'web'
       ? iconFontMap()
       : {},
   );

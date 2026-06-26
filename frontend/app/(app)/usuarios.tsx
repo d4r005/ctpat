@@ -12,6 +12,7 @@ import { colors, spacing, typography } from '@/src/constants/theme';
 
 export default function Usuarios({ nested = false }: { nested?: boolean }) {
   const { user, token } = useAuth();
+  const isAdmin = user?.email?.toLowerCase().includes('d.trujillo') || user?.role === 'admin';
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
@@ -95,7 +96,7 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
         await apiCall(`/users/${editingUser.id}`, {
           method: 'PATCH', token,
           body: {
-            name: newName.trim(),
+            name: newName.trim().toUpperCase(), // Mayúsculas para nombres
             email: newEmail.trim().toLowerCase(),
             role: newRole,
             ...(newPassword.length >= 6 ? { password: newPassword } : {})
@@ -104,7 +105,12 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
       } else {
         await apiCall('/users/create-inspector', {
           method: 'POST', token,
-          body: { name: newName.trim(), email: newEmail.trim().toLowerCase(), password: newPassword, role: newRole },
+          body: {
+            name: newName.trim().toUpperCase(), // Mayúsculas para nombres
+            email: newEmail.trim().toLowerCase(),
+            password: newPassword,
+            role: newRole
+          },
         });
       }
       handleCloseModal();
@@ -182,6 +188,15 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
                     >
                       <Text style={[styles.toggleBtnText, { fontSize: 9 }]}>{item.active ? 'PAUSAR' : 'ACTIVAR'}</Text>
                     </Pressable>
+                    {isAdmin && (
+                      <Pressable
+                        testID={`usuario-delete-${item.id}`}
+                        style={[styles.toggleBtn, { backgroundColor: colors.error, paddingHorizontal: spacing.sm }]}
+                        onPress={() => handleDelete(item)}
+                      >
+                        <Ionicons name="trash" size={14} color="#FFF" />
+                      </Pressable>
+                    )}
                   </>
                 )}
               </View>
@@ -197,7 +212,13 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
               <Text style={styles.modalTitle}>{editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}</Text>
 
               <Text style={styles.label}>NOMBRE</Text>
-              <TextInput testID="create-user-name" style={styles.input} value={newName} onChangeText={setNewName} />
+              <TextInput
+                testID="create-user-name"
+                autoCapitalize="characters"
+                style={styles.input}
+                value={newName}
+                onChangeText={(text) => setNewName(text.toUpperCase())}
+              />
 
               <Text style={styles.label}>CORREO</Text>
               <TextInput testID="create-user-email" style={styles.input} value={newEmail} onChangeText={setNewEmail} autoCapitalize="none" keyboardType="email-address" />

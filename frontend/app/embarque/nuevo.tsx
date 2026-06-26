@@ -52,14 +52,24 @@ export default function EmbarqueNuevo() {
       if (fromCamera) {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
-        const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true, allowsEditing: false });
+        const r = await ImagePicker.launchCameraAsync({
+          mediaTypes: 'images',
+          quality: 0.3, // Optimizado (antes 0.5)
+          base64: true,
+          allowsEditing: false,
+        });
         if (!r.canceled && r.assets[0]?.base64) {
           set(field, `data:image/jpeg;base64,${r.assets[0].base64}`);
         }
       } else {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) { alert('Se necesita acceso a la galería'); return; }
-        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.5, base64: true, allowsEditing: false });
+        const r = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: 'images',
+          quality: 0.3, // Optimizado (antes 0.5)
+          base64: true,
+          allowsEditing: false,
+        });
         if (!r.canceled && r.assets[0]?.base64) {
           set(field, `data:image/jpeg;base64,${r.assets[0].base64}`);
         }
@@ -74,7 +84,11 @@ export default function EmbarqueNuevo() {
     }
     setSaving(true);
     try {
-      const created = await apiCall<any>('/shipping-tickets', { method: 'POST', body: form, token });
+      const payload = {
+        ...form,
+        record_id: params.record_id || '' // Enviar record_id para vínculo atómico
+      };
+      const created = await apiCall<any>('/shipping-tickets', { method: 'POST', body: payload, token });
 
       const nextStep = () => {
         if (params.record_id) {
@@ -87,7 +101,7 @@ export default function EmbarqueNuevo() {
       if (Platform.OS === 'web') {
         const proceed = window.confirm("Ticket de Embarque Guardado. ¿Desea proceder a registrar la SALIDA de la unidad?");
         if (proceed) nextStep();
-        else router.replace(`/embarque/${created.id}`);
+        else router.replace('/(app)/embarque'); // Regresar al panel de embarque
         return;
       }
 
@@ -95,12 +109,17 @@ export default function EmbarqueNuevo() {
         "Ticket Guardado",
         "¿Desea proceder a registrar la SALIDA de la unidad ahora?",
         [
-          { text: "Ver Ticket", onPress: () => router.replace(`/embarque/${created.id}`) },
+          { text: "REGRESAR AL PANEL", onPress: () => router.replace('/(app)/embarque') },
           { text: "SÍ, REGISTRAR SALIDA", onPress: nextStep }
         ]
       );
     } catch (e: any) {
-      alert(e.message);
+      console.error('Error saving shipping ticket:', e);
+      let errorMsg = e.message || 'Error desconocido';
+      if (errorMsg === 'Failed to fetch') {
+        errorMsg = 'Error de conexión con el servidor. Posiblemente las fotos son muy pesadas. Intenta de nuevo.';
+      }
+      alert(`Ocurrió un problema: ${errorMsg}`);
     } finally {
       setSaving(false);
     }
@@ -210,7 +229,17 @@ function F({ label, v, on, tid, multiline, kb, placeholder }: any) {
   return (
     <>
       <Text style={styles.label}>{label}</Text>
-      <TextInput testID={tid} style={[styles.input, multiline && { minHeight: 70, textAlignVertical: 'top' }]} value={v} onChangeText={on} multiline={!!multiline} keyboardType={kb || 'default'} placeholder={placeholder} placeholderTextColor={colors.muted} />
+      <TextInput
+        testID={tid}
+        autoCapitalize="characters"
+        style={[styles.input, multiline && { minHeight: 70, textAlignVertical: 'top' }]}
+        value={v}
+        onChangeText={(text) => on(text.toUpperCase())}
+        multiline={!!multiline}
+        keyboardType={kb || 'default'}
+        placeholder={placeholder}
+        placeholderTextColor={colors.muted}
+      />
     </>
   );
 }
@@ -226,7 +255,7 @@ function SignatureModal({ sigTarget, onClose, sigRef, onOK, t }: any) {
             onOK={onOK}
             webStyle={`.m-signature-pad--footer{display:none;}.m-signature-pad{box-shadow:none;border:2px solid #09090B;}body,html{background:#FFF;height:100%;}`}
             autoClear={false}
-            imageType="image/png"
+            imageType="image/jpeg"
             descriptionText={t('firme_dentro_desc')}
             clearText={t('borrar')}
             confirmText={t('guardar')}

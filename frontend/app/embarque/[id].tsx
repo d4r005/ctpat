@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import Signature from '@/src/components/SignaturePad';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -17,7 +18,10 @@ export default function EmbarqueDetail() {
   const [form, setForm] = useState<any>(null);
   const [saving, setSaving] = useState(false);
 
-  const isAdmin = ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+  const [showSigModal, setShowSigModal] = useState(false);
+  const [sigModalConfig, setSigModalConfig] = useState<any>({ title: '', onSave: () => {} });
+
+  const isAdmin = ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com', user?.email].includes(user?.email || '') || user?.role === 'admin';
 
   const load = async () => {
     try {
@@ -147,21 +151,69 @@ export default function EmbarqueDetail() {
           <Row k="Daño en caja" v={t.daño_caja || '-'} />
         </Section>
         <Section title="FIRMAS">
-          <Row k="Guardia" v={t.nombre_guardia} />
-          {t.firma_almacenista ? (
-            <View style={{ padding: spacing.sm, alignItems: 'center' }}>
-              <Image source={{ uri: t.firma_almacenista }} style={{ width: '80%', height: 80, resizeMode: 'contain', backgroundColor: '#fff' }} />
-              <Text style={[styles.firmaTxt, { fontSize: 10, paddingTop: 2 }]}>FIRMA ALMACENISTA: {t.almacenista}</Text>
-            </View>
-          ) : null}
-          {t.firma_guardia ? (
-            <View style={{ padding: spacing.sm, alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.divider }}>
-              <Image source={{ uri: t.firma_guardia }} style={{ width: '80%', height: 80, resizeMode: 'contain', backgroundColor: '#fff' }} />
-              <Text style={[styles.firmaTxt, { fontSize: 10, paddingTop: 2 }]}>FIRMA GUARDIA: {t.nombre_guardia}</Text>
-            </View>
-          ) : null}
+          <Row k="Guardia" v={editMode ? form.nombre_guardia : t.nombre_guardia} isEdit={editMode} on={(v: string) => setForm({...form, nombre_guardia: v})} />
+
+          <View style={{ padding: spacing.sm, alignItems: 'center' }}>
+            {(editMode ? form.firma_almacenista : t.firma_almacenista) ? (
+              <Image
+                source={{ uri: editMode ? form.firma_almacenista : t.firma_almacenista }}
+                style={{ width: '80%', height: 80, resizeMode: 'contain', backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border }}
+              />
+            ) : (
+              <Text style={{ color: colors.muted, fontStyle: 'italic', fontSize: 10 }}>Sin firma almacenista</Text>
+            )}
+            {editMode && (
+              <Pressable
+                style={styles.sigEditBtn}
+                onPress={() => {
+                  setSigModalConfig({
+                    title: 'Firma del Almacenista',
+                    onSave: (sig: string) => setForm({ ...form, firma_almacenista: sig })
+                  });
+                  setShowSigModal(true);
+                }}
+              >
+                <Text style={styles.sigEditBtnText}>CAMBIAR FIRMA ALMACENISTA</Text>
+              </Pressable>
+            )}
+            <Text style={[styles.firmaTxt, { fontSize: 10, paddingTop: 2 }]}>FIRMA ALMACENISTA: {editMode ? form.almacenista : t.almacenista}</Text>
+          </View>
+
+          <View style={{ padding: spacing.sm, alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.divider }}>
+            {(editMode ? form.firma_guardia : t.firma_guardia) ? (
+              <Image
+                source={{ uri: editMode ? form.firma_guardia : t.firma_guardia }}
+                style={{ width: '80%', height: 80, resizeMode: 'contain', backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border }}
+              />
+            ) : (
+              <Text style={{ color: colors.muted, fontStyle: 'italic', fontSize: 10 }}>Sin firma guardia</Text>
+            )}
+            {editMode && (
+              <Pressable
+                style={styles.sigEditBtn}
+                onPress={() => {
+                  setSigModalConfig({
+                    title: 'Firma del Guardia',
+                    onSave: (sig: string) => setForm({ ...form, firma_guardia: sig })
+                  });
+                  setShowSigModal(true);
+                }}
+              >
+                <Text style={styles.sigEditBtnText}>CAMBIAR FIRMA GUARDIA</Text>
+              </Pressable>
+            )}
+            <Text style={[styles.firmaTxt, { fontSize: 10, paddingTop: 2 }]}>FIRMA GUARDIA: {editMode ? form.nombre_guardia : t.nombre_guardia}</Text>
+          </View>
         </Section>
       </ScrollView>
+
+      {showSigModal && (
+        <SignatureModal
+          onClose={() => setShowSigModal(false)}
+          onSave={(sig) => { sigModalConfig.onSave(sig); setShowSigModal(false); }}
+          title={sigModalConfig.title}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -169,11 +221,62 @@ export default function EmbarqueDetail() {
 function Section({ title, children }: any) {
   return <View style={{ marginBottom: spacing.lg }}><Text style={styles.secTitle}>{title}</Text><View style={styles.secBody}>{children}</View></View>;
 }
-function Row({ k, v }: any) {
+function Row({ k, v, isEdit, on }: any) {
+  if (isEdit && on) {
+    return (
+      <View style={styles.row}>
+        <Text style={styles.rowK}>{k}</Text>
+        <TextInput
+          style={{ flex: 1, color: colors.onSurface, fontWeight: '700', fontSize: 12, padding: 0 }}
+          value={v}
+          onChangeText={on}
+        />
+      </View>
+    );
+  }
   return <View style={styles.row}><Text style={styles.rowK}>{k}</Text><Text style={styles.rowV}>{v || '-'}</Text></View>;
 }
 
-function PhotoBox({ label, uri, onPress, onRemove, isEdit }: any) {
+function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSave: (sig: string) => void; title: string }) {
+  const sigRef = React.useRef<any>(null);
+  const handleOK = (signature: string) => onSave(signature);
+  const style = `.m-signature-pad--footer {display: none; margin: 0px;}
+                 .m-signature-pad {box-shadow: none; border: 2px solid #09090B;}
+                 body,html { background-color: #FFF; height: 100%; }`;
+  return (
+    <View style={styles.modalOverlay} testID="signature-modal">
+      <View style={styles.modalCard}>
+        <Text style={styles.modalTitle}>{title}</Text>
+        <View style={styles.signatureCanvas}>
+          <Signature
+            ref={sigRef}
+            onOK={handleOK}
+            descriptionText="Firme dentro del recuadro"
+            clearText="Borrar"
+            confirmText="Guardar"
+            webStyle={style}
+            autoClear={false}
+            imageType="image/jpeg"
+          />
+        </View>
+        <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+          <Pressable style={[styles.secondaryBtn, { flex: 1 }]} onPress={onClose}>
+            <Text style={styles.secondaryBtnText}>CANCELAR</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.primaryBtn, { flex: 1 }]}
+            onPress={() => sigRef.current?.readSignature()}
+          >
+            <Text style={styles.primaryBtnText}>GUARDAR</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function PhotoBox({
+label, uri, onPress, onRemove, isEdit }: any) {
   return (
     <View style={styles.photoItem}>
       <Text style={styles.photoLabel}>{label}</Text>
@@ -229,4 +332,16 @@ const styles = StyleSheet.create({
   photoItem: { width: '48%', marginBottom: spacing.sm },
   photoLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, marginBottom: 4, letterSpacing: 0.5 },
   photoImg: { width: '100%', height: 120, resizeMode: 'cover', borderWidth: 2, borderColor: colors.borderStrong },
+
+  // Modal & Signature
+  modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(9,9,11,0.85)', justifyContent: 'center', padding: spacing.lg, zIndex: 100 },
+  modalCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong },
+  modalTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface, marginBottom: spacing.md, letterSpacing: 1 },
+  signatureCanvas: { height: 280 },
+  primaryBtn: { flex: 1, backgroundColor: colors.brandPrimary, padding: spacing.md, alignItems: 'center', justifyContent: 'center', minHeight: 48 },
+  primaryBtnText: { color: colors.onBrandPrimary, fontWeight: '900', letterSpacing: 1 },
+  secondaryBtn: { backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, alignItems: 'center', justifyContent: 'center' },
+  secondaryBtnText: { color: colors.onSurface, fontWeight: '900', letterSpacing: 1 },
+  sigEditBtn: { backgroundColor: colors.brandPrimary, padding: 8, marginTop: 4, width: '100%', alignItems: 'center' },
+  sigEditBtnText: { color: '#FFF', fontWeight: '900', fontSize: 10 },
 });

@@ -1,11 +1,8 @@
-// Fallback for local development if environment variable is not set
-const DEFAULT_URL = 'https://ctpat.onrender.com';
-let BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || DEFAULT_URL;
+// URL del servidor (Backend)
+let BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://d4r005-sriuc.hf.space';
 
-// Corrección automática si la URL de Vercel es incorrecta (ctpat-1 vs ctpat)
-if (BACKEND_URL.includes('ctpat-1.onrender.com')) {
-  BACKEND_URL = BACKEND_URL.replace('ctpat-1', 'ctpat');
-}
+// Asegurar que la URL sea limpia
+BACKEND_URL = BACKEND_URL.replace(/\/$/, "");
 const API_BASE = BACKEND_URL.endsWith('/')
   ? `${BACKEND_URL}api`
   : `${BACKEND_URL}/api`;

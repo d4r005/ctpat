@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
@@ -29,7 +30,15 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
+# Optimización de conexión para carga rápida
+client = AsyncIOMotorClient(
+    mongo_url,
+    maxPoolSize=50,
+    minPoolSize=10,
+    maxIdleTimeMS=10000,
+    connectTimeoutMS=5000,
+    serverSelectionTimeoutMS=5000
+)
 db = client[os.environ['DB_NAME']]
 
 JWT_SECRET = os.environ.get('JWT_SECRET', 'naf-inspection-secret-change-in-prod')
@@ -88,6 +97,7 @@ class InspectionCreate(BaseModel):
     verificador_firma: str = ""
     fecha_hora: Optional[str] = None
     client_uuid: Optional[str] = None
+    record_id: Optional[str] = None
 
 class Inspection(BaseModel):
     id: str
@@ -182,6 +192,7 @@ class VehicleRecord(BaseModel):
     entry: VehicleEntry
     exit: Optional[VehicleExit] = None
     inspection_id: Optional[str] = None
+    shipping_ticket_id: Optional[str] = None
     has_shipping_ticket: bool = False
     created_at: str
 
@@ -202,8 +213,12 @@ def add_watermark(base64_str: str) -> str:
         image_data = base64.b64decode(encoded)
         img = Image.open(io.BytesIO(image_data))
 
-        # Convertir a RGB si es necesario (evita errores con PNG o formatos raros)
-        if img.mode != 'RGB':
+        # Solución al cuadro negro: Si tiene transparencia, pegarla sobre fondo blanco
+        if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            background.paste(img, mask=img.split()[3] if img.mode == 'RGBA' else None)
+            img = background
+        elif img.mode != 'RGB':
             img = img.convert('RGB')
 
         # Redimensionar agresivamente para asegurar que el correo sea ligero (Gmail límite 25MB)
@@ -285,89 +300,80 @@ async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dic
     return user
 
 
-# ========== AppSheet Sync Utility ==========
-def flatten_dict(d, parent_key='', sep='_'):
-    items = []
-    for k, v in d.items():
-        new_key = f"{parent_key}{sep}{k}" if parent_key else k
-        if isinstance(v, dict):
-            items.extend(flatten_dict(v, new_key, sep=sep).items())
-        else:
-            items.append((new_key, v))
-    return dict(items)
+import asyncio
 
-async def sync_to_appsheet(table_name: str, data: Dict[str, Any]):
-    app_id = os.environ.get("APPSHEET_APP_ID")
-    access_key = os.environ.get("APPSHEET_ACCESS_KEY")
+async def sync_to_google_sheets(process_type: str, data: Dict[str, Any]):
+    """
+    Envía los datos a Google Sheets para seguimiento en tiempo real.
+    process_type: 'entrada' | 'inspeccion' | 'embarque' | 'salida'
+    """
     webhook_url = os.environ.get("GOOGLE_SHEET_WEBHOOK_URL")
+    if not webhook_url:
+        return
 
-    # Special handling for points to include state and photos individually
-    data_to_flatten = data.copy()
-    if "points" in data_to_flatten:
-        points = data_to_flatten.pop("points")
-        data_to_flatten["total_puntos"] = len(points)
-        data_to_flatten["fallas"] = sum(1 for p in points if p.get("estado") == "malo")
-        for p in points:
-            p_num = p.get("number")
-            data_to_flatten[f"punto_{p_num}_estado"] = p.get("estado")
-            data_to_flatten[f"punto_{p_num}_comentarios"] = p.get("comentarios", "")
-            # Añadir marca de agua si hay foto
-            p_photo = p.get("photo", "")
-            if p_photo and "data:image" in p_photo:
-                data_to_flatten[f"punto_{p_num}_foto"] = add_watermark(p_photo)
-            else:
-                data_to_flatten[f"punto_{p_num}_foto"] = p_photo
-
-    flattened = flatten_dict(data_to_flatten)
-
-    # Aplicar marca de agua a fotos conocidas en Caseta y otras tablas
-    photo_fields = [
-        "entry_foto_frente_unidad", "entry_foto_atras_caja", "entry_foto_id_chofer",
-        "exit_sello_vvtt_foto",
-        "foto_inicio_carga", "foto_media_carga", "foto_final_carga"
-    ]
-    for field in photo_fields:
-        if field in flattened and isinstance(flattened[field], str) and "data:image" in flattened[field]:
-            flattened[field] = add_watermark(flattened[field])
-
-    # Convert everything to string for AppSheet compatibility if it's not a basic type
-    for k, v in flattened.items():
-        if isinstance(v, (list, dict)):
-            flattened[k] = str(v)
-
-    if app_id and access_key:
+    def send_request():
         try:
-            url = f"https://www.appsheet.com/api/v2/apps/{app_id}/tables/{table_name}/Action"
+            # Preparar payload unificado para seguimiento
             payload = {
-                "Action": "Add",
-                "Properties": { "Locale": "es-MX", "Timezone": "Central Standard Time" },
-                "Rows": [flattened]
+                "proceso": process_type.upper(),
+                "fecha_servidor": datetime.now(timezone.utc).isoformat(),
+                "placas": "",
+                "chofer": "",
+                "compania": "",
+                "trailer": "",
+                "estado_inspeccion": "",
+                "aprobacion": "",
+                "cliente": "",
+                "pallets": "",
+                "inspector": "",
+                "supervisor": "",
+                "id_vinculo": data.get("id", "")
             }
-            headers = { "ApplicationAccessKey": access_key, "Content-Type": "application/json" }
-            response = requests.post(url, json=payload, headers=headers, timeout=10)
-            if response.status_code == 200:
-                logger.info(f"Successfully synced {table_name} to AppSheet API")
-                return
-            else:
-                logger.error(f"AppSheet API Error ({table_name}): {response.text}")
-        except Exception as e:
-            logger.error(f"Error syncing to AppSheet API ({table_name}): {e}")
 
-    # Option 2: Fallback to Google Sheets Webhook
-    if webhook_url:
-        try:
-            payload = {
-                "table": table_name,
-                "data": flattened,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
-            response = requests.post(webhook_url, json=payload, timeout=10)
-            if response.status_code == 200:
-                print(f"Successfully synced {table_name} to Google Sheets Webhook")
-            else:
-                print(f"Failed to sync to Webhook: {response.text}")
+            # Extraer datos específicos según el proceso
+            if process_type == 'entrada':
+                entry = data.get("entry", {})
+                payload.update({
+                    "placas": entry.get("placas_unidad"),
+                    "chofer": entry.get("chofer_nombre"),
+                    "compania": entry.get("compania_transporte"),
+                    "trailer": entry.get("numero_caja"),
+                    "inspector": data.get("user_id") # Guardia que recibe
+                })
+            elif process_type == 'inspeccion':
+                payload.update({
+                    "placas": data.get("placas_unidad"),
+                    "compania": data.get("compania_transportista"),
+                    "trailer": data.get("numero_trailer"),
+                    "estado_inspeccion": data.get("status_general"),
+                    "aprobacion": data.get("approval_status"),
+                    "inspector": data.get("inspector_nombre"),
+                    "supervisor": data.get("approved_by_name")
+                })
+            elif process_type == 'embarque':
+                payload.update({
+                    "placas": data.get("placas_unidad"),
+                    "cliente": data.get("cliente"),
+                    "pallets": data.get("numero_pallets"),
+                    "chofer": data.get("operador"),
+                    "inspector": data.get("almacenista")
+                })
+            elif process_type == 'salida':
+                entry = data.get("entry", {})
+                exit = data.get("exit", {})
+                payload.update({
+                    "placas": entry.get("placas_unidad"),
+                    "chofer": entry.get("chofer_nombre"),
+                    "trailer": exit.get("numero_caja_salida") or entry.get("numero_caja"),
+                    "inspector": exit.get("guardia_salida_nombre")
+                })
+
+            requests.post(webhook_url, json=payload, timeout=5)
         except Exception as e:
-            print(f"Error syncing to Webhook: {e}")
+            logger.error(f"Error en sincronización Excel (Sync): {e}")
+
+    # Ejecutar en un hilo separado para no bloquear la respuesta principal del servidor
+    asyncio.create_task(asyncio.to_thread(send_request))
 
 
 # ========== Auth Routes ==========
@@ -520,7 +526,53 @@ async def create_inspector(body: UserRegister, current_user: Dict[str, Any] = De
 
 
 # ========== Inspections ==========
+def ensure_clean_image(base64_str: str) -> str:
+    """Solución definitiva para cuadros negros: Fuerza fondo blanco y formato JPEG.
+    Ahora también maneja firmas antiguas que podrían no tener el encabezado data:image."""
+    if not base64_str or not isinstance(base64_str, str) or len(base64_str) < 10:
+        return base64_str
+
+    # Si no tiene el encabezado, intentamos agregarlo para procesarla
+    processed_b64 = base64_str
+    if not base64_str.startswith('data:image'):
+        processed_b64 = f"data:image/png;base64,{base64_str}"
+
+    try:
+        # 1. Extraer el contenido base64 puro
+        pure_base64 = processed_b64.split(",")[-1]
+        img_data = base64.b64decode(pure_base64)
+        img = Image.open(io.BytesIO(img_data))
+
+        # 2. Crear una imagen nueva BLANCA (esto mata cualquier transparencia que se vea negra)
+        clean_img = Image.new("RGB", img.size, (255, 255, 255))
+
+        # 3. Pegar la firma/foto encima.
+        if img.mode == 'RGBA':
+            clean_img.paste(img, mask=img.split()[3])
+        elif img.mode in ('P', 'L'):
+            temp_rgba = img.convert('RGBA')
+            clean_img.paste(temp_rgba, mask=temp_rgba.split()[3])
+        else:
+            clean_img.paste(img)
+
+        # 4. Guardar como JPEG ligero
+        buf = io.BytesIO()
+        clean_img.save(buf, format="JPEG", quality=85) # Un poco más de calidad para firmas
+        new_encoded = base64.b64encode(buf.getvalue()).decode()
+
+        return f"data:image/jpeg;base64,{new_encoded}"
+    except Exception as e:
+        logger.error(f"Error reparando imagen/firma: {e}")
+        # Si falló y no tenía encabezado, al menos devolvemos el intento con encabezado
+        # para que el <img> lo intente renderizar
+        return processed_b64
+
 def _serialize_inspection(doc: Dict[str, Any]) -> Inspection:
+    # Reparar solo las firmas para no alentar el listado general
+    for f in ["inspector_firma", "verificador_firma", "approved_by_signature"]:
+        if doc.get(f):
+            doc[f] = ensure_clean_image(doc[f])
+
     return Inspection(
         id=doc["id"],
         user_id=doc["user_id"],
@@ -544,6 +596,7 @@ def _serialize_inspection(doc: Dict[str, Any]) -> Inspection:
         approval_status=doc.get("approval_status", "pendiente"),
         approval_note=doc.get("approval_note", ""),
         approved_by_name=doc.get("approved_by_name", ""),
+        approved_by_signature=doc.get("approved_by_signature", ""),
         approved_at=doc.get("approved_at", ""),
     )
 
@@ -591,6 +644,18 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
     }
     await db.inspections.insert_one(doc)
 
+    # Autolink to vehicle record if record_id provided
+    if body.record_id:
+        try:
+            status = "inspeccionado" if status_general == "bueno" else "inspeccionado" # we usually mark as inspected regardless of good/bad
+            await db.vehicle_records.update_one(
+                {"id": body.record_id},
+                {"$set": {"inspection_id": insp_id, "status": status}}
+            )
+            logger.info(f"Auto-linked inspection {insp_id} to record {body.record_id}")
+        except Exception as e:
+            logger.error(f"Error auto-linking inspection: {e}")
+
     # Log Activity
     await _log_activity(
         "inspection", insp_id,
@@ -600,9 +665,16 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
         status_general
     )
 
-    # Sync to AppSheet
+    # Notificar a Supervisores: SE REQUIERE APROBACIÓN
+    await _notify_supervisors(
+        title="Aprobación Necesaria",
+        message=f"La unidad {body.placas_unidad} ha sido inspeccionada por {body.inspector_nombre} y requiere aprobación.",
+        inspection_id=insp_id
+    )
+
+    # Sync to Google Sheets
     try:
-        await sync_to_appsheet("Inspecciones", doc)
+        await sync_to_google_sheets("inspeccion", doc)
     except: pass
 
     return _serialize_inspection(doc)
@@ -615,6 +687,7 @@ async def list_inspections(
     inspector_id: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    summary: bool = Query(False)
 ):
     filt: Dict[str, Any] = {}
     if scope == "all":
@@ -633,7 +706,14 @@ async def list_inspections(
             date_filt["$lte"] = date_to + "T23:59:59.999999"
         filt["created_at"] = date_filt
 
-    docs = await db.inspections.find(filt, {"_id": 0, "client_uuid": 0}).sort("created_at", -1).to_list(2000)
+    projection = {"_id": 0, "client_uuid": 0}
+    if summary:
+        projection["points"] = 0
+        projection["inspector_firma"] = 0
+        projection["verificador_firma"] = 0
+        projection["approved_by_signature"] = 0
+
+    docs = await db.inspections.find(filt, projection).sort("created_at", -1).to_list(1000 if summary else 500)
     return [_serialize_inspection(d) for d in docs]
 
 
@@ -707,7 +787,8 @@ async def export_csv(
 @api_router.get("/inspections/{inspection_id}", response_model=Inspection)
 async def get_inspection(inspection_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     filt: Dict[str, Any] = {"id": inspection_id}
-    if current_user.get("role") != "supervisor":
+    # Permitir que supervisores y admins vean cualquier inspección
+    if current_user.get("role") not in ["supervisor", "admin"] and not is_admin(current_user):
         filt["user_id"] = current_user["id"]
     doc = await db.inspections.find_one(filt, {"_id": 0, "client_uuid": 0})
     if not doc:
@@ -718,7 +799,7 @@ async def get_inspection(inspection_id: str, current_user: Dict[str, Any] = Depe
 @api_router.put("/inspections/{inspection_id}", response_model=Inspection)
 async def update_inspection(
     inspection_id: str, body: Dict[str, Any],
-    current_user: Dict[str, Any] = Depends(require_supervisor),
+    current_user: Dict[str, Any] = Depends(require_admin),
 ):
     doc = await db.inspections.find_one({"id": inspection_id}, {"_id": 0})
     if not doc:
@@ -728,7 +809,9 @@ async def update_inspection(
     update_data = {k: v for k, v in body.items() if k in [
         "compania_transportista", "placas_unidad", "numero_trailer",
         "numero_precinto", "sello_alta_seguridad", "sello_verificado",
-        "actividad_sospechosa", "inspector_nombre", "verificador_nombre",
+        "actividad_sospechosa", "inspector_nombre", "inspector_firma",
+        "verificador_nombre", "verificador_firma",
+        "approved_by_name", "approved_by_signature", "approval_status", "approval_note",
         "points", "status_general", "inspection_type"
     ]}
 
@@ -738,11 +821,11 @@ async def update_inspection(
     await db.inspections.update_one({"id": inspection_id}, {"$set": update_data})
     updated_doc = await db.inspections.find_one({"id": inspection_id}, {"_id": 0})
 
-    # Sync to AppSheet
+    # Sync update to Google Sheets
     try:
-        await sync_to_appsheet("Inspecciones", updated_doc)
+        await sync_to_google_sheets("inspeccion", updated_doc)
     except Exception as e:
-        logger.error(f"Error syncing update to AppSheet: {e}")
+        logger.error(f"Error syncing update to Google Sheets: {e}")
 
     return _serialize_inspection(updated_doc)
 
@@ -846,14 +929,14 @@ async def approve_inspection(
 
     await _create_notification(
         user_id=doc["user_id"],
-        title="Inspección aprobada",
-        message=f"Tu inspección {doc.get('placas_unidad','')} fue APROBADA por {current_user['name']}." + (f" Nota: {body.note}" if body.note else ""),
+        title="Inspección aprobada ✓",
+        message=f"¡Atención! Tu inspección de la unidad {doc.get('placas_unidad','')} ha sido APROBADA por {current_user['name']}.",
         inspection_id=inspection_id,
     )
 
-    # Sync update to AppSheet
+    # Sync update to Google Sheets
     try:
-        await sync_to_appsheet("Inspecciones", doc)
+        await sync_to_google_sheets("inspeccion", doc)
     except: pass
 
     return _serialize_inspection(doc)
@@ -879,22 +962,39 @@ async def reject_inspection(
 
     await _log_activity(
         "inspection", inspection_id,
-        f"Inspección Aprobada: {doc.get('placas_unidad')}",
-        f"Aprobada por {body.name or current_user['name']}",
+        f"Inspección RECHAZADA: {doc.get('placas_unidad')}",
+        f"Rechazada por {body.name or current_user['name']}. Motivo: {body.note}",
         current_user["name"],
-        "bueno"
+        "malo"
     )
 
     await _create_notification(
         user_id=doc["user_id"],
-        title="Inspección rechazada",
-        message=f"Tu inspección {doc.get('placas_unidad','')} fue RECHAZADA por {current_user['name']}." + (f" Motivo: {body.note}" if body.note else ""),
+        title="Inspección RECHAZADA 🚨",
+        message=f"URGENTE: La unidad {doc.get('placas_unidad','')} ha sido RECHAZADA por {current_user['name']}. Motivo: {body.note}",
         inspection_id=inspection_id,
     )
 
-    # Sync update to AppSheet
+    # ALERTA AUTOMÁTICA POR RECHAZO (Seguridad) - En segundo plano
+    async def bg_reject_alert():
+        try:
+            record = await db.vehicle_records.find_one({"inspection_id": inspection_id})
+            if record:
+                await _trigger_automatic_report(record["id"])
+            else:
+                await send_automatic_report(
+                    f"ALERTA DE SEGURIDAD: Inspección RECHAZADA - {doc.get('placas_unidad')}",
+                    os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com"),
+                    f"La inspección para la unidad <b>{doc.get('placas_unidad')}</b> ha sido RECHAZADA.<br/>Motivo: {body.note}"
+                )
+        except Exception as e:
+            logger.error(f"Error enviando alerta de rechazo: {e}")
+
+    asyncio.create_task(bg_reject_alert())
+
+    # Sync update to Google Sheets
     try:
-        await sync_to_appsheet("Inspecciones", doc)
+        await sync_to_google_sheets("inspeccion", doc)
     except: pass
 
     return _serialize_inspection(doc)
@@ -922,6 +1022,12 @@ async def _create_notification(user_id: str, title: str, message: str, inspectio
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.notifications.insert_one(doc)
+
+async def _notify_supervisors(title: str, message: str, inspection_id: Optional[str] = None):
+    """Envía una notificación a todos los supervisores y administradores"""
+    supervisors = await db.users.find({"role": {"$in": ["supervisor", "admin"]}}).to_list(100)
+    for sup in supervisors:
+        await _create_notification(sup["id"], title, message, inspection_id)
 
 async def _log_activity(type: str, item_id: str, title: str, subtitle: str, user_name: str, status: str = ""):
     """Registra actividad para el panel de inicio"""
@@ -980,28 +1086,82 @@ async def list_notifications(current_user: Dict[str, Any] = Depends(get_current_
     return [Notification(**d) for d in docs]
 
 @api_router.get("/activities")
-async def list_activities(current_user: Dict[str, Any] = Depends(get_current_user)):
-    """Lista actividad reciente global (para supervisores) o propia"""
-    filt = {}
-    # Supervisores ven todo el movimiento de la planta
-    if current_user.get("role") not in ["supervisor", "admin"] and not is_admin(current_user):
-        filt["user_name"] = current_user["name"]
+async def get_recent_activities(
+    limit: int = Query(50, le=100),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Retorna una lista unificada de las actividades más recientes (inspecciones, caseta, embarque)."""
+    # 1. Inspections (Excluding large fields like photos)
+    insp_filt = {}
+    if current_user["role"] not in ["supervisor", "admin"]:
+        insp_filt["user_id"] = current_user["id"]
+    inspections = await db.inspections.find(insp_filt, {"_id": 0, "points": 0, "inspector_firma": 0, "verificador_firma": 0}).sort("created_at", -1).to_list(limit)
 
-    docs = await db.activities.find(filt, {"_id": 0}).sort("created_at", -1).to_list(50)
-    return docs
+    # 2. Vehicle Records
+    vec_filt = {}
+    if current_user["role"] not in ["supervisor", "admin"]:
+        vec_filt["user_id"] = current_user["id"]
+    records = await db.vehicle_records.find(vec_filt, {"_id": 0, "entry.foto_frente_unidad": 0, "entry.foto_atras_caja": 0, "entry.foto_id_chofer": 0, "exit.sello_vvtt_foto": 0, "entry.firma_operador": 0}).sort("created_at", -1).to_list(limit)
+
+    # 3. Shipping Tickets
+    ship_filt = {}
+    if current_user["role"] not in ["supervisor", "admin"]:
+        ship_filt["user_id"] = current_user["id"]
+    tickets = await db.shipping_tickets.find(ship_filt, {"_id": 0, "foto_inicio_carga": 0, "foto_media_carga": 0, "foto_final_carga": 0, "firma_almacenista": 0, "firma_guardia": 0}).sort("created_at", -1).to_list(limit)
+
+    # Unify
+    activities = []
+    for i in inspections:
+        activities.append({
+            "id": i["id"],
+            "type": "inspection",
+            "title": f"Inspección: {i.get('placas_unidad')}",
+            "subtitle": f"{i.get('compania_transportista')} · {i.get('numero_trailer')}",
+            "status": i.get("status_general"),
+            "created_at": i["created_at"],
+            "user_name": i.get("inspector_nombre", "Inspector"),
+            "inspection_type": i.get("inspection_type")
+        })
+
+    for r in records:
+        title = "Entrada Vehículo" if r["status"] == "entrada" else "Salida Vehículo"
+        activities.append({
+            "id": r["id"],
+            "type": "caseta",
+            "title": f"{title}: {r['entry'].get('placas_unidad')}",
+            "subtitle": f"{r['entry'].get('chofer_nombre')} · {r['entry'].get('compania_transporte', '')}",
+            "status": r["status"],
+            "created_at": r["created_at"],
+            "user_name": r['entry'].get('guardia_caseta_nombre', "Guardia")
+        })
+
+    for t in tickets:
+        activities.append({
+            "id": t["id"],
+            "type": "embarque",
+            "title": f"Ticket Embarque: {t.get('placas_unidad')}",
+            "subtitle": f"Cliente: {t.get('cliente')} · {t.get('operador')}",
+            "status": "ticket",
+            "created_at": t["created_at"],
+            "user_name": t.get("almacenista")
+        })
+
+    # Sort all by created_at descending
+    activities.sort(key=lambda x: x["created_at"], reverse=True)
+    return activities[:limit]
 
 
-@api_router.post("/test-appsheet")
-async def test_appsheet(current_user: Dict[str, Any] = Depends(require_admin)):
-    """Ruta para probar la conexión con AppSheet API"""
+@api_router.post("/test-sheets")
+async def test_sheets(current_user: Dict[str, Any] = Depends(require_admin)):
+    """Ruta para probar la conexión con Google Sheets"""
     test_data = {
         "id": str(uuid.uuid4()),
         "test": True,
-        "message": "Prueba de conexión desde SRIUC API",
+        "message": "Prueba de conexión desde SRIUC API a Google Sheets",
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
-    await sync_to_appsheet("Test", test_data)
-    return {"message": "Petición de prueba enviada a AppSheet. Revisa los logs del servidor."}
+    await sync_to_google_sheets("entrada", {"id": test_data["id"], "entry": {"placas_unidad": "TEST-123", "chofer_nombre": "PRUEBA", "compania_transporte": "NAF", "numero_caja": "000"}})
+    return {"message": "Petición de prueba enviada a Google Sheets. Revisa tu Excel."}
 
 
 @api_router.post("/test-email")
@@ -1062,6 +1222,29 @@ async def admin_update_shipping_ticket(
     if "_id" in body: del body["_id"]
     res = await db.shipping_tickets.update_one({"id": ticket_id}, {"$set": body})
     if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Ticket no encontrado")
+    return {"ok": True}
+
+# --- DELETE ROUTES FOR ADMIN ---
+
+@api_router.delete("/inspections/{inspection_id}/admin-delete")
+async def admin_delete_inspection(inspection_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
+    res = await db.inspections.delete_one({"id": inspection_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Inspección no encontrada")
+    return {"ok": True}
+
+@api_router.delete("/vehicle-records/{rec_id}/admin-delete")
+async def admin_delete_vehicle_record(rec_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
+    res = await db.vehicle_records.delete_one({"id": rec_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    return {"ok": True}
+
+@api_router.delete("/shipping-tickets/{ticket_id}/admin-delete")
+async def admin_delete_shipping_ticket(ticket_id: str, current_user: Dict[str, Any] = Depends(require_admin)):
+    res = await db.shipping_tickets.delete_one({"id": ticket_id})
+    if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Ticket no encontrado")
     return {"ok": True}
 
@@ -1149,6 +1332,18 @@ async def mark_all_read(current_user: Dict[str, Any] = Depends(get_current_user)
 # ========== Vehicle Records (Caseta) ==========
 @api_router.post("/vehicle-records", response_model=VehicleRecord)
 async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any] = Depends(get_current_user)):
+    # EVITAR DUPLICADOS: Si ya hay una unidad con las mismas placas en patio (entrada o inspeccionado), no crear una nueva.
+    existing = await db.vehicle_records.find_one({
+        "entry.placas_unidad": body.placas_unidad.trim().toUpperCase(),
+        "status": {"$in": ["entrada", "inspeccionado"]}
+    })
+
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"La unidad con placas {body.placas_unidad} ya se encuentra registrada en el patio."
+        )
+
     rec_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     entry_data = body.dict()
@@ -1172,12 +1367,75 @@ async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any]
         "entrada"
     )
 
-    # Sync to AppSheet
+    # Notificar proceso
+    await _notify_supervisors(
+        title="Nueva Entrada",
+        message=f"Unidad {body.placas_unidad} ha ingresado a planta (Caseta)."
+    )
+
+    # Sync to Google Sheets
     try:
-        await sync_to_appsheet("Caseta", doc)
+        await sync_to_google_sheets("entrada", doc)
     except: pass
 
     return VehicleRecord(**{k: v for k, v in doc.items() if k != "_id"})
+
+
+async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Busca y vincula inspecciones y tickets de embarque si no están vinculados directamente.
+    Esto repara la trazabilidad del proceso en tiempo real.
+    """
+    rec_id = record["id"]
+    placas = record["entry"].get("placas_unidad", "").strip()
+    if not placas:
+        return record
+
+    updated = False
+
+    # 1. Vincular Inspección
+    if not record.get("inspection_id"):
+        # Buscar inspección reciente para estas placas (mismo día)
+        start_dt = datetime.fromisoformat(record["created_at"].replace('Z', '+00:00')) - timedelta(hours=24)
+        insp = await db.inspections.find_one({
+            "placas_unidad": placas,
+            "created_at": {"$gte": start_dt.isoformat()}
+        }, sort=[("created_at", -1)])
+
+        if insp:
+            record["inspection_id"] = insp["id"]
+            if record["status"] == "entrada":
+                record["status"] = "inspeccionado"
+            updated = True
+
+    # 2. Vincular Ticket de Embarque
+    if not record.get("shipping_ticket_id"):
+        start_dt = datetime.fromisoformat(record["created_at"].replace('Z', '+00:00')) - timedelta(hours=12)
+        ticket = await db.shipping_tickets.find_one({
+            "placas_unidad": placas,
+            "created_at": {"$gte": start_dt.isoformat()}
+        }, sort=[("created_at", -1)])
+
+        if ticket:
+            record["shipping_ticket_id"] = ticket["id"]
+            record["has_shipping_ticket"] = True
+            updated = True
+    elif not record.get("has_shipping_ticket"):
+        record["has_shipping_ticket"] = True
+        updated = True
+
+    if updated:
+        await db.vehicle_records.update_one(
+            {"id": rec_id},
+            {"$set": {
+                "inspection_id": record.get("inspection_id"),
+                "shipping_ticket_id": record.get("shipping_ticket_id"),
+                "has_shipping_ticket": record.get("has_shipping_ticket", False),
+                "status": record["status"]
+            }}
+        )
+
+    return record
 
 
 @api_router.get("/vehicle-records", response_model=List[VehicleRecord])
@@ -1186,8 +1444,6 @@ async def list_vehicle_records(
     status: Optional[str] = None,
 ):
     filt: Dict[str, Any] = {}
-    # Administradores y supervisores ven todo.
-    # Inspectores ven lo suyo y lo que está actualmente en patio (para poder inspeccionar)
     if current_user.get("role") not in ["supervisor", "admin"] and not is_admin(current_user):
         filt["$or"] = [
             {"user_id": current_user["id"]},
@@ -1196,19 +1452,25 @@ async def list_vehicle_records(
 
     if status:
         filt["status"] = status
-    docs = await db.vehicle_records.find(filt, {"_id": 0}).sort("created_at", -1).to_list(1000)
 
-    # Check for shipping tickets to sync status
+    # Excluir campos pesados en el listado general
+    projection = {
+        "_id": 0,
+        "entry.foto_frente_unidad": 0, "entry.foto_atras_caja": 0,
+        "entry.foto_id_chofer": 0, "entry.firma_operador": 0,
+        "exit.sello_vvtt_foto": 0, "exit.firma_guardia": 0
+    }
+
+    docs = await db.vehicle_records.find(filt, projection).sort("created_at", -1).to_list(200)
+
+    if not docs:
+        return []
+
+    # Aplicar vinculación inteligente a cada registro para asegurar que los puntos del proceso se vean bien
     res = []
     for d in docs:
-        plates = d["entry"].get("placas_unidad", "")
-        # Find if there is a shipping ticket after this entry
-        ticket = await db.shipping_tickets.find_one({
-            "placas_unidad": plates,
-            "created_at": {"$gte": d["created_at"]}
-        })
-        d["has_shipping_ticket"] = bool(ticket)
-        res.append(VehicleRecord(**d))
+        linked_d = await _ensure_record_links(d)
+        res.append(VehicleRecord(**linked_d))
 
     return res
 
@@ -1216,18 +1478,33 @@ async def list_vehicle_records(
 @api_router.get("/vehicle-records/{rec_id}", response_model=VehicleRecord)
 async def get_vehicle_record(rec_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     filt: Dict[str, Any] = {"id": rec_id}
-    if current_user.get("role") != "supervisor":
+    # Permitir que supervisores y admins vean cualquier registro
+    if current_user.get("role") not in ["supervisor", "admin"] and not is_admin(current_user):
         filt["user_id"] = current_user["id"]
     doc = await db.vehicle_records.find_one(filt, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
+
+    # Asegurar vínculos antes de devolver
+    doc = await _ensure_record_links(doc)
+
+    # Limpieza de imágenes en tiempo real para reportes
+    if "entry" in doc:
+        for f in ["foto_frente_unidad", "foto_atras_caja", "foto_id_chofer", "firma_operador"]:
+            if doc["entry"].get(f):
+                doc["entry"][f] = ensure_clean_image(doc["entry"][f])
+    if doc.get("exit"):
+        for f in ["sello_vvtt_foto", "firma_guardia"]:
+            if doc["exit"].get(f):
+                doc["exit"][f] = ensure_clean_image(doc["exit"][f])
+
     return VehicleRecord(**doc)
 
 
 @api_router.put("/vehicle-records/{rec_id}", response_model=VehicleRecord)
 async def update_vehicle_record(
     rec_id: str, body: Dict[str, Any],
-    current_user: Dict[str, Any] = Depends(require_supervisor),
+    current_user: Dict[str, Any] = Depends(require_admin),
 ):
     doc = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
     if not doc:
@@ -1243,9 +1520,9 @@ async def update_vehicle_record(
     await db.vehicle_records.update_one({"id": rec_id}, {"$set": update_data})
     updated_doc = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
 
-    # Sync to AppSheet
+    # Sync to Google Sheets
     try:
-        await sync_to_appsheet("Caseta", updated_doc)
+        await sync_to_google_sheets("salida", updated_doc)
     except: pass
 
     return VehicleRecord(**updated_doc)
@@ -1275,16 +1552,53 @@ async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[
         "salida"
     )
 
-    # Intentar enviar reporte automático al finalizar la salida
-    try:
-        await _trigger_automatic_report(rec_id)
-        # Sync update to AppSheet
-        await sync_to_appsheet("Caseta", doc)
-    except Exception as e:
-        print(f"Error al disparar reporte o sync: {e}")
+    # Notificar salida
+    await _notify_supervisors(
+        title="Salida de Unidad",
+        message=f"La unidad {doc['entry']['placas_unidad']} ha salido de planta."
+    )
+
+    # Ejecutar en segundo plano para no demorar la respuesta a la App
+    async def bg_report():
+        try:
+            await _trigger_automatic_report(rec_id)
+            await sync_to_google_sheets("salida", doc)
+        except Exception as e:
+            logger.error(f"Error en reporte/sync background: {e}")
+
+    asyncio.create_task(bg_report())
 
     return VehicleRecord(**doc)
 
+
+def compress_image_base64(base64_str: str, max_size=(600, 600)) -> str:
+    """Comprime y redimensiona una imagen en base64 para que el correo no sea pesado."""
+    try:
+        if not base64_str or "data:image" not in base64_str:
+            return base64_str
+
+        # Extraer el contenido base64
+        header, encoded = base64_str.split(",", 1)
+        image_data = base64.b64decode(encoded)
+        image = Image.open(io.BytesIO(image_data))
+
+        # Convertir a RGB si es necesario (para evitar problemas con PNG transparentes en JPEG)
+        if image.mode in ("RGBA", "P"):
+            image = image.convert("RGB")
+
+        # Redimensionar manteniendo proporción
+        image.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+        # Guardar comprimido
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG", quality=60, optimize=True)
+
+        # Convertir de nuevo a base64
+        compressed_base64 = base64.b64encode(buffer.getvalue()).decode()
+        return f"data:image/jpeg;base64,{compressed_base64}"
+    except Exception as e:
+        logger.error(f"Error comprimiendo imagen: {e}")
+        return base64_str
 
 async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[str] = None):
     logger.info(f"Generando reporte consolidado para ID: {rec_id}")
@@ -1293,54 +1607,39 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
         logger.error(f"Reporte cancelado: No existe el registro {rec_id}")
         return False
 
-    placas = record["entry"].get("placas_unidad", "").strip()
+    # ASEGURAR VÍNCULOS (REPARACIÓN DE TRAZABILIDAD)
+    # Esto busca inspecciones y tickets por placas si no están vinculados explícitamente
+    record = await _ensure_record_links(record)
 
-    # Buscar inspección vinculada o por placas (con búsqueda flexible)
+    # Cargar los objetos vinculados
     inspection = None
     if record.get("inspection_id"):
         inspection = await db.inspections.find_one({"id": record["inspection_id"]})
 
-    if not inspection and placas:
-        # Intentar búsqueda exacta primero
-        inspection = await db.inspections.find_one(
-            {"placas_unidad": placas},
-            sort=[("created_at", -1)]
-        )
-        if not inspection:
-            # Búsqueda flexible (solo letras y números)
-            norm_placas = re.sub(r'[^a-zA-Z0-9]', '', placas)
-            if norm_placas:
-                flex_regex = ".*".join(list(norm_placas))
-                inspection = await db.inspections.find_one(
-                    {"placas_unidad": {"$regex": flex_regex, "$options": "i"}},
-                    sort=[("created_at", -1)]
-                )
-
-    # Buscar ticket de embarque con búsqueda flexible
     ticket = None
-    if placas:
-        fecha_inicio = record["created_at"]
-        fecha_fin = record.get("exit", {}).get("fecha_salida") or datetime.now(timezone.utc).isoformat()
-        # Expandimos rango de búsqueda a 3 horas para mayor seguridad
-        start_dt = datetime.fromisoformat(fecha_inicio.replace('Z', '+00:00')) - timedelta(hours=3)
-        end_dt = datetime.fromisoformat(fecha_fin.replace('Z', '+00:00')) + timedelta(hours=3)
+    if record.get("shipping_ticket_id"):
+        ticket = await db.shipping_tickets.find_one({"id": record["shipping_ticket_id"]})
 
-        # Intento exacto
-        ticket = await db.shipping_tickets.find_one({
-            "placas_unidad": placas,
-            "created_at": {"$gte": start_dt.isoformat(), "$lte": end_dt.isoformat()}
-        })
-        if not ticket:
-            # Intento flexible
-            norm_placas = re.sub(r'[^a-zA-Z0-9]', '', placas)
-            if norm_placas:
-                flex_regex = ".*".join(list(norm_placas))
-                ticket = await db.shipping_tickets.find_one({
-                    "placas_unidad": {"$regex": flex_regex, "$options": "i"},
-                    "created_at": {"$gte": start_dt.isoformat(), "$lte": end_dt.isoformat()}
-                })
+    placas = record["entry"].get("placas_unidad", "").strip()
+    logger.info(f"Reporte Consolidado - Placas: {placas} - Inspección: {'SI' if inspection else 'NO'}, Ticket: {'SI' if ticket else 'NO'}")
 
-    logger.info(f"Datos encontrados - Inspección: {'SI' if inspection else 'NO'}, Ticket: {'SI' if ticket else 'NO'}")
+    # PRE-PROCESAR FIRMAS PARA EVITAR CUADROS NEGROS Y ASEGURAR VISIBILIDAD DE FIRMAS ANTIGUAS
+    f_operador = ensure_clean_image(record["entry"].get("firma_operador", ""))
+    f_guardia_salida = ""
+    if record.get("exit"):
+        f_guardia_salida = ensure_clean_image(record["exit"].get("firma_guardia", ""))
+
+    f_inspector = ""
+    f_supervisor = ""
+    if inspection:
+        f_inspector = ensure_clean_image(inspection.get("inspector_firma", ""))
+        f_supervisor = ensure_clean_image(inspection.get("approved_by_signature", ""))
+
+    f_almacenista = ""
+    f_guardia_embarque = ""
+    if ticket:
+        f_almacenista = ensure_clean_image(ticket.get("firma_almacenista", ""))
+        f_guardia_embarque = ensure_clean_image(ticket.get("firma_guardia", ""))
 
     subject = f"REPORTE CONSOLIDADO SRIUC - UNIDAD: {placas}"
     recipient = recipient_override or os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com")
@@ -1445,8 +1744,8 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
                 </div>
 
                 <div style="margin-top: 15px; display: flex; gap: 20px;">
-                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA CONDUCTOR (ENTRADA) / 司机签字:</p><img src="{record["entry"]["firma_operador"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if record["entry"].get("firma_operador") else ''}
-                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA GUARDIA (SALIDA) / 警卫签字:</p><img src="{record["exit"]["firma_guardia"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if record.get("exit") and record["exit"].get("firma_guardia") else ''}
+                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA CONDUCTOR (ENTRADA) / 司机签字:</p><img src="{f_operador}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if f_operador else ''}
+                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA GUARDIA (SALIDA) / 警卫签字:</p><img src="{f_guardia_salida}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if f_guardia_salida else ''}
                 </div>
                 <div style="margin-top: 10px;">{caseta_photos_html}</div>
 
@@ -1460,12 +1759,12 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
                             <td style="width: 50%; vertical-align: top;">
                                 <p style="margin: 0; font-weight: bold;">Inspector / 检查员:</p>
                                 <p style="margin: 2px 0;">{inspection.get('inspector_nombre', 'N/A')}</p>
-                                {f'<img src="{inspection.get("inspector_firma")}" style="height:45px; border-bottom:1px solid #0A2540;" />' if inspection.get("inspector_firma") else ''}
+                                {f'<img src="{f_inspector}" style="height:45px; border-bottom:1px solid #0A2540;" />' if f_inspector else ''}
                             </td>
                             <td style="width: 50%; vertical-align: top;">
                                 <p style="margin: 0; font-weight: bold;">Supervisor / 主管:</p>
                                 <p style="margin: 2px 0;">{inspection.get('approved_by_name', 'N/A')}</p>
-                                {f'<img src="{inspection.get("approved_by_signature")}" style="height:45px; border-bottom:1px solid #0A2540;" />' if inspection.get("approved_by_signature") else ''}
+                                {f'<img src="{f_supervisor}" style="height:45px; border-bottom:1px solid #0A2540;" />' if f_supervisor else ''}
                             </td>
                         </tr>
                     </table>
@@ -1495,8 +1794,8 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
                     <tr><td style="padding: 8px; font-weight: bold;">Guardia / 警卫:</td><td style="padding: 8px;">{ticket.get('nombre_guardia', 'N/A')}</td></tr>
                 </table>
                 <div style="margin-top: 15px; display: flex; gap: 20px;">
-                    {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA ALMACENISTA / 仓管员签字:</p><img src="{ticket["firma_almacenista"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if ticket.get("firma_almacenista") else ''}
-                    {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA GUARDIA / 警卫签字:</p><img src="{ticket["firma_guardia"]}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if ticket.get("firma_guardia") else ''}
+                    {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA ALMACENISTA / 仓管员签字:</p><img src="{f_almacenista}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if f_almacenista else ''}
+                    {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA GUARDIA / 警卫签字:</p><img src="{f_guardia_embarque}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if f_guardia_embarque else ''}
                 </div>
                 <div style="margin-top: 10px;">{ticket_photos_html}</div>
                 ''' if ticket else "<p style='color: #666; font-style: italic;'>No se generó ticket de embarque para este movimiento / 本次操作未生成运输单。</p>"}
@@ -1505,15 +1804,6 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
             <div style="margin-top: 40px; padding: 20px; background-color: #f9fafb; text-align: center; font-size: 12px; color: #666;">
                 <p>Este es un reporte automático generado por el Sistema SRIUC / 这是由 SRIUC 系统生成的自动报告。</p>
                 <p>&copy; {datetime.now().year} Branco Industries - Todos los derechos reservados / 版权所有。</p>
-            </div>
-        </body>
-    </html>
-    """
-            </div>
-
-            <div style="margin-top: 40px; padding: 20px; background-color: #f9fafb; text-align: center; font-size: 12px; color: #666;">
-                <p>Este es un reporte automático generado por el Sistema SRIUC.</p>
-                <p>&copy; {datetime.now().year} Branco Industries - Todos los derechos reservados.</p>
             </div>
         </body>
     </html>
@@ -1536,6 +1826,19 @@ async def link_inspection(rec_id: str, inspection_id: str, current_user: Dict[st
     await db.vehicle_records.update_one(
         {"id": rec_id},
         {"$set": {"inspection_id": inspection_id, "status": new_status}},
+    )
+    return {"ok": True}
+
+
+@api_router.patch("/vehicle-records/{rec_id}/link-ticket")
+async def link_shipping_ticket(rec_id: str, ticket_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    doc = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+
+    await db.vehicle_records.update_one(
+        {"id": rec_id},
+        {"$set": {"shipping_ticket_id": ticket_id, "has_shipping_ticket": True}},
     )
     return {"ok": True}
 
@@ -1570,6 +1873,7 @@ class ShippingTicket(BaseModel):
     firma_almacenista: str = ""
     firma_guardia: str = ""
     nombre_guardia: str = ""
+    record_id: Optional[str] = None
     created_at: str
 
 class ShippingTicketCreate(BaseModel):
@@ -1599,6 +1903,7 @@ class ShippingTicketCreate(BaseModel):
     firma_almacenista: str = ""
     firma_guardia: str = ""
     nombre_guardia: str = ""
+    record_id: Optional[str] = None
 
 
 @api_router.post("/shipping-tickets", response_model=ShippingTicket)
@@ -1612,6 +1917,17 @@ async def create_ticket(body: ShippingTicketCreate, current_user: Dict[str, Any]
     doc["created_at"] = now
     await db.shipping_tickets.insert_one(doc)
 
+    # Autolink to vehicle record if record_id provided
+    if body.record_id:
+        try:
+            await db.vehicle_records.update_one(
+                {"id": body.record_id},
+                {"$set": {"shipping_ticket_id": tid, "has_shipping_ticket": True}}
+            )
+            logger.info(f"Auto-linked shipping ticket {tid} to record {body.record_id}")
+        except Exception as e:
+            logger.error(f"Error auto-linking shipping ticket: {e}")
+
     await _log_activity(
         "embarque", tid,
         f"Ticket Embarque: {body.placas_unidad}",
@@ -1620,9 +1936,15 @@ async def create_ticket(body: ShippingTicketCreate, current_user: Dict[str, Any]
         "embarque"
     )
 
-    # Sync to AppSheet
+    # Notificar embarque
+    await _notify_supervisors(
+        title="Ticket de Embarque Generado",
+        message=f"Se ha generado un ticket de embarque para la unidad {body.placas_unidad} (Cliente: {body.cliente})."
+    )
+
+    # Sync to Google Sheets
     try:
-        await sync_to_appsheet("Embarque", doc)
+        await sync_to_google_sheets("embarque", doc)
     except: pass
 
     return ShippingTicket(**{k: v for k, v in doc.items() if k != "_id"})
@@ -1633,25 +1955,40 @@ async def list_tickets(current_user: Dict[str, Any] = Depends(get_current_user))
     filt: Dict[str, Any] = {}
     if current_user.get("role") != "supervisor":
         filt["user_id"] = current_user["id"]
-    docs = await db.shipping_tickets.find(filt, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+    # Excluir campos pesados
+    projection = {
+        "_id": 0, "foto_inicio_carga": 0, "foto_media_carga": 0,
+        "foto_final_carga": 0, "firma_almacenista": 0,
+        "firma_guardia": 0, "plano_carga": 0
+    }
+
+    docs = await db.shipping_tickets.find(filt, projection).sort("created_at", -1).to_list(500)
     return [ShippingTicket(**d) for d in docs]
 
 
 @api_router.get("/shipping-tickets/{ticket_id}", response_model=ShippingTicket)
 async def get_ticket(ticket_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     filt: Dict[str, Any] = {"id": ticket_id}
-    if current_user.get("role") != "supervisor":
+    # Permitir que supervisores y admins vean cualquier ticket
+    if current_user.get("role") not in ["supervisor", "admin"] and not is_admin(current_user):
         filt["user_id"] = current_user["id"]
     doc = await db.shipping_tickets.find_one(filt, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Ticket no encontrado")
+
+    # Limpieza de imágenes para reportes
+    for f in ["foto_inicio_carga", "foto_media_carga", "foto_final_carga", "firma_almacenista", "firma_guardia"]:
+        if doc.get(f):
+            doc[f] = ensure_clean_image(doc[f])
+
     return ShippingTicket(**doc)
 
 
 @api_router.put("/shipping-tickets/{ticket_id}", response_model=ShippingTicket)
 async def update_shipping_ticket(
     ticket_id: str, body: Dict[str, Any],
-    current_user: Dict[str, Any] = Depends(require_supervisor),
+    current_user: Dict[str, Any] = Depends(require_admin),
 ):
     doc = await db.shipping_tickets.find_one({"id": ticket_id}, {"_id": 0})
     if not doc:
@@ -1663,9 +2000,9 @@ async def update_shipping_ticket(
     await db.shipping_tickets.update_one({"id": ticket_id}, {"$set": update_data})
     updated_doc = await db.shipping_tickets.find_one({"id": ticket_id}, {"_id": 0})
 
-    # Sync to AppSheet
+    # Sync update to Google Sheets
     try:
-        await sync_to_appsheet("Embarque", updated_doc)
+        await sync_to_google_sheets("embarque", updated_doc)
     except: pass
 
     return ShippingTicket(**updated_doc)
@@ -1735,18 +2072,45 @@ async def analytics(
     }
 
 
+@api_router.get("/health")
+async def health():
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+
 app.include_router(api_router)
+
+# Compresión GZip para transferencia ultra rápida de datos
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Esto permite que Cloudflare, Vercel o cualquier origen se conecte
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+@app.on_event("startup")
+async def ensure_indexes():
+    """Asegura que la base de datos tenga índices para búsquedas instantáneas"""
+    try:
+        # Índices para Inspecciones
+        await db.inspections.create_index([("created_at", -1)])
+        await db.inspections.create_index([("id", 1)], unique=True)
+        await db.inspections.create_index([("user_id", 1)])
+        await db.inspections.create_index([("placas_unidad", 1)])
+
+        # Índices para Caseta
+        await db.vehicle_records.create_index([("created_at", -1)])
+        await db.vehicle_records.create_index([("id", 1)], unique=True)
+        await db.vehicle_records.create_index([("status", 1)])
+
+        logger.info("Índices de base de datos verificados y activos.")
+    except Exception as e:
+        logger.error(f"Error al crear índices: {e}")
 
 
 @app.on_event("shutdown")

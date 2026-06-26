@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "SRIUC",
-    "slug": "frontend",
+    "slug": "sriuc",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -38,7 +38,7 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "single",
+      "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -62,8 +62,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "824d2584-b4b4-4515-a2a0-5ce4d8e49a4b"
+        "projectId": "01269631-71a5-4e26-a1ff-b790c1c80459"
       }
-    }
+    },
+    "owner": "north-america-flooring"
   }
 }

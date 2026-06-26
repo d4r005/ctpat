@@ -453,7 +453,6 @@ const resources = {
       "pendientes_ticket": "待填写的装运单",
       "generar": "生成",
       "actividad_reciente": "最近活动",
-      "tiempo_real": "实时",
       "no_hay_actividad": "无最近活动",
       "usuario": "用户",
       "aprobada_caps": "已通过",

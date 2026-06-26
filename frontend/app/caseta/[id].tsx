@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import Signature from '@/src/components/SignaturePad';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -31,6 +32,9 @@ export default function CasetaDetail() {
 
   const [editEntry, setEditEntry] = useState(false);
   const [entryForm, setEntryForm] = useState<any>({});
+
+  const [showSigModal, setShowSigModal] = useState(false);
+  const [sigModalConfig, setSigModalConfig] = useState<any>({ title: '', onSave: () => {} });
 
   const isAdmin = user?.role === 'admin' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
 
@@ -286,6 +290,34 @@ export default function CasetaDetail() {
           </View>
         </Section>
 
+        <Section title="FIRMA DEL OPERADOR">
+           <View style={{ padding: spacing.md, alignItems: 'center' }}>
+             {(editEntry ? (entryForm.firma_operador || e.firma_operador) : e.firma_operador) ? (
+               <Image
+                 source={{ uri: editEntry ? (entryForm.firma_operador || e.firma_operador) : e.firma_operador }}
+                 style={{ width: '80%', height: 100, resizeMode: 'contain', backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border }}
+               />
+             ) : (
+               <Text style={{ color: colors.muted, fontStyle: 'italic' }}>Sin firma capturada</Text>
+             )}
+
+             {editEntry && (
+               <Pressable
+                 style={[styles.bigBtn, { height: 48, minHeight: 48, padding: 0, marginTop: 10, width: '100%' }]}
+                 onPress={() => {
+                   setSigModalConfig({
+                     title: 'Editar Firma del Operador',
+                     onSave: (sig) => setEntryForm({ ...entryForm, firma_operador: sig })
+                   });
+                   setShowSigModal(true);
+                 }}
+               >
+                 <Text style={[styles.bigBtnText, { fontSize: 12 }]}>CAMBIAR FIRMA DEL OPERADOR</Text>
+               </Pressable>
+             )}
+           </View>
+        </Section>
+
         {rec.status === 'entrada' && (
           <Pressable testID="caseta-go-inspeccion" style={styles.bigBtn} onPress={goInspeccion}>
             <Ionicons name="clipboard" size={24} color={colors.onBrandPrimary} />
@@ -330,6 +362,14 @@ export default function CasetaDetail() {
           </Pressable>
         )}
       </ScrollView>
+
+      {showSigModal && (
+        <SignatureModal
+          onClose={() => setShowSigModal(false)}
+          onSave={(sig) => { sigModalConfig.onSave(sig); setShowSigModal(false); }}
+          title={sigModalConfig.title}
+        />
+      )}
 
       {showExit && (
         <View style={styles.modalOverlay}>
@@ -462,6 +502,44 @@ function ExitField({ label, v, on, tid, kb }: any) {
   );
 }
 
+function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSave: (sig: string) => void; title: string }) {
+  const sigRef = React.useRef<any>(null);
+  const handleOK = (signature: string) => onSave(signature);
+  const style = `.m-signature-pad--footer {display: none; margin: 0px;}
+                 .m-signature-pad {box-shadow: none; border: 2px solid #09090B;}
+                 body,html { background-color: #FFF; height: 100%; }`;
+  return (
+    <View style={styles.modalOverlay} testID="signature-modal">
+      <View style={styles.modalCard}>
+        <Text style={styles.modalTitle}>{title}</Text>
+        <View style={styles.signatureCanvas}>
+          <Signature
+            ref={sigRef}
+            onOK={handleOK}
+            descriptionText="Firme dentro del recuadro"
+            clearText="Borrar"
+            confirmText="Guardar"
+            webStyle={style}
+            autoClear={false}
+            imageType="image/jpeg"
+          />
+        </View>
+        <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+          <Pressable style={[styles.secondaryBtn, { flex: 1 }]} onPress={onClose}>
+            <Text style={styles.secondaryBtnText}>CANCELAR</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.primaryBtn, { flex: 1 }]}
+            onPress={() => sigRef.current?.readSignature()}
+          >
+            <Text style={styles.primaryBtnText}>GUARDAR FIRMA</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -493,4 +571,12 @@ const styles = StyleSheet.create({
   photoLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, marginBottom: 4, letterSpacing: 0.5 },
   photoImg: { width: '100%', height: 120, resizeMode: 'cover', borderWidth: 2, borderColor: colors.borderStrong },
   noPhoto: { fontSize: 10, color: colors.muted, fontStyle: 'italic' },
+
+  // Signature Modal styles
+  modalCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong, width: '100%' },
+  signatureCanvas: { height: 300, marginBottom: spacing.md },
+  primaryBtn: { flex: 1, backgroundColor: colors.brandPrimary, padding: spacing.md, alignItems: 'center', justifyContent: 'center', minHeight: 52 },
+  primaryBtnText: { color: colors.onBrandPrimary, fontWeight: '900', letterSpacing: 1 },
+  secondaryBtn: { backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  secondaryBtnText: { color: colors.onSurface, fontWeight: '900', letterSpacing: 1 },
 });

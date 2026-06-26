@@ -15,6 +15,7 @@ import { getInspectionPoints } from '@/src/constants/inspectionPoints';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import BarcodeScanner from '@/src/components/BarcodeScanner';
 import { apiCall } from '@/src/api/client';
+import MainHeader from '@/src/components/MainHeader';
 
 const TOTAL_STEPS = 4;
 
@@ -23,7 +24,15 @@ export default function Nueva() {
   const { user, token } = useAuth();
   const { saveInspection } = useInspections();
   const { t } = useTranslation();
-  const params = useLocalSearchParams<{ record_id?: string; compania?: string; placas?: string; trailer?: string; sello?: string; type?: string }>();
+  const params = useLocalSearchParams<{
+    record_id?: string;
+    compania?: string;
+    placas?: string;
+    trailer?: string;
+    sello?: string;
+    type?: string;
+    chofer?: string; // Recibir chofer
+  }>();
 
   const [showTypeSelector, setShowTypeSelector] = useState(!params.type);
   const [selectedType, setSelectedType] = useState<any>(params.type || null);
@@ -75,14 +84,24 @@ export default function Nueva() {
       if (fromCamera) {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
-        const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true, allowsEditing: false });
+        const r = await ImagePicker.launchCameraAsync({
+          mediaTypes: 'images',
+          quality: 0.3, // Optimizado (antes 0.5)
+          base64: true,
+          allowsEditing: false,
+        });
         if (!r.canceled && r.assets[0]?.base64) {
           updatePoint(idx, { photo: `data:image/jpeg;base64,${r.assets[0].base64}` });
         }
       } else {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) { alert('Se necesita acceso a la galería'); return; }
-        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.5, base64: true, allowsEditing: false });
+        const r = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: 'images',
+          quality: 0.3, // Optimizado (antes 0.5)
+          base64: true,
+          allowsEditing: false,
+        });
         if (!r.canceled && r.assets[0]?.base64) {
           updatePoint(idx, { photo: `data:image/jpeg;base64,${r.assets[0].base64}` });
         }
@@ -95,6 +114,14 @@ export default function Nueva() {
   const [inspectorNombre, setInspectorNombre] = useState(user?.name || '');
   const [inspectorFirma, setInspectorFirma] = useState('');
   const [showSigInspector, setShowSigInspector] = useState(false);
+
+  // Efecto para prellenar datos cuando cambian los params (especialmente útil al venir de caseta)
+  React.useEffect(() => {
+    if (params.compania) setCompania(params.compania);
+    if (params.placas) setPlacas(params.placas);
+    if (params.trailer) setTrailer(params.trailer);
+    if (params.sello) setSelloAlta(params.sello);
+  }, [params.record_id]);
   const [scanning, setScanning] = useState<null | 'placas' | 'trailer' | 'precinto'>(null);
 
   const handleScan = (value: string) => {
@@ -148,13 +175,8 @@ export default function Nueva() {
         fecha_hora: new Date().toISOString(),
         client_uuid: '',
         inspection_type: inspectionType,
+        record_id: params.record_id || '', // Enviar record_id para vínculo atómico
       } as any);
-      // Link inspection to caseta record if came from there
-      if (params.record_id && token) {
-        try {
-          await apiCall(`/vehicle-records/${params.record_id}/link-inspection?inspection_id=${created.id}`, { method: 'PATCH', token });
-        } catch {}
-      }
 
       if (Platform.OS === 'web') {
         const proceed = window.confirm(`${t('inspeccion_guardada')}. ${t('desea_generar_ticket')}`);
@@ -166,11 +188,12 @@ export default function Nueva() {
             placas: placas,
             trailer: trailer,
             sello: precinto !== 'N/A' ? precinto : '',
-            operador: inspectorNombre
+            operador: params.chofer || inspectorNombre // Usar nombre del chofer si viene de caseta
           });
           router.replace(`/embarque/nuevo?${queryParams.toString()}`);
         } else {
-          router.replace(`/inspection/${created.id}${params.record_id ? `?record_id=${params.record_id}` : ''}`);
+          // Regresar al panel de Histórico en lugar de quedarse en el detalle
+          router.replace('/(app)/historico');
         }
         return;
       }
@@ -180,8 +203,8 @@ export default function Nueva() {
         t('desea_generar_ticket'),
         [
           {
-            text: t('ver_detalle'),
-            onPress: () => router.replace(`/inspection/${created.id}${params.record_id ? `?record_id=${params.record_id}` : ''}`)
+            text: "REGRESAR AL PANEL",
+            onPress: () => router.replace('/(app)/historico')
           },
           {
             text: t('si_generar_ticket_caps'),
@@ -193,7 +216,7 @@ export default function Nueva() {
                 placas: placas,
                 trailer: trailer,
                 sello: precinto !== 'N/A' ? precinto : '',
-                operador: inspectorNombre
+                operador: params.chofer || inspectorNombre
               });
               router.replace(`/embarque/nuevo?${queryParams.toString()}`);
             }
@@ -201,7 +224,12 @@ export default function Nueva() {
         ]
       );
     } catch (e: any) {
-      alert(e.message || t('error_general', 'Error'));
+      console.error('Error saving inspection:', e);
+      let errorMsg = e.message || t('error_general', 'Error');
+      if (errorMsg === 'Failed to fetch') {
+        errorMsg = 'Error de conexión con el servidor. Las fotos podrían ser muy pesadas. Intenta de nuevo.';
+      }
+      alert(`Ocurrió un problema: ${errorMsg}`);
     } finally {
       setSaving(false);
     }
@@ -210,12 +238,7 @@ export default function Nueva() {
   if (showTypeSelector) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <View style={styles.selectorHeader}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} />
-          </Pressable>
-          <Text style={styles.selectorTitle}>{t('nueva_inspeccion')}</Text>
-        </View>
+        <MainHeader showBack title="NAF" subtitle={t('nueva_inspeccion').toUpperCase()} />
 
         <ScrollView contentContainerStyle={styles.selectorContent} keyboardShouldPersistTaps="handled">
           {pendingInYard.length > 0 && (
@@ -268,10 +291,12 @@ export default function Nueva() {
             style={[styles.typeCard, { backgroundColor: colors.brandPrimary }]}
             onPress={() => { setSelectedType('19_puntos'); setShowTypeSelector(false); }}
           >
-            <Ionicons name="car-sport" size={48} color="#FFF" />
+            <View style={styles.iconCircle}>
+              <Ionicons name="car-sport" size={32} color="#FFF" />
+            </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.typeTitle}>{t('inspeccion_19_puntos')}</Text>
-              <Text style={styles.typeSub}>{t('tractor_camion')}</Text>
+              <Text style={styles.typeTitle}>{t('inspeccion_19_puntos').toUpperCase()}</Text>
+              <Text style={styles.typeSub}>{t('tractor_camion').toUpperCase()}</Text>
             </View>
             <Ionicons name="chevron-forward" size={24} color="#FFF" />
           </Pressable>
@@ -280,10 +305,12 @@ export default function Nueva() {
             style={[styles.typeCard, { backgroundColor: colors.info }]}
             onPress={() => { setSelectedType('9_puntos_contenedor'); setShowTypeSelector(false); }}
           >
-            <Ionicons name="cube" size={48} color="#FFF" />
+            <View style={styles.iconCircle}>
+              <Ionicons name="cube" size={32} color="#FFF" />
+            </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.typeTitle}>{t('inspeccion_9_puntos')}</Text>
-              <Text style={styles.typeSub}>{t('contenedor_maritimo')}</Text>
+              <Text style={styles.typeTitle}>{t('inspeccion_9_puntos').toUpperCase()}</Text>
+              <Text style={styles.typeSub}>{t('contenedor_maritimo').toUpperCase()}</Text>
             </View>
             <Ionicons name="chevron-forward" size={24} color="#FFF" />
           </Pressable>
@@ -528,13 +555,14 @@ function Field({ label, value, onChange, testID, onScan, scanTestID, disabled }:
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <TextInput
           testID={testID}
+          autoCapitalize="characters"
           style={[
             styles.input,
             { flex: 1 },
             disabled && { backgroundColor: colors.border, opacity: 0.6 }
           ]}
           value={disabled ? 'N/A' : value}
-          onChangeText={onChange}
+          onChangeText={(text) => onChange(text.toUpperCase())}
           placeholderTextColor={colors.muted}
           editable={!disabled}
         />
@@ -567,7 +595,7 @@ function SignatureModal({ onClose, onSave, title, t }: { onClose: () => void; on
             confirmText={t('guardar')}
             webStyle={style}
             autoClear={false}
-            imageType="image/png"
+            imageType="image/jpeg"
           />
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
@@ -676,7 +704,23 @@ const styles = StyleSheet.create({
   },
   pendingPlates: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface },
   pendingSub: { fontSize: 11, color: colors.muted, marginTop: 2 },
-  typeCard: { flexDirection: 'row', alignItems: 'center', padding: spacing.xl, gap: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong, marginBottom: spacing.md },
+  typeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    gap: spacing.lg,
+    borderWidth: 2,
+    borderColor: colors.borderStrong,
+    marginBottom: spacing.md,
+    minHeight: 100,
+  },
+  iconCircle: {
+    width: 64,
+    height: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
   typeTitle: { color: '#FFF', fontWeight: '900', fontSize: 18, letterSpacing: 1 },
   typeSub: { color: '#FFF', opacity: 0.8, fontSize: 12, marginTop: 2 },
 });

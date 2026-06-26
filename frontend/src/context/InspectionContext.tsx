@@ -17,6 +17,7 @@ export interface InspectionPoint {
 }
 
 export interface InspectionPayload {
+  inspection_type: string;
   compania_transportista: string;
   placas_unidad: string;
   numero_trailer: string;
@@ -29,6 +30,7 @@ export interface InspectionPayload {
   inspector_firma: string;
   fecha_hora: string;
   client_uuid: string;
+  record_id?: string;
 }
 
 export interface Inspection extends InspectionPayload {
@@ -99,7 +101,11 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     if (!token) return;
     setLoading(true);
     try {
-      const data = await apiCall<Inspection[]>('/inspections', { token });
+      // Si es admin o supervisor, cargar todo por defecto para que el histórico no se vea vacío
+      const isAdmin = user?.role === 'admin' || user?.email === 'd.trujillo@brancoindustries.com';
+      const scope = (isAdmin || user?.role === 'supervisor') ? 'all' : 'mine';
+
+      const data = await apiCall<Inspection[]>(`/inspections?summary=true&scope=${scope}`, { token });
       setInspections((prev) => {
         const pending = prev.filter((p) => p._pending);
         const merged = [...pending, ...data];
@@ -107,12 +113,13 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
         return merged;
       });
     } catch {} finally { setLoading(false); }
-  }, [token]);
+  }, [token, user]);
 
   const refreshAll = useCallback(async () => {
     if (!token || (user?.role !== 'supervisor' && user?.role !== 'admin')) return;
     try {
-      const data = await apiCall<Inspection[]>('/inspections?scope=all', { token });
+      // For the supervisor view, we also use summary=true for better performance
+      const data = await apiCall<Inspection[]>('/inspections?scope=all&summary=true', { token });
       setAllInspections(data);
     } catch {}
   }, [token, user?.role]);

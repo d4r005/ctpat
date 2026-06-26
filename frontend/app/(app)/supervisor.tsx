@@ -193,23 +193,7 @@ export default function Supervisor() {
         return dateB - dateA;
       });
     } else {
-      // Unimos tickets realizados + registros de caseta pendientes de embarque
-      const pendingShipping = allRecords.filter(r => (r.inspection_id || r.status === 'inspeccionado') && !allTickets.some(t => t.placas_unidad === r.entry.placas_unidad));
-      const pendingMapped = pendingShipping.map(r => ({ ...r, _is_pending_shipping: true }));
-
-      const combined = [...pendingMapped, ...allTickets];
-
-      const filtered = combined.filter(t => {
-        const plates = t._is_pending_shipping ? t.entry.placas_unidad : t.placas_unidad;
-        const client = t._is_pending_shipping ? t.entry.compania_transporte : t.cliente;
-        return (plates?.toLowerCase() || "").includes(q) || (client?.toLowerCase() || "").includes(q);
-      });
-
-      return filtered.sort((a, b) => {
-        const dateA = new Date(a.created_at || a.entry?.fecha_entrada || 0).getTime();
-        const dateB = new Date(b.created_at || b.entry?.fecha_entrada || 0).getTime();
-        return dateB - dateA;
-      });
+      return allTickets.filter(t => t.placas_unidad.toLowerCase().includes(q) || t.cliente.toLowerCase().includes(q));
     }
   }, [activeTab, query, allRecords, allInspections, allTickets, orphanRecords]);
 
@@ -221,6 +205,22 @@ export default function Supervisor() {
         <View style={styles.masterPanel}>
           <Text style={styles.masterTitle}>{t('panel_maestro')}</Text>
           <View style={styles.masterActions}>
+            <Pressable style={styles.masterBtn} onPress={() => router.push('/caseta/nuevo')}>
+              <Ionicons name="car" size={14} color={colors.onSurface} />
+              <Text style={styles.masterBtnText}>NUEVA ENTRADA</Text>
+            </Pressable>
+            <Pressable style={styles.masterBtn} onPress={() => router.push('/nueva')}>
+              <Ionicons name="clipboard" size={14} color={colors.onSurface} />
+              <Text style={styles.masterBtnText}>INSPECCIÓN</Text>
+            </Pressable>
+            <Pressable style={styles.masterBtn} onPress={() => router.push('/embarque/nuevo')}>
+              <Ionicons name="document-text" size={14} color={colors.onSurface} />
+              <Text style={styles.masterBtnText}>{t('embarque_boletos')}</Text>
+            </Pressable>
+            <Pressable style={[styles.masterBtn, { backgroundColor: colors.success + '22' }]} onPress={() => router.push('/caseta')}>
+              <Ionicons name="exit" size={14} color={colors.success} />
+              <Text style={[styles.masterBtnText, { color: colors.success }]}>{t('registrador_salida')}</Text>
+            </Pressable>
             <Pressable style={[styles.masterBtn, { backgroundColor: colors.info + '22' }]} onPress={() => setLinkingMode(!linkingMode)}>
               <Ionicons name="link" size={14} color={colors.info} />
               <Text style={[styles.masterBtnText, { color: colors.info }]}>{t('vincular_registros')}</Text>
@@ -332,42 +332,13 @@ export default function Supervisor() {
               />
             );
           }
-          if (activeTab === 'embarque') {
-            if (item._is_pending_shipping) {
-              return (
-                <View style={[styles.row, { borderLeftWidth: 4, borderLeftColor: colors.warning }]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.rowTitle}>{item.entry.placas_unidad} · {item.entry.chofer_nombre}</Text>
-                    <Text style={[styles.rowSub, { color: colors.warning, fontWeight: '700' }]}>⚠️ TICKET DE EMBARQUE PENDIENTE</Text>
-                    <ProcessTracker steps={{ entry: true, inspection: true, shipping: false, exit: false }} compact />
-                    <Pressable
-                      onPress={() => {
-                        const params = new URLSearchParams({
-                          record_id: item.id,
-                          placas: item.entry.placas_unidad || '',
-                          chofer: item.entry.chofer_nombre || '',
-                          linea: item.entry.compania_transporte || '',
-                          caja: item.entry.numero_caja || '',
-                        });
-                        router.push(`/embarque/nuevo?${params.toString()}`);
-                      }}
-                      style={[styles.actionBtn, { marginTop: 8, backgroundColor: colors.warning + '22', padding: 4 }]}
-                    >
-                      <Ionicons name="document-text-outline" size={16} color={colors.warning} />
-                      <Text style={[styles.actionText, { color: colors.warning }]}>GENERAR TICKET AHORA</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              );
-            }
-            return (
-              <TicketRow
-                item={item}
-                onEdit={() => router.push(`/embarque/${item.id}`)}
-                records={allRecords}
-              />
-            );
-          }
+          return (
+            <TicketRow
+              item={item}
+              onEdit={() => router.push(`/embarque/${item.id}`)}
+              records={allRecords}
+            />
+          );
         }}
         ListEmptyComponent={<View style={styles.empty}><Text style={styles.emptyText}>No hay registros para mostrar</Text></View>}
       />

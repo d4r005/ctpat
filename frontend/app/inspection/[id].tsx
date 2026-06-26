@@ -17,17 +17,23 @@ export default function InspectionDetail() {
   const router = useRouter();
   const { getById, approveInspection, rejectInspection, updateInspection } = useInspections();
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.email?.toLowerCase().includes('d.trujillo') || user?.email?.toLowerCase().includes('d4r005');
   const [insp, setInsp] = useState<Inspection | undefined>(undefined);
   const [generating, setGenerating] = useState(false);
-  const [isEditing, setIsEditing] = useState(edit === 'true');
+  const [isEditing, setIsEditing] = useState(edit === 'true' && isAdmin);
   const [editData, setEditData] = useState<Partial<Inspection>>({});
   const [approvalNote, setApprovalNote] = useState('');
   const [approvalName, setApprovalName] = useState(user?.name || '');
   const [approvalSignature, setApprovalSignature] = useState('');
   const [showSigModal, setShowSigModal] = useState(false);
   const [acting, setActing] = useState(false);
+  const [sigModalConfig, setSigModalConfig] = useState<{ title: string, onSave: (sig: string) => void }>({
+    title: 'Firma del Supervisor',
+    onSave: (sig) => setApprovalSignature(sig)
+  });
   const isSupervisor = user?.role === 'supervisor';
-  const isAdmin = user?.role === 'admin' || user?.email?.toLowerCase().includes('d.trujillo') || user?.email?.toLowerCase().includes('d4r005');
+
+  const canEdit = isAdmin; // Solo administrador puede editar/modificar/borrar
 
   useEffect(() => {
     if (id) {
@@ -86,9 +92,9 @@ export default function InspectionDetail() {
     setActing(true);
     try {
       await approveInspection(id, approvalNote.trim(), approvalName.trim(), approvalSignature);
-      setInsp(getById(id));
-      setApprovalNote('');
-      setApprovalSignature('');
+      alert('Inspección aprobada correctamente');
+      // Redirigir al panel de supervisor para continuar con otras tareas
+      router.replace('/(app)/supervisor');
     } catch (e: any) { alert(e.message); }
     finally { setActing(false); }
   };
@@ -106,9 +112,9 @@ export default function InspectionDetail() {
     setActing(true);
     try {
       await rejectInspection(id, approvalNote.trim(), approvalName.trim(), approvalSignature);
-      setInsp(getById(id));
-      setApprovalNote('');
-      setApprovalSignature('');
+      alert('Inspección rechazada');
+      // Redirigir al panel de supervisor
+      router.replace('/(app)/supervisor');
     } catch (e: any) { alert(e.message); }
     finally { setActing(false); }
   };
@@ -234,13 +240,22 @@ export default function InspectionDetail() {
           <Ionicons name="arrow-back" size={28} color={colors.onBrandPrimary} />
         </Pressable>
         <Text style={styles.topTitle}>{isEditing ? 'Editar Inspección' : 'Inspección'}</Text>
-        {isEditing ? (
-          <Pressable onPress={handleSaveEdit} disabled={acting}>
-            {acting ? <ActivityIndicator size={20} color="#FFF" /> : <Ionicons name="save" size={24} color="#FFF" />}
-          </Pressable>
-        ) : (
-          <View style={{ width: 24 }} />
-        )}
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          {canEdit && !isEditing && (
+            <Pressable onPress={() => setIsEditing(true)}>
+              <Ionicons name="create-outline" size={24} color="#FFF" />
+            </Pressable>
+          )}
+          {isEditing ? (
+            <Pressable onPress={handleSaveEdit} disabled={acting}>
+              {acting ? <ActivityIndicator size={20} color="#FFF" /> : <Ionicons name="save" size={24} color="#FFF" />}
+            </Pressable>
+          ) : (
+            <Pressable onPress={handleExportPDF} disabled={generating}>
+              {generating ? <ActivityIndicator size={20} color="#FFF" /> : <Ionicons name="download" size={24} color="#FFF" />}
+            </Pressable>
+          )}
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -329,7 +344,7 @@ export default function InspectionDetail() {
                 }}
               >
                 <Text style={{ color: colors.brandPrimary, fontWeight: '900', fontSize: 13 }}>
-                  {(editData.inspection_type || insp.inspection_type).replace('_', ' ').toUpperCase()}
+                  {((editData.inspection_type || insp.inspection_type) || '19_puntos').replace('_', ' ').toUpperCase()}
                 </Text>
                 <Ionicons name="swap-horizontal" size={18} color={colors.brandPrimary} />
               </Pressable>
@@ -392,20 +407,87 @@ export default function InspectionDetail() {
 
         <Section title="FIRMAS">
           <Text style={styles.label}>INSPECTOR</Text>
-          <Text style={styles.value}>{insp.inspector_nombre}</Text>
-          {insp.inspector_firma ? (
-            <View style={styles.firmaWrap}>
-              <Image source={{ uri: insp.inspector_firma }} style={{ width: '100%', height: 100, resizeMode: 'contain', backgroundColor: '#fff' }} />
-              <Text style={[styles.firmaLabel, { marginTop: 4 }]}>FIRMA INSPECTOR</Text>
-            </View>
-          ) : null}
-          {insp.approved_by_signature ? (
+          {isEditing ? (
+            <TextInput
+              style={[styles.value, { borderBottomWidth: 1, borderBottomColor: colors.border }]}
+              value={editData.inspector_nombre || insp.inspector_nombre}
+              onChangeText={(v) => setEditData({ ...editData, inspector_nombre: v })}
+            />
+          ) : (
+            <Text style={styles.value}>{insp.inspector_nombre}</Text>
+          )}
+
+          <View style={styles.firmaWrap}>
+            { (isEditing ? (editData.inspector_firma || insp.inspector_firma) : insp.inspector_firma) ? (
+              <Image
+                source={{ uri: isEditing ? (editData.inspector_firma || insp.inspector_firma) : insp.inspector_firma }}
+                style={{ width: '100%', height: 100, resizeMode: 'contain', backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border }}
+              />
+            ) : (
+              <View style={[styles.firmaWrap, { borderStyle: 'dashed', borderWidth: 1, height: 100, justifyContent: 'center', alignItems: 'center' }]}>
+                <Text style={{ color: colors.muted }}>Sin firma</Text>
+              </View>
+            )}
+
+            {isEditing && (
+              <Pressable
+                style={[styles.actionBtn, { backgroundColor: colors.brandPrimary, marginTop: 8 }]}
+                onPress={() => {
+                  setSigModalConfig({
+                    title: 'Editar Firma del Inspector',
+                    onSave: (sig) => setEditData({ ...editData, inspector_firma: sig })
+                  });
+                  setShowSigModal(true);
+                }}
+              >
+                <Ionicons name="brush" size={20} color="#FFF" />
+                <Text style={styles.actionBtnText}>CAMBIAR FIRMA INSPECTOR</Text>
+              </Pressable>
+            )}
+            <Text style={[styles.firmaLabel, { marginTop: 4 }]}>FIRMA INSPECTOR</Text>
+          </View>
+
+          {(insp.approved_by_signature || isEditing) ? (
             <>
               <Text style={[styles.label, { marginTop: spacing.md }]}>APROBACIÓN / RECHAZO POR</Text>
-              <Text style={styles.value}>{insp.approved_by_name}</Text>
+              {isEditing ? (
+                <TextInput
+                  style={[styles.value, { borderBottomWidth: 1, borderBottomColor: colors.border }]}
+                  value={editData.approved_by_name || insp.approved_by_name}
+                  onChangeText={(v) => setEditData({ ...editData, approved_by_name: v })}
+                />
+              ) : (
+                <Text style={styles.value}>{insp.approved_by_name || '-'}</Text>
+              )}
+
               <View style={styles.firmaWrap}>
-                <Image source={{ uri: insp.approved_by_signature }} style={{ width: '100%', height: 100, resizeMode: 'contain', backgroundColor: '#fff', borderColor: insp.approval_status === 'aprobada' ? colors.success : colors.error, borderWidth: 1 }} />
-                <Text style={[styles.firmaLabel, { color: insp.approval_status === 'aprobada' ? colors.success : colors.error, marginTop: 4 }]}>FIRMA AUTORIZACIÓN</Text>
+                { (isEditing ? (editData.approved_by_signature || insp.approved_by_signature) : insp.approved_by_signature) ? (
+                  <Image
+                    source={{ uri: isEditing ? (editData.approved_by_signature || insp.approved_by_signature) : insp.approved_by_signature }}
+                    style={{ width: '100%', height: 100, resizeMode: 'contain', backgroundColor: '#fff', borderColor: (isEditing ? (editData.approval_status || insp.approval_status) : insp.approval_status) === 'aprobada' ? colors.success : colors.error, borderWidth: 1 }}
+                  />
+                ) : (
+                  <View style={[styles.firmaWrap, { borderStyle: 'dashed', borderWidth: 1, height: 100, justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={{ color: colors.muted }}>Sin firma de aprobación</Text>
+                  </View>
+                )}
+
+                {isEditing && (
+                  <Pressable
+                    style={[styles.actionBtn, { backgroundColor: colors.brandPrimary, marginTop: 8 }]}
+                    onPress={() => {
+                      setSigModalConfig({
+                        title: 'Editar Firma del Supervisor',
+                        onSave: (sig) => setEditData({ ...editData, approved_by_signature: sig })
+                      });
+                      setShowSigModal(true);
+                    }}
+                  >
+                    <Ionicons name="brush" size={20} color="#FFF" />
+                    <Text style={styles.actionBtnText}>CAMBIAR FIRMA SUPERVISOR</Text>
+                  </Pressable>
+                )}
+                <Text style={[styles.firmaLabel, { color: (isEditing ? (editData.approval_status || insp.approval_status) : insp.approval_status) === 'aprobada' ? colors.success : colors.error, marginTop: 4 }]}>FIRMA AUTORIZACIÓN</Text>
               </View>
             </>
           ) : null}
@@ -430,8 +512,8 @@ export default function InspectionDetail() {
       {showSigModal && (
         <SignatureModal
           onClose={() => setShowSigModal(false)}
-          onSave={(sig) => { setApprovalSignature(sig); setShowSigModal(false); }}
-          title="Firma del Supervisor"
+          onSave={(sig) => { sigModalConfig.onSave(sig); setShowSigModal(false); }}
+          title={sigModalConfig.title}
         />
       )}
     </SafeAreaView>
@@ -457,7 +539,7 @@ function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSav
             confirmText="Guardar"
             webStyle={style}
             autoClear={false}
-            imageType="image/png"
+            imageType="image/jpeg"
           />
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
@@ -492,9 +574,10 @@ function Row({ label, value, isEdit, onEdit }: { label: string; value: string; i
       <Text style={styles.rowLabel}>{label}</Text>
       {isEdit && onEdit ? (
         <TextInput
+          autoCapitalize="characters"
           style={[styles.rowValue, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 4 }]}
           value={value}
-          onChangeText={onEdit}
+          onChangeText={(text) => onEdit(text.toUpperCase())}
         />
       ) : (
         <Text style={styles.rowValue}>{value}</Text>
@@ -528,6 +611,12 @@ const styles = StyleSheet.create({
   pointNum: { width: 28, fontWeight: '900', color: colors.muted },
   pointName: { color: colors.onSurface, fontWeight: '700', fontSize: typography.sizes.sm },
   pointComment: { color: colors.error, fontSize: typography.sizes.sm, marginTop: 4 },
+  modalOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(9,9,11,0.85)', justifyContent: 'center', padding: spacing.lg, zIndex: 100,
+  },
+  rowInspector: { color: colors.onSurfaceTertiary, fontSize: typography.sizes.sm, marginTop: 4 },
+
   pointPhoto: { width: '100%', height: 180, marginTop: 8, borderWidth: 2, borderColor: colors.error, resizeMode: 'cover' },
   pointChip: { paddingHorizontal: spacing.sm, paddingVertical: 4, marginLeft: spacing.sm },
   pointChipText: { color: '#FFF', fontWeight: '900', fontSize: 10, letterSpacing: 1 },

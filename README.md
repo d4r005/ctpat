@@ -1,17 +1,33 @@
-# C-TPAT Inspection System (SRIUC) - Updated
+# C-TPAT Inspection System (SRIUC)
 
-Este proyecto ha sido configurado para conectarse con **AppSheet** y utilizar las credenciales de correo proporcionadas.
+Sistema de Registro e Inspección de Unidades de Carga (SRIUC) desarrollado para NAF.
 
-## Configuración de AppSheet
-Se ha implementado una integración con la API oficial de AppSheet. Para activarla, sigue estos pasos:
-1. Obtén tu `App ID` y `Access Key` desde la consola de AppSheet (Manage -> Integrations -> IN).
-2. Agrega estos valores al archivo `backend/.env`.
-3. Consulta `backend/appsheet_setup.md` para más detalles sobre las tablas requeridas (`Inspecciones`, `Caseta`, `Embarque`).
+## Características
+
+- Registro de entrada y salida de vehículos (Caseta).
+- Inspecciones C-TPAT de 19 y 9 puntos con evidencia fotográfica.
+- Generación de Tickets de Embarque.
+- Reportes consolidados en PDF con firmas digitales.
+- Seguimiento en tiempo real vía Google Sheets.
+- Envío automático de reportes por correo electrónico.
+
+## Configuración de Seguimiento (Google Sheets)
+
+El sistema sincroniza automáticamente cada etapa del proceso con una hoja de cálculo en Google Drive.
+
+1. Crea un Google Sheet y añade el script de Webhook proporcionado.
+2. Configura la URL del script en la variable de entorno `GOOGLE_SHEET_WEBHOOK_URL`.
 
 ## Credenciales de Correo
-Se ha configurado el sistema para enviar reportes automáticos usando:
-- **Usuario:** d4r005@gmail.com
+
+El sistema envía reportes automáticos y alertas de seguridad usando:
+
 - **Servidor:** smtp.gmail.com (Puerto 587)
+- **Administrador:** d.trujillo@brancoindustries.com
 
 ## Administración
-El correo `d4r005@gmail.com` ha sido añadido como administrador tanto en el Backend como en el Frontend.
+
+El control maestro del sistema (Gestión de Usuarios y KPIs) está restringido a la cuenta de administrador principal.
+
+---
+*SRIUC System - Branco Industries © 2026*

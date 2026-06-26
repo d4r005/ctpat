@@ -103,14 +103,24 @@ export default function CasetaNuevo() {
       if (fromCamera) {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
-        const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+        const r = await ImagePicker.launchCameraAsync({
+          mediaTypes: 'images',
+          quality: 0.3, // Reducido para evitar errores de red (antes 0.5)
+          base64: true,
+          allowsEditing: false, // Menos pesado sin edición
+        });
         if (!r.canceled && r.assets[0]?.base64) {
           setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
         }
       } else {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) { alert('Se necesita acceso a la galería'); return; }
-        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+        const r = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: 'images',
+          quality: 0.3, // Reducido (antes 0.5)
+          base64: true,
+          allowsEditing: false,
+        });
         if (!r.canceled && r.assets[0]?.base64) {
           setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
         }
@@ -119,8 +129,14 @@ export default function CasetaNuevo() {
   };
 
   const handleSave = async () => {
+    if (saving) return; // Evitar doble clic
     setSaving(true);
     try {
+      // Validaciones básicas antes de enviar
+      if (!placas.trim() || !chofer.trim() || !guardiaCaseta.trim()) {
+        throw new Error('Por favor completa todos los campos obligatorios (*)');
+      }
+
       const body = {
         sucursal, direccion, licencia_conductor: licencia,
         placas_unidad: placas.trim().toUpperCase(), chofer_nombre: chofer.trim(),
@@ -140,51 +156,45 @@ export default function CasetaNuevo() {
         destino,
         firma_operador: firmaOperador, declaraciones_aceptadas: aceptaTerminos,
       };
+
+      console.log('Enviando registro de caseta...');
       const created = await apiCall<any>('/vehicle-records', { method: 'POST', body, token });
+      console.log('Registro exitoso:', created.id);
+
+      const nextParams = new URLSearchParams({
+        record_id: created.id,
+        compania: body.compania_transporte,
+        placas: body.placas_unidad,
+        trailer: body.numero_caja,
+        sello: body.sello_entrada,
+        chofer: body.chofer_nombre // Añadido para prellenado
+      }).toString();
 
       if (Platform.OS === 'web') {
-        const proceed = window.confirm("Entrada Registrada. ¿Desea proceder con la inspección de 19 puntos ahora?");
+        const proceed = window.confirm("✅ Entrada Registrada Correctamente. \n\n¿Deseas iniciar la inspección de 19 puntos para esta unidad ahora mismo?");
         if (proceed) {
-          const params = new URLSearchParams({
-            record_id: created.id,
-            compania: body.compania_transporte,
-            placas: body.placas_unidad,
-            trailer: body.numero_caja,
-            sello: body.sello_entrada
-          });
-          router.replace(`/(app)/nueva?${params.toString()}`);
+          router.replace(`/(app)/nueva?${nextParams}`);
         } else {
-          router.replace(`/caseta/${created.id}`);
+          // Regresar al panel de Caseta en lugar de quedarse en el detalle
+          router.replace('/(app)/caseta');
         }
-        return;
+      } else {
+        Alert.alert(
+          "✅ Entrada Registrada",
+          "¿Desea proceder con la inspección de 19 puntos ahora?",
+          [
+            { text: "MÁS TARDE (REGRESAR)", onPress: () => router.replace('/(app)/caseta') },
+            { text: "SÍ, INICIAR", onPress: () => router.replace(`/(app)/nueva?${nextParams}`) }
+          ]
+        );
       }
-
-      Alert.alert(
-        "Entrada Registrada",
-        "¿Desea proceder con la inspección de 19 puntos ahora?",
-        [
-          {
-            text: "Más tarde",
-            onPress: () => router.replace(`/caseta/${created.id}`)
-          },
-          {
-            text: "SÍ, INICIAR",
-            onPress: () => {
-              const params = new URLSearchParams({
-                record_id: created.id,
-                compania: body.compania_transporte,
-                placas: body.placas_unidad,
-                trailer: body.numero_caja,
-                sello: body.sello_entrada
-              });
-              router.replace(`/(app)/nueva?${params.toString()}`);
-            }
-          }
-        ]
-      );
     } catch (e: any) {
       console.error('Error saving vehicle record:', e);
-      alert(`Error al guardar: ${e.message}`);
+      let errorMsg = e.message || 'Error desconocido';
+      if (errorMsg === 'Failed to fetch') {
+        errorMsg = 'Error de conexión con el servidor. Posiblemente las fotos son muy pesadas o el internet es inestable. Intenta de nuevo.';
+      }
+      alert(`Ocurrió un problema: ${errorMsg}`);
     }
     finally { setSaving(false); }
   };
@@ -373,7 +383,7 @@ export default function CasetaNuevo() {
                 onOK={(sig) => { setFirmaOperador(sig); setShowSig(false); }}
                 webStyle={`.m-signature-pad--footer{display:none;}.m-signature-pad{box-shadow:none;border:2px solid #09090B;}body,html{background:#FFF;height:100%;}`}
                 autoClear={false}
-                imageType="image/png"
+                imageType="image/jpeg"
               />
             </View>
             <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
@@ -401,13 +411,14 @@ function Field({ label, value, onChange, testID, multiline, disabled }: any) {
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
         testID={testID}
+        autoCapitalize="characters"
         style={[
           styles.input,
           multiline && { minHeight: 80, textAlignVertical: 'top' },
           disabled && { backgroundColor: colors.border, opacity: 0.6 }
         ]}
         value={disabled ? 'N/A' : value}
-        onChangeText={onChange}
+        onChangeText={(text) => onChange(text.toUpperCase())}
         multiline={!!multiline}
         placeholderTextColor={colors.muted}
         editable={!disabled}
