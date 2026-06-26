@@ -50,6 +50,27 @@ api_router = APIRouter(prefix="/api")
 security = HTTPBearer()
 
 
+@app.on_event("startup")
+async def startup_db_client():
+    # Crear índices para acelerar consultas críticas (menos de 3 segundos)
+    await db.vehicle_records.create_index([("id", 1)], unique=True)
+    await db.vehicle_records.create_index([("created_at", -1)])
+    await db.vehicle_records.create_index([("entry.placas_unidad", 1)])
+    await db.vehicle_records.create_index([("inspection_id", 1)])
+
+    await db.inspections.create_index([("id", 1)], unique=True)
+    await db.inspections.create_index([("created_at", -1)])
+    await db.inspections.create_index([("placas_unidad", 1)])
+
+    await db.shipping_tickets.create_index([("id", 1)], unique=True)
+    await db.shipping_tickets.create_index([("created_at", -1)])
+    await db.shipping_tickets.create_index([("placas_unidad", 1)])
+
+    await db.users.create_index([("id", 1)], unique=True)
+    await db.users.create_index([("email", 1)], unique=True)
+
+    logging.info("Índices de base de datos creados/verificados correctamente.")
+
 # ========== Models ==========
 class UserRegister(BaseModel):
     email: EmailStr

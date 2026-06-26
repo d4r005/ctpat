@@ -4,7 +4,7 @@ import {
   useWindowDimensions, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Sharing from 'expo-sharing';
@@ -17,6 +17,7 @@ import { apiCall } from '@/src/api/client';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import { generateConsolidatedReportHtml } from '@/src/utils/reportGenerator';
 import ProcessTracker from '@/src/components/ProcessTracker';
+import MainHeader from '@/src/components/MainHeader';
 
 type TabType = 'caseta' | 'inspeccion' | 'embarque';
 
@@ -42,7 +43,7 @@ export default function Supervisor() {
   const [reportLoading, setReportLoading] = useState<string | null>(null);
   const [emailLoading, setEmailLoading] = useState<string | null>(null);
 
-  const fetchAllData = async () => {
+  const fetchAllData = React.useCallback(async () => {
     if (!token || !isSupervisor) return;
     setLoadingExtra(true);
     try {
@@ -58,11 +59,43 @@ export default function Supervisor() {
     } finally {
       setLoadingExtra(false);
     }
-  };
+  }, [token, isSupervisor, refreshInspections]);
 
-  useEffect(() => {
-    if (isSupervisor) fetchAllData();
-  }, [token, isSupervisor]);
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchAllData();
+    }, [fetchAllData])
+  );
+
+  const handleDelete = async (type: 'record' | 'inspection' | 'ticket', id: string) => {
+    if (!isAdmin) return;
+    if (Platform.OS !== 'web') {
+      const confirmed = await new Promise((resolve) => {
+        Alert.alert(
+          t('confirmar_eliminar_proceso'),
+          "",
+          [
+            { text: t('cancelar'), onPress: () => resolve(false), style: 'cancel' },
+            { text: t('malo'), onPress: () => resolve(true), style: 'destructive' }
+          ]
+        );
+      });
+      if (!confirmed) return;
+    } else {
+      if (!window.confirm(t('confirmar_eliminar_proceso'))) return;
+    }
+
+    try {
+      const endpoint = type === 'record' ? `/vehicle-records/${id}/admin-delete` :
+                       type === 'inspection' ? `/inspections/${id}/admin-delete` :
+                       `/shipping-tickets/${id}/admin-delete`;
+
+      await apiCall(endpoint, { method: 'DELETE', token });
+      fetchAllData();
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
 
   if (authLoading) {
     return (
@@ -215,9 +248,8 @@ export default function Supervisor() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']} testID="supervisor-screen">
-      <View style={styles.header}>
-        <Text style={styles.title}>{t('panel_supervisor')}</Text>
-
+      <MainHeader title="NAF" subtitle={t('panel_supervisor').toUpperCase()} />
+      <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.md }}>
         <View style={styles.masterPanel}>
           <Text style={styles.masterTitle}>{t('admin_tools')}</Text>
           <View style={styles.masterActions}>
@@ -290,6 +322,8 @@ export default function Supervisor() {
               onEdit={() => router.push(`/caseta/${item.id}`)}
               onPdf={() => handleDownloadPdf(item.id, item.entry.placas_unidad)}
               onEmail={() => handleSendEmail(item.id)}
+              onDelete={() => handleDelete('record', item.id)}
+              isAdmin={isAdmin}
               loadingPdf={reportLoading === item.id}
               loadingEmail={emailLoading === item.id}
               t={t}
@@ -320,6 +354,11 @@ export default function Supervisor() {
                       <Text style={[styles.actionText, { color: colors.warning }]}>{t('realizar_inspeccion_ahora').toUpperCase()}</Text>
                     </Pressable>
                   </View>
+                  {isAdmin && (
+                    <Pressable onPress={() => handleDelete('record', item.id)} style={styles.deleteBtn}>
+                      <Ionicons name="trash-outline" size={20} color={colors.error} />
+                    </Pressable>
+                  )}
                 </View>
               );
             }
@@ -327,6 +366,8 @@ export default function Supervisor() {
               <InspectionRow
                 item={item}
                 onEdit={() => router.push(`/inspection/${item.id}?edit=true`)}
+                onDelete={() => handleDelete('inspection', item.id)}
+                isAdmin={isAdmin}
                 t={t}
                 records={allRecords}
                 tickets={allTickets}
@@ -358,6 +399,11 @@ export default function Supervisor() {
                       <Text style={[styles.actionText, { color: colors.warning }]}>{t('generar_ticket_ahora').toUpperCase()}</Text>
                     </Pressable>
                   </View>
+                  {isAdmin && (
+                    <Pressable onPress={() => handleDelete('record', item.id)} style={styles.deleteBtn}>
+                      <Ionicons name="trash-outline" size={20} color={colors.error} />
+                    </Pressable>
+                  )}
                 </View>
               );
             }
@@ -365,6 +411,8 @@ export default function Supervisor() {
               <TicketRow
                 item={item}
                 onEdit={() => router.push(`/embarque/${item.id}`)}
+                onDelete={() => handleDelete('ticket', item.id)}
+                isAdmin={isAdmin}
                 records={allRecords}
                 t={t}
               />
@@ -386,7 +434,7 @@ function TabItem({ label, active, onPress, icon }: any) {
   );
 }
 
-function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail, t }: any) {
+function RecordRow({ item, onEdit, onPdf, onEmail, onDelete, isAdmin, loadingPdf, loadingEmail, t }: any) {
   const e = item.entry;
   const statusColor = item.status === 'salida' ? colors.success : item.status === 'inspeccionado' ? colors.info : colors.warning;
 
@@ -423,14 +471,21 @@ function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail, t }
         </View>
         <Text style={styles.rowDate}>{new Date(e.fecha_entrada || item.created_at).toLocaleString()}</Text>
       </View>
-      <View style={[styles.statusChip, { backgroundColor: statusColor }]}>
-        <Text style={styles.statusChipText}>{statusLabel.toUpperCase()}</Text>
+      <View style={{ alignItems: 'flex-end', gap: 8 }}>
+        <View style={[styles.statusChip, { backgroundColor: statusColor }]}>
+          <Text style={styles.statusChipText}>{statusLabel.toUpperCase()}</Text>
+        </View>
+        {isAdmin && (
+          <Pressable onPress={onDelete} style={styles.deleteBtn}>
+            <Ionicons name="trash-outline" size={20} color={colors.error} />
+          </Pressable>
+        )}
       </View>
     </View>
   );
 }
 
-function InspectionRow({ item, onEdit, t, records = [], tickets = [] }: any) {
+function InspectionRow({ item, onEdit, onDelete, isAdmin, t, records = [], tickets = [] }: any) {
   const statusColor = item.approval_status === 'aprobada' ? colors.success : item.approval_status === 'rechazada' ? colors.error : colors.warning;
 
   // Corregir búsqueda de record relacionado para mostrar el rastreador
@@ -467,12 +522,17 @@ function InspectionRow({ item, onEdit, t, records = [], tickets = [] }: any) {
         <View style={[styles.statusChip, { backgroundColor: statusColor }]}>
           <Text style={styles.statusChipText}>{t(item.approval_status || 'pendiente').toUpperCase()}</Text>
         </View>
+        {isAdmin && (
+          <Pressable onPress={onDelete} style={[styles.deleteBtn, { marginTop: 4 }]}>
+            <Ionicons name="trash-outline" size={20} color={colors.error} />
+          </Pressable>
+        )}
       </View>
     </View>
   );
 }
 
-function TicketRow({ item, onEdit, records = [], t }: any) {
+function TicketRow({ item, onEdit, onDelete, isAdmin, records = [], t }: any) {
   const relatedRecord = records.find((r: any) =>
     r.entry.placas_unidad?.trim().toUpperCase() === item.placas_unidad?.trim().toUpperCase() &&
     new Date(r.created_at).getTime() <= new Date(item.created_at).getTime()
@@ -499,6 +559,11 @@ function TicketRow({ item, onEdit, records = [], t }: any) {
         </Pressable>
         <Text style={styles.rowDate}>{new Date(item.created_at).toLocaleString()}</Text>
       </View>
+      {isAdmin && (
+        <Pressable onPress={onDelete} style={styles.deleteBtn}>
+          <Ionicons name="trash-outline" size={20} color={colors.error} />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -531,4 +596,5 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', padding: spacing.xxxl },
   emptyText: { color: colors.muted },
   lockText: { color: colors.muted, marginTop: spacing.md, fontWeight: '700' },
+  deleteBtn: { padding: 8, backgroundColor: colors.error + '11', borderRadius: 4 },
 });
