@@ -1517,7 +1517,7 @@ def compress_image_base64(base64_str: str, max_size=(600, 600)) -> str:
 async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[str] = None):
     logger.info(f"Generando reporte consolidado para ID: {rec_id}")
     record = await db.vehicle_records.find_one({"id": rec_id})
-    if (!record) {
+    if not record:
         logger.error(f"Reporte cancelado: No existe el registro {rec_id}")
         return False
 
