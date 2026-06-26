@@ -2105,7 +2105,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],  # Esto permite que Cloudflare, Vercel o cualquier origen se conecte
+    allow_origins=["*"],  # Esto permite que Cloudflare o cualquier origen se conecte
     allow_methods=["*"],
     allow_headers=["*"],
 )

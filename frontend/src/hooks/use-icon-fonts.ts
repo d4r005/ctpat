@@ -47,7 +47,7 @@ const iconFontMap = (): Record<string, string> =>
 
 export const useIconFonts = (): readonly [boolean, Error | null] =>
   useFonts(
-    // Cargamos desde CDN tanto en Expo Go como en Web para asegurar que los iconos se vean en Cloudflare/Vercel
+    // Cargamos desde CDN tanto en Expo Go como en Web para asegurar que los iconos se vean en Cloudflare
     Constants.executionEnvironment === ExecutionEnvironment.StoreClient || Platform.OS === 'web'
       ? iconFontMap()
       : {},
