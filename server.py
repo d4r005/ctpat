@@ -1271,6 +1271,18 @@ async def mark_all_read(current_user: Dict[str, Any] = Depends(get_current_user)
 # ========== Vehicle Records (Caseta) ==========
 @api_router.post("/vehicle-records", response_model=VehicleRecord)
 async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any] = Depends(get_current_user)):
+    # EVITAR DUPLICADOS: Si ya hay una unidad con las mismas placas en patio (entrada o inspeccionado), no crear una nueva.
+    existing = await db.vehicle_records.find_one({
+        "entry.placas_unidad": body.placas_unidad.trim().toUpperCase(),
+        "status": {"$in": ["entrada", "inspeccionado"]}
+    })
+
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"La unidad con placas {body.placas_unidad} ya se encuentra registrada en el patio."
+        )
+
     rec_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     entry_data = body.dict()
