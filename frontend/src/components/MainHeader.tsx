@@ -5,6 +5,7 @@ import { colors, spacing } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import NotificationsPanel from './NotificationsPanel';
+import ProfilePanel from './ProfilePanel';
 
 interface MainHeaderProps {
   title?: string;
@@ -16,6 +17,7 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack }) =>
   const { user } = useAuth();
   const router = useRouter();
   const [showNotifs, setShowNotifs] = React.useState(false);
+  const [showProfile, setShowProfile] = React.useState(false);
 
   return (
     <View style={styles.brandHeader}>
@@ -37,15 +39,16 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack }) =>
           <Ionicons name="notifications" size={24} color="#FFF" />
           <View style={styles.notifBadge} />
         </Pressable>
-        <View style={styles.userContainer}>
+        <Pressable onPress={() => setShowProfile(true)} style={styles.userContainer}>
           <View style={styles.avatarCircle}>
             <Text style={styles.avatarText}>{user?.name?.charAt(0).toUpperCase() || 'D'}</Text>
             <View style={styles.onlineIndicator} />
           </View>
           <Text style={styles.onlineStatusText}>● ON LINE</Text>
-        </View>
+        </Pressable>
       </View>
       <NotificationsPanel visible={showNotifs} onClose={() => setShowNotifs(false)} />
+      <ProfilePanel visible={showProfile} onClose={() => setShowProfile(false)} />
     </View>
   );
 };
