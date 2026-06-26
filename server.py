@@ -527,40 +527,38 @@ async def create_inspector(body: UserRegister, current_user: Dict[str, Any] = De
 
 # ========== Inspections ==========
 def ensure_clean_image(base64_str: str) -> str:
-    """Asegura que la imagen tenga fondo blanco y sea un base64 válido para PDF"""
+    """Solución definitiva para cuadros negros: Fuerza fondo blanco y formato JPEG"""
     if not base64_str or not isinstance(base64_str, str) or not base64_str.startswith('data:image'):
         return base64_str
 
     try:
-        # Extraer base64 limpiamente
-        if "," in base64_str:
-            header, encoded = base64_str.split(",", 1)
-            # Limpiar restos de intentos fallidos
-            encoded = encoded.replace("clean=true,", "")
+        # 1. Extraer el contenido base64 puro
+        pure_base64 = base64_str.split(",")[-1]
+        img_data = base64.b64decode(pure_base64)
+        img = Image.open(io.BytesIO(img_data))
+
+        # 2. Crear una imagen nueva BLANCA (esto mata cualquier transparencia que se vea negra)
+        # Usamos RGB (sin canal Alpha) para garantizar compatibilidad con PDF
+        clean_img = Image.new("RGB", img.size, (255, 255, 255))
+
+        # 3. Pegar la firma/foto encima. Si tiene transparencia, Pillow la usará como máscara.
+        if img.mode == 'RGBA':
+            clean_img.paste(img, mask=img.split()[3])
         else:
-            header, encoded = "data:image/jpeg;base64", base64_str
+            # Para otros modos (P, L), convertimos a RGBA para manejar posible transparencia oculta
+            temp_rgba = img.convert('RGBA')
+            clean_img.paste(temp_rgba, mask=temp_rgba.split()[3])
 
-        img = Image.open(io.BytesIO(base64.b64decode(encoded)))
-
-        # 1. Quitar transparencia (evita cuadros negros)
-        if img.mode in ('RGBA', 'LA', 'P'):
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            if img.mode == 'RGBA':
-                background.paste(img, mask=img.split()[3])
-            else:
-                background.paste(img.convert('RGBA'))
-            img = background
-        elif img.mode != 'RGB':
-            img = img.convert('RGB')
-
-        # 2. Devolver base64 limpio y estándar
+        # 4. Guardar como JPEG ligero para velocidad máxima en el reporte
         buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=75)
+        clean_img.save(buf, format="JPEG", quality=75)
         new_encoded = base64.b64encode(buf.getvalue()).decode()
+
         return f"data:image/jpeg;base64,{new_encoded}"
     except Exception as e:
         logger.error(f"Error reparando imagen: {e}")
-        return base64_str.replace("clean=true,", "")
+        # Si falla el proceso, al menos intentamos quitar el marcador de transparencia del header
+        return base64_str.replace("image/png", "image/jpeg")
 
 def _serialize_inspection(doc: Dict[str, Any]) -> Inspection:
     # Reparar solo las firmas para no alentar el listado general
