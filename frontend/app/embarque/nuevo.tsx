@@ -57,7 +57,6 @@ export default function EmbarqueNuevo() {
           quality: 0.3, // Optimizado (antes 0.5)
           base64: true,
           allowsEditing: false,
-          width: 800
         });
         if (!r.canceled && r.assets[0]?.base64) {
           set(field, `data:image/jpeg;base64,${r.assets[0].base64}`);
@@ -70,7 +69,6 @@ export default function EmbarqueNuevo() {
           quality: 0.3, // Optimizado (antes 0.5)
           base64: true,
           allowsEditing: false,
-          width: 800
         });
         if (!r.canceled && r.assets[0]?.base64) {
           set(field, `data:image/jpeg;base64,${r.assets[0].base64}`);

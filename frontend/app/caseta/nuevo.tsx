@@ -108,7 +108,6 @@ export default function CasetaNuevo() {
           quality: 0.3, // Reducido para evitar errores de red (antes 0.5)
           base64: true,
           allowsEditing: false, // Menos pesado sin edición
-          width: 800, // Limitar dimensiones
         });
         if (!r.canceled && r.assets[0]?.base64) {
           setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
@@ -121,7 +120,6 @@ export default function CasetaNuevo() {
           quality: 0.3, // Reducido (antes 0.5)
           base64: true,
           allowsEditing: false,
-          width: 800,
         });
         if (!r.canceled && r.assets[0]?.base64) {
           setter(`data:image/jpeg;base64,${r.assets[0].base64}`);

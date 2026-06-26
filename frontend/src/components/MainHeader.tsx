@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { colors, spacing } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import NotificationsPanel from './NotificationsPanel';
 
 interface MainHeaderProps {
   title?: string;

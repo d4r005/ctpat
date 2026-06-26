@@ -89,7 +89,6 @@ export default function Nueva() {
           quality: 0.3, // Optimizado (antes 0.5)
           base64: true,
           allowsEditing: false,
-          width: 800
         });
         if (!r.canceled && r.assets[0]?.base64) {
           updatePoint(idx, { photo: `data:image/jpeg;base64,${r.assets[0].base64}` });
@@ -102,7 +101,6 @@ export default function Nueva() {
           quality: 0.3, // Optimizado (antes 0.5)
           base64: true,
           allowsEditing: false,
-          width: 800
         });
         if (!r.canceled && r.assets[0]?.base64) {
           updatePoint(idx, { photo: `data:image/jpeg;base64,${r.assets[0].base64}` });

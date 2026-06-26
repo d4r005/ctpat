@@ -12,6 +12,7 @@ import { colors, spacing, typography } from '@/src/constants/theme';
 
 export default function Usuarios({ nested = false }: { nested?: boolean }) {
   const { user, token } = useAuth();
+  const isAdmin = user?.email?.toLowerCase().includes('d.trujillo') || user?.role === 'admin';
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
