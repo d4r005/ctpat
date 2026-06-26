@@ -38,9 +38,25 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
     readSignature: () => {
       if (Platform.OS === 'web') {
         if (webRef.current && !webRef.current.isEmpty()) {
-          // Cambiado a JPEG con calidad 0.5 para que la generación sea instantánea y el peso mínimo
-          const base64 = webRef.current.getTrimmedCanvas().toDataURL('image/jpeg', 0.5);
-          props.onOK(base64);
+          // Solución al cuadro negro: Usar un fondo blanco explícito antes de exportar
+          const canvas = webRef.current.getCanvas();
+          const context = canvas.getContext('2d');
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = canvas.width;
+          tempCanvas.height = canvas.height;
+          const tempCtx = tempCanvas.getContext('2d');
+
+          if (tempCtx) {
+            // Dibujar fondo blanco
+            tempCtx.fillStyle = '#FFFFFF';
+            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            // Dibujar la firma encima
+            tempCtx.drawImage(canvas, 0, 0);
+
+            // Exportar como JPEG ligero (calidad 0.6) para velocidad máxima
+            const base64 = tempCanvas.toDataURL('image/jpeg', 0.6);
+            props.onOK(base64);
+          }
         } else {
           props.onOK('');
         }
