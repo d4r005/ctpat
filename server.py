@@ -97,6 +97,7 @@ class InspectionCreate(BaseModel):
     verificador_firma: str = ""
     fecha_hora: Optional[str] = None
     client_uuid: Optional[str] = None
+    record_id: Optional[str] = None
 
 class Inspection(BaseModel):
     id: str
@@ -212,8 +213,12 @@ def add_watermark(base64_str: str) -> str:
         image_data = base64.b64decode(encoded)
         img = Image.open(io.BytesIO(image_data))
 
-        # Convertir a RGB si es necesario (evita errores con PNG o formatos raros)
-        if img.mode != 'RGB':
+        # Solución al cuadro negro: Si tiene transparencia, pegarla sobre fondo blanco
+        if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            background.paste(img, mask=img.split()[3] if img.mode == 'RGBA' else None)
+            img = background
+        elif img.mode != 'RGB':
             img = img.convert('RGB')
 
         # Redimensionar agresivamente para asegurar que el correo sea ligero (Gmail límite 25MB)
@@ -643,6 +648,18 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
     }
     await db.inspections.insert_one(doc)
 
+    # Autolink to vehicle record if record_id provided
+    if body.record_id:
+        try:
+            status = "inspeccionado" if status_general == "bueno" else "inspeccionado" # we usually mark as inspected regardless of good/bad
+            await db.vehicle_records.update_one(
+                {"id": body.record_id},
+                {"$set": {"inspection_id": insp_id, "status": status}}
+            )
+            logger.info(f"Auto-linked inspection {insp_id} to record {body.record_id}")
+        except Exception as e:
+            logger.error(f"Error auto-linking inspection: {e}")
+
     # Log Activity
     await _log_activity(
         "inspection", insp_id,
@@ -1059,7 +1076,7 @@ async def list_notifications(current_user: Dict[str, Any] = Depends(get_current_
 
 @api_router.get("/activities")
 async def get_recent_activities(
-    limit: int = Query(20, le=50),
+    limit: int = Query(50, le=100),
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """Retorna una lista unificada de las actividades más recientes (inspecciones, caseta, embarque)."""
@@ -1827,6 +1844,7 @@ class ShippingTicket(BaseModel):
     firma_almacenista: str = ""
     firma_guardia: str = ""
     nombre_guardia: str = ""
+    record_id: Optional[str] = None
     created_at: str
 
 class ShippingTicketCreate(BaseModel):
@@ -1856,6 +1874,7 @@ class ShippingTicketCreate(BaseModel):
     firma_almacenista: str = ""
     firma_guardia: str = ""
     nombre_guardia: str = ""
+    record_id: Optional[str] = None
 
 
 @api_router.post("/shipping-tickets", response_model=ShippingTicket)
@@ -1868,6 +1887,17 @@ async def create_ticket(body: ShippingTicketCreate, current_user: Dict[str, Any]
     doc["fecha"] = doc.get("fecha") or now
     doc["created_at"] = now
     await db.shipping_tickets.insert_one(doc)
+
+    # Autolink to vehicle record if record_id provided
+    if body.record_id:
+        try:
+            await db.vehicle_records.update_one(
+                {"id": body.record_id},
+                {"$set": {"shipping_ticket_id": tid, "has_shipping_ticket": True}}
+            )
+            logger.info(f"Auto-linked shipping ticket {tid} to record {body.record_id}")
+        except Exception as e:
+            logger.error(f"Error auto-linking shipping ticket: {e}")
 
     await _log_activity(
         "embarque", tid,
