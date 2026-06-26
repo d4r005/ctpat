@@ -116,11 +116,29 @@ export default function Supervisor() {
       }, 'es');
 
       if (Platform.OS === 'web') {
-        const win = window.open('', '_blank');
-        if (win) {
-          win.document.write(html);
-          win.document.close();
-          setTimeout(() => { win.print(); }, 800);
+        // SOLUCIÓN VELOCIDAD: Inyectar reporte de inmediato en ventana optimizada
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+            printWindow.document.write(`
+                <html>
+                    <head><title>Generando Reporte...</title></head>
+                    <body style="margin:0; padding:0; display:flex; justify-content:center; align-items:center; height:100vh; font-family:sans-serif; background:#f4f4f5;">
+                        <div style="text-align:center;">
+                            <div style="border: 4px solid #f3f3f3; border-top: 4px solid #0A2540; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 15px;"></div>
+                            <p>Procesando imágenes y firmas...</p>
+                        </div>
+                        <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+                    </body>
+                </html>
+            `);
+
+            setTimeout(() => {
+                printWindow.document.open();
+                printWindow.document.write(html);
+                printWindow.document.close();
+                printWindow.onload = () => { printWindow.print(); };
+                setTimeout(() => { try { printWindow.print(); } catch(e){} }, 1000);
+            }, 300);
         } else {
           alert('El bloqueador de ventanas impidió abrir el reporte.');
         }

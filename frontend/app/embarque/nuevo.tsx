@@ -86,6 +86,15 @@ export default function EmbarqueNuevo() {
     try {
       const created = await apiCall<any>('/shipping-tickets', { method: 'POST', body: form, token });
 
+      // Vincular ticket al registro de caseta si existe
+      if (params.record_id && token) {
+        try {
+          await apiCall(`/vehicle-records/${params.record_id}/link-ticket?ticket_id=${created.id}`, { method: 'PATCH', token });
+        } catch (linkErr) {
+          console.error('Error linking ticket to record:', linkErr);
+        }
+      }
+
       const nextStep = () => {
         if (params.record_id) {
           router.replace(`/caseta/${params.record_id}`);
