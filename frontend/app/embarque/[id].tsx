@@ -9,9 +9,12 @@ import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
+import { useTranslation } from 'react-i18next';
+
 export default function EmbarqueDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { t: tr } = useTranslation();
   const { token, user } = useAuth();
   const [t, setT] = useState<any>(null);
   const [editMode, setEditMode] = useState(false);
@@ -48,12 +51,12 @@ export default function EmbarqueDetail() {
   const pickPhoto = async (field: string) => {
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
+      if (!perm.granted) { alert(tr('acceso_restringido')); return; }
       const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
       if (!r.canceled && r.assets[0]?.base64) {
         setForm({ ...form, [field]: `data:image/jpeg;base64,${r.assets[0].base64}` });
       }
-    } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
+    } catch (e: any) { alert(e.message || 'Error'); }
   };
 
   if (!t) return <SafeAreaView style={styles.safe}><View style={styles.center}><ActivityIndicator color={colors.brandPrimary} /></View></SafeAreaView>;
@@ -67,91 +70,94 @@ export default function EmbarqueDetail() {
         >
           <Ionicons name="arrow-back" size={28} color={colors.onBrandPrimary} />
         </Pressable>
-        <Text style={styles.topTitle}>Ticket Embarque</Text>
+        <Text style={styles.topTitle}>{tr('embarque')} {t.placas_unidad}</Text>
         {isAdmin && (
           <Pressable onPress={() => editMode ? handleUpdate() : setEditMode(true)} style={styles.editBtn}>
-            {saving ? <ActivityIndicator size={16} color="#FFF" /> : <Text style={styles.editBtnText}>{editMode ? 'GUARDAR' : 'EDITAR'}</Text>}
+            {saving ? <ActivityIndicator size={16} color="#FFF" /> : <Text style={styles.editBtnText}>{editMode ? tr('guardar').toUpperCase() : tr('editar').toUpperCase()}</Text>}
           </Pressable>
         )}
       </View>
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}>
-        <Section title="ALMACÉN">
+        <Section title={tr('almacen')}>
           {editMode ? (
             <View style={{ padding: spacing.sm }}>
-              <EditField label="ALMACENISTA" v={form.almacenista} on={(v: string) => setForm({...form, almacenista: v})} />
-              <EditField label="ÁREA" v={form.area} on={(v: string) => setForm({...form, area: v})} />
-              <EditField label="SELLOS" v={form.sellos} on={(v: string) => setForm({...form, sellos: v})} />
+              <EditField label={tr('almacenista_caps')} v={form.almacenista} on={(v: string) => setForm({...form, almacenista: v})} />
+              <EditField label={tr('area')} v={form.area} on={(v: string) => setForm({...form, area: v})} />
+              <EditField label={tr('sellos_caps')} v={form.sellos} on={(v: string) => setForm({...form, sellos: v})} />
             </View>
           ) : (
             <>
-              <Row k="Almacenista" v={t.almacenista} />
-              <Row k="Área" v={t.area} />
-              <Row k="Sellos" v={t.sellos} />
-              <Row k="Fecha" v={new Date(t.fecha).toLocaleString('es-MX')} />
+              <Row k={tr('almacenista')} v={t.almacenista} />
+              <Row k={tr('area')} v={t.area} />
+              <Row k={tr('sellos')} v={t.sellos} />
+              <Row k={tr('fecha')} v={new Date(t.fecha).toLocaleString()} />
             </>
           )}
         </Section>
-        <Section title="MATERIAL / TRANSPORTE">
+        <Section title={tr('material_transporte') || "MATERIAL / TRANSPORTE"}>
           {editMode ? (
             <View style={{ padding: spacing.sm }}>
-              <EditField label="CLIENTE" v={form.cliente} on={(v: string) => setForm({...form, cliente: v})} />
-              <EditField label="PLACAS UNIDAD" v={form.placas_unidad} on={(v: string) => setForm({...form, placas_unidad: v})} />
-              <EditField label="# CAJA" v={form.numero_caja} on={(v: string) => setForm({...form, numero_caja: v})} />
-              <EditField label="# SELLO" v={form.numero_sello} on={(v: string) => setForm({...form, numero_sello: v})} />
+              <EditField label={tr('cliente_caps')} v={form.cliente} on={(v: string) => setForm({...form, cliente: v})} />
+              <EditField label={tr('placas_unidad_caps')} v={form.placas_unidad} on={(v: string) => setForm({...form, placas_unidad: v})} />
+              <EditField label={tr('numero_caja_caps')} v={form.numero_caja} on={(v: string) => setForm({...form, numero_caja: v})} />
+              <EditField label={tr('numero_sello_caps')} v={form.numero_sello} on={(v: string) => setForm({...form, numero_sello: v})} />
             </View>
           ) : (
             <>
-              <Row k="Cliente" v={t.cliente} />
-              <Row k="Operador" v={t.operador} />
-              <Row k="Línea transporte" v={t.linea_transporte} />
-              <Row k="# Económico" v={t.numero_economico} />
-              <Row k="Placas unidad" v={t.placas_unidad} />
-              <Row k="# Caja" v={t.numero_caja} />
-              <Row k="Placas caja" v={t.placas_caja} />
+              <Row k={tr('cliente')} v={t.cliente} />
+              <Row k={tr('operador')} v={t.operador} />
+              <Row k={tr('linea_transporte') || "Línea transporte"} v={t.linea_transporte} />
+              <Row k={tr('numero_economico_unidad') || "# Económico"} v={t.numero_economico} />
+              <Row k={tr('placas_unidad') || "Placas unidad"} v={t.placas_unidad} />
+              <Row k={tr('numero_caja_caps') || "# Caja"} v={t.numero_caja} />
+              <Row k={tr('placas_caja_caps') || "Placas caja"} v={t.placas_caja} />
             </>
           )}
         </Section>
         {/* ... rest of the sections could also be editable if needed, but these are the main ones */}
-        <Section title="TIEMPOS Y CARGA">
-          <Row k="Hora llegada" v={t.hora_llegada} />
-          <Row k="Apertura cortina" v={t.hora_apertura_cortina} />
-          <Row k="Cierre cortina" v={t.hora_cierre_cortina} />
-          <Row k="Salida (desenrampe)" v={t.hora_salida} />
-          <Row k="# Pallets" v={t.numero_pallets} />
-          <Row k="# Sello" v={t.numero_sello} />
+        <Section title={tr('tiempos_y_carga')}>
+          <Row k={tr('hora_llegada_caseta') || "Hora llegada"} v={t.hora_llegada} />
+          <Row k={tr('hora_apertura_cortina_caps') || "Apertura cortina"} v={t.hora_apertura_cortina} />
+          <Row k={tr('hora_cierre_cortina_caps') || "Cierre cortina"} v={t.hora_cierre_cortina} />
+          <Row k={tr('hora_salida_desenrampe') || "Salida (desenrampe)"} v={t.hora_salida} />
+          <Row k={tr('numero_pallets_caps') || "# Pallets"} v={t.numero_pallets} />
+          <Row k={tr('numero_sello_caps') || "# Sello"} v={t.numero_sello} />
         </Section>
 
-        <Section title="FOTOGRAFÍAS DE CARGA">
+        <Section title={tr('evidencia_carga')}>
           <View style={styles.photoGrid}>
             <PhotoBox
-              label="INICIO CARGA"
+              label={tr('foto_inicio_carga').replace('FOTO ', '')}
               uri={editMode ? form.foto_inicio_carga : t.foto_inicio_carga}
               onPress={() => pickPhoto('foto_inicio_carga')}
               onRemove={() => setForm({...form, foto_inicio_carga: ''})}
               isEdit={editMode}
+              t={tr}
             />
             <PhotoBox
-              label="MEDIA CARGA"
+              label={tr('foto_media_carga').replace('FOTO ', '')}
               uri={editMode ? form.foto_media_carga : t.foto_media_carga}
               onPress={() => pickPhoto('foto_media_carga')}
               onRemove={() => setForm({...form, foto_media_carga: ''})}
               isEdit={editMode}
+              t={tr}
             />
             <PhotoBox
-              label="FINAL CARGA"
+              label={tr('foto_final_carga').replace('FOTO ', '')}
               uri={editMode ? form.foto_final_carga : t.foto_final_carga}
               onPress={() => pickPhoto('foto_final_carga')}
               onRemove={() => setForm({...form, foto_final_carga: ''})}
               isEdit={editMode}
+              t={tr}
             />
           </View>
         </Section>
-        <Section title="OBSERVACIONES Y DAÑOS">
-          <Row k="Observaciones" v={t.observaciones || '-'} />
-          <Row k="Daño en caja" v={t.daño_caja || '-'} />
+        <Section title={tr('observaciones_y_danos')}>
+          <Row k={tr('observaciones')} v={t.observaciones || '-'} />
+          <Row k={tr('danos_caja_desc')} v={t.daño_caja || '-'} />
         </Section>
-        <Section title="FIRMAS">
-          <Row k="Guardia" v={editMode ? form.nombre_guardia : t.nombre_guardia} isEdit={editMode} on={(v: string) => setForm({...form, nombre_guardia: v})} />
+        <Section title={tr('firmas').toUpperCase()}>
+          <Row k={tr('guardia')} v={editMode ? form.nombre_guardia : t.nombre_guardia} isEdit={editMode} on={(v: string) => setForm({...form, nombre_guardia: v})} />
 
           <View style={{ padding: spacing.sm, alignItems: 'center' }}>
             {(editMode ? form.firma_almacenista : t.firma_almacenista) ? (
@@ -160,23 +166,23 @@ export default function EmbarqueDetail() {
                 style={{ width: '80%', height: 80, resizeMode: 'contain', backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border }}
               />
             ) : (
-              <Text style={{ color: colors.muted, fontStyle: 'italic', fontSize: 10 }}>Sin firma almacenista</Text>
+              <Text style={{ color: colors.muted, fontStyle: 'italic', fontSize: 10 }}>{tr('sin_firma_capturada')}</Text>
             )}
             {editMode && (
               <Pressable
                 style={styles.sigEditBtn}
                 onPress={() => {
                   setSigModalConfig({
-                    title: 'Firma del Almacenista',
+                    title: tr('firma_almacenista'),
                     onSave: (sig: string) => setForm({ ...form, firma_almacenista: sig })
                   });
                   setShowSigModal(true);
                 }}
               >
-                <Text style={styles.sigEditBtnText}>CAMBIAR FIRMA ALMACENISTA</Text>
+                <Text style={styles.sigEditBtnText}>{tr('cambiar_firma_almacenista') || "CAMBIAR FIRMA ALMACENISTA"}</Text>
               </Pressable>
             )}
-            <Text style={[styles.firmaTxt, { fontSize: 10, paddingTop: 2 }]}>FIRMA ALMACENISTA: {editMode ? form.almacenista : t.almacenista}</Text>
+            <Text style={[styles.firmaTxt, { fontSize: 10, paddingTop: 2 }]}>{tr('firma_almacenista_caps')}: {editMode ? form.almacenista : t.almacenista}</Text>
           </View>
 
           <View style={{ padding: spacing.sm, alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.divider }}>
@@ -186,23 +192,23 @@ export default function EmbarqueDetail() {
                 style={{ width: '80%', height: 80, resizeMode: 'contain', backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border }}
               />
             ) : (
-              <Text style={{ color: colors.muted, fontStyle: 'italic', fontSize: 10 }}>Sin firma guardia</Text>
+              <Text style={{ color: colors.muted, fontStyle: 'italic', fontSize: 10 }}>{tr('sin_firma_capturada')}</Text>
             )}
             {editMode && (
               <Pressable
                 style={styles.sigEditBtn}
                 onPress={() => {
                   setSigModalConfig({
-                    title: 'Firma del Guardia',
+                    title: tr('firma_guardia'),
                     onSave: (sig: string) => setForm({ ...form, firma_guardia: sig })
                   });
                   setShowSigModal(true);
                 }}
               >
-                <Text style={styles.sigEditBtnText}>CAMBIAR FIRMA GUARDIA</Text>
+                <Text style={styles.sigEditBtnText}>{tr('cambiar_firma_guardia') || "CAMBIAR FIRMA GUARDIA"}</Text>
               </Pressable>
             )}
-            <Text style={[styles.firmaTxt, { fontSize: 10, paddingTop: 2 }]}>FIRMA GUARDIA: {editMode ? form.nombre_guardia : t.nombre_guardia}</Text>
+            <Text style={[styles.firmaTxt, { fontSize: 10, paddingTop: 2 }]}>{tr('firma_guardia_caps')}: {editMode ? form.nombre_guardia : t.nombre_guardia}</Text>
           </View>
         </Section>
       </ScrollView>
@@ -212,6 +218,7 @@ export default function EmbarqueDetail() {
           onClose={() => setShowSigModal(false)}
           onSave={(sig) => { sigModalConfig.onSave(sig); setShowSigModal(false); }}
           title={sigModalConfig.title}
+          t={tr}
         />
       )}
     </SafeAreaView>
@@ -237,7 +244,7 @@ function Row({ k, v, isEdit, on }: any) {
   return <View style={styles.row}><Text style={styles.rowK}>{k}</Text><Text style={styles.rowV}>{v || '-'}</Text></View>;
 }
 
-function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSave: (sig: string) => void; title: string }) {
+function SignatureModal({ onClose, onSave, title, t }: { onClose: () => void; onSave: (sig: string) => void; title: string; t: any }) {
   const sigRef = React.useRef<any>(null);
   const handleOK = (signature: string) => onSave(signature);
   const style = `.m-signature-pad--footer {display: none; margin: 0px;}
@@ -251,9 +258,9 @@ function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSav
           <Signature
             ref={sigRef}
             onOK={handleOK}
-            descriptionText="Firme dentro del recuadro"
-            clearText="Borrar"
-            confirmText="Guardar"
+            descriptionText={t('firme_dentro_desc')}
+            clearText={t('borrar')}
+            confirmText={t('guardar')}
             webStyle={style}
             autoClear={false}
             imageType="image/jpeg"
@@ -261,13 +268,13 @@ function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSav
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
           <Pressable style={[styles.secondaryBtn, { flex: 1 }]} onPress={onClose}>
-            <Text style={styles.secondaryBtnText}>CANCELAR</Text>
+            <Text style={styles.secondaryBtnText}>{t('cancelar_caps')}</Text>
           </Pressable>
           <Pressable
             style={[styles.primaryBtn, { flex: 1 }]}
             onPress={() => sigRef.current?.readSignature()}
           >
-            <Text style={styles.primaryBtnText}>GUARDAR</Text>
+            <Text style={styles.primaryBtnText}>{t('guardar')}</Text>
           </Pressable>
         </View>
       </View>
@@ -276,7 +283,7 @@ function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSav
 }
 
 function PhotoBox({
-label, uri, onPress, onRemove, isEdit }: any) {
+label, uri, onPress, onRemove, isEdit, t }: any) {
   return (
     <View style={styles.photoItem}>
       <Text style={styles.photoLabel}>{label}</Text>
@@ -297,7 +304,7 @@ label, uri, onPress, onRemove, isEdit }: any) {
         >
           <Ionicons name="camera" size={32} color={isEdit ? colors.brandPrimary : colors.border} />
           <Text style={{ fontSize: 9, color: isEdit ? colors.brandPrimary : colors.border, fontWeight: '900', marginTop: 4 }}>
-            {isEdit ? 'AGREGAR FOTO' : 'SIN FOTO'}
+            {isEdit ? t('agregar_foto') : t('sin_foto')}
           </Text>
         </Pressable>
       )}

@@ -219,7 +219,7 @@ export default function Supervisor() {
         <Text style={styles.title}>{t('panel_supervisor')}</Text>
 
         <View style={styles.masterPanel}>
-          <Text style={styles.masterTitle}>{t('panel_maestro')}</Text>
+          <Text style={styles.masterTitle}>{t('admin_tools')}</Text>
           <View style={styles.masterActions}>
             <Pressable style={[styles.masterBtn, { backgroundColor: colors.info + '22' }]} onPress={() => setLinkingMode(!linkingMode)}>
               <Ionicons name="link" size={14} color={colors.info} />
@@ -227,20 +227,20 @@ export default function Supervisor() {
             </Pressable>
             <Pressable style={[styles.masterBtn, { backgroundColor: colors.brandPrimary + '22' }]} onPress={() => router.push('/usuarios')}>
               <Ionicons name="people" size={14} color={colors.brandPrimary} />
-              <Text style={[styles.masterBtnText, { color: colors.brandPrimary }]}>USUARIOS</Text>
+              <Text style={[styles.masterBtnText, { color: colors.brandPrimary }]}>{t('usuarios_caps')}</Text>
             </Pressable>
             <Pressable style={[styles.masterBtn, { backgroundColor: '#7c3aed22' }]} onPress={() => router.push('/analitica')}>
               <Ionicons name="stats-chart" size={14} color="#7c3aed" />
-              <Text style={[styles.masterBtnText, { color: '#7c3aed' }]}>KPIs / ANALÍTICA</Text>
+              <Text style={[styles.masterBtnText, { color: '#7c3aed' }]}>{t('kpis').toUpperCase()} / {t('reporte_analitica').toUpperCase()}</Text>
             </Pressable>
           </View>
         </View>
 
         {linkingMode && (
           <View style={[styles.masterPanel, { backgroundColor: colors.surfaceTertiary, borderTopWidth: 0, marginTop: -spacing.md }]}>
-            <Text style={[styles.masterTitle, { color: colors.onSurface }]}>HERRAMIENTA DE VINCULACIÓN (HUÉRFANOS)</Text>
+            <Text style={[styles.masterTitle, { color: colors.onSurface }]}>{t('vincular_huerfanos')}</Text>
             {orphanRecords.length === 0 ? (
-              <Text style={{ fontSize: 10, color: colors.muted }}>No hay registros de caseta sin inspección vinculada.</Text>
+              <Text style={{ fontSize: 10, color: colors.muted }}>{t('no_hay_registros')}</Text>
             ) : (
               orphanRecords.map(r => {
                 const match = orphanInspections.find(i => i.placas_unidad === r.entry.placas_unidad);
@@ -249,10 +249,10 @@ export default function Supervisor() {
                     <Text style={{ fontSize: 10, fontWeight: '700' }}>{r.entry.placas_unidad} ({r.entry.chofer_nombre})</Text>
                     {match ? (
                       <Pressable style={{ backgroundColor: colors.success, paddingHorizontal: 8, paddingVertical: 2 }} onPress={() => handleLink(r.id, match.id)}>
-                        <Text style={{ fontSize: 9, color: '#FFF', fontWeight: '900' }}>VINCULAR CON INSP: {match.id.slice(0,5)}</Text>
+                        <Text style={{ fontSize: 9, color: '#FFF', fontWeight: '900' }}>{t('vincular_con')} INSP: {match.id.slice(0,5)}</Text>
                       </Pressable>
                     ) : (
-                      <Text style={{ fontSize: 9, color: colors.error }}>SIN INSP. ENCONTRADA</Text>
+                      <Text style={{ fontSize: 9, color: colors.error }}>{t('sin_insp_encontrada')}</Text>
                     )}
                   </View>
                 );
@@ -262,9 +262,9 @@ export default function Supervisor() {
         )}
 
         <View style={styles.tabRow}>
-          <TabItem label="CASETA" active={activeTab === 'caseta'} onPress={() => setActiveTab('caseta')} icon="business" />
-          <TabItem label="INSPECCIÓN" active={activeTab === 'inspeccion'} onPress={() => setActiveTab('inspeccion')} icon="clipboard" />
-          <TabItem label="EMBARQUE" active={activeTab === 'embarque'} onPress={() => setActiveTab('embarque')} icon="cube" />
+          <TabItem label={t('caseta').toUpperCase()} active={activeTab === 'caseta'} onPress={() => setActiveTab('caseta')} icon="business" />
+          <TabItem label={t('inspeccion').toUpperCase()} active={activeTab === 'inspeccion'} onPress={() => setActiveTab('inspeccion')} icon="clipboard" />
+          <TabItem label={t('embarque').toUpperCase()} active={activeTab === 'embarque'} onPress={() => setActiveTab('embarque')} icon="cube" />
         </View>
 
         <View style={styles.searchBox}>
@@ -292,6 +292,7 @@ export default function Supervisor() {
               onEmail={() => handleSendEmail(item.id)}
               loadingPdf={reportLoading === item.id}
               loadingEmail={emailLoading === item.id}
+              t={t}
             />
           );
           if (activeTab === 'inspeccion') {
@@ -300,7 +301,7 @@ export default function Supervisor() {
                 <View style={[styles.row, { borderLeftWidth: 4, borderLeftColor: colors.warning }]}>
                    <View style={{ flex: 1 }}>
                     <Text style={styles.rowTitle}>{item.entry.placas_unidad} · {item.entry.chofer_nombre}</Text>
-                    <Text style={[styles.rowSub, { color: colors.warning, fontWeight: '700' }]}>⚠️ INSPECCIÓN PENDIENTE</Text>
+                    <Text style={[styles.rowSub, { color: colors.warning, fontWeight: '700' }]}>⚠️ {t('inspeccion_pendiente').toUpperCase()}</Text>
                     <ProcessTracker steps={{ entry: true, inspection: false, shipping: !!item.has_shipping_ticket, exit: false }} compact />
                     <Pressable
                       onPress={() => {
@@ -316,7 +317,7 @@ export default function Supervisor() {
                       style={[styles.actionBtn, { marginTop: 8, backgroundColor: colors.warning + '22', padding: 4 }]}
                     >
                       <Ionicons name="clipboard-outline" size={16} color={colors.warning} />
-                      <Text style={[styles.actionText, { color: colors.warning }]}>REALIZAR INSPECCIÓN AHORA</Text>
+                      <Text style={[styles.actionText, { color: colors.warning }]}>{t('realizar_inspeccion_ahora').toUpperCase()}</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -338,7 +339,7 @@ export default function Supervisor() {
                 <View style={[styles.row, { borderLeftWidth: 4, borderLeftColor: colors.warning }]}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.rowTitle}>{item.entry.placas_unidad} · {item.entry.chofer_nombre}</Text>
-                    <Text style={[styles.rowSub, { color: colors.warning, fontWeight: '700' }]}>⚠️ TICKET DE EMBARQUE PENDIENTE</Text>
+                    <Text style={[styles.rowSub, { color: colors.warning, fontWeight: '700' }]}>⚠️ {t('ticket_pendiente').toUpperCase()}</Text>
                     <ProcessTracker steps={{ entry: true, inspection: true, shipping: false, exit: false }} compact />
                     <Pressable
                       onPress={() => {
@@ -354,7 +355,7 @@ export default function Supervisor() {
                       style={[styles.actionBtn, { marginTop: 8, backgroundColor: colors.warning + '22', padding: 4 }]}
                     >
                       <Ionicons name="document-text-outline" size={16} color={colors.warning} />
-                      <Text style={[styles.actionText, { color: colors.warning }]}>GENERAR TICKET AHORA</Text>
+                      <Text style={[styles.actionText, { color: colors.warning }]}>{t('generar_ticket_ahora').toUpperCase()}</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -365,11 +366,12 @@ export default function Supervisor() {
                 item={item}
                 onEdit={() => router.push(`/embarque/${item.id}`)}
                 records={allRecords}
+                t={t}
               />
             );
           }
         }}
-        ListEmptyComponent={<View style={styles.empty}><Text style={styles.emptyText}>No hay registros para mostrar</Text></View>}
+        ListEmptyComponent={<View style={styles.empty}><Text style={styles.emptyText}>{t('no_hay_registros')}</Text></View>}
       />
     </SafeAreaView>
   );
@@ -384,7 +386,7 @@ function TabItem({ label, active, onPress, icon }: any) {
   );
 }
 
-function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail }: any) {
+function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail, t }: any) {
   const e = item.entry;
   const statusColor = item.status === 'salida' ? colors.success : item.status === 'inspeccionado' ? colors.info : colors.warning;
 
@@ -394,6 +396,8 @@ function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail }: a
     shipping: !!item.has_shipping_ticket,
     exit: item.status === 'salida'
   };
+
+  const statusLabel = item.status === 'entrada' ? t('en_patio') : item.status === 'inspeccionado' ? t('inspeccionado') : item.status === 'salida' ? t('salio') : item.status;
 
   return (
     <View style={styles.row}>
@@ -406,21 +410,21 @@ function RecordRow({ item, onEdit, onPdf, onEmail, loadingPdf, loadingEmail }: a
         <View style={styles.btnRow}>
           <Pressable onPress={onEdit} style={styles.actionBtn}>
             <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
-            <Text style={styles.actionText}>EDITOR</Text>
+            <Text style={styles.actionText}>{t('editor').toUpperCase()}</Text>
           </Pressable>
           <Pressable onPress={onPdf} style={[styles.actionBtn, { backgroundColor: colors.brandPrimary, paddingHorizontal: 8, borderRadius: 2 }]} disabled={loadingPdf}>
             {loadingPdf ? <ActivityIndicator size={14} color="#FFF" /> : <Ionicons name="eye-outline" size={16} color="#FFF" />}
-            <Text style={[styles.actionText, { color: '#FFF' }]}>VER REPORTE COMPLETO (PDF)</Text>
+            <Text style={[styles.actionText, { color: '#FFF' }]}>{t('ver_reporte_pdf').toUpperCase()}</Text>
           </Pressable>
           <Pressable onPress={onEmail} style={styles.actionBtn} disabled={loadingEmail}>
             {loadingEmail ? <ActivityIndicator size={14} color={colors.brandPrimary} /> : <Ionicons name="mail-outline" size={16} color={colors.brandPrimary} />}
-            <Text style={styles.actionText}>CORREO ELECTRÓNICO</Text>
+            <Text style={styles.actionText}>{t('correo_electronico_btn').toUpperCase()}</Text>
           </Pressable>
         </View>
         <Text style={styles.rowDate}>{new Date(e.fecha_entrada || item.created_at).toLocaleString()}</Text>
       </View>
       <View style={[styles.statusChip, { backgroundColor: statusColor }]}>
-        <Text style={styles.statusChipText}>{item.status.toUpperCase()}</Text>
+        <Text style={styles.statusChipText}>{statusLabel.toUpperCase()}</Text>
       </View>
     </View>
   );
@@ -452,7 +456,7 @@ function InspectionRow({ item, onEdit, t, records = [], tickets = [] }: any) {
         </View>
         <Pressable onPress={onEdit} style={[styles.actionBtn, { marginTop: 8 }]}>
           <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
-          <Text style={styles.actionText}>EDITAR INSPECCIÓN</Text>
+          <Text style={styles.actionText}>{t('editar_inspeccion').toUpperCase()}</Text>
         </Pressable>
         <Text style={styles.rowDate}>{new Date(item.created_at).toLocaleString()}</Text>
       </View>
@@ -468,7 +472,7 @@ function InspectionRow({ item, onEdit, t, records = [], tickets = [] }: any) {
   );
 }
 
-function TicketRow({ item, onEdit, records = [] }: any) {
+function TicketRow({ item, onEdit, records = [], t }: any) {
   const relatedRecord = records.find((r: any) =>
     r.entry.placas_unidad?.trim().toUpperCase() === item.placas_unidad?.trim().toUpperCase() &&
     new Date(r.created_at).getTime() <= new Date(item.created_at).getTime()
@@ -491,7 +495,7 @@ function TicketRow({ item, onEdit, records = [] }: any) {
         </View>
         <Pressable onPress={onEdit} style={[styles.actionBtn, { marginTop: 8 }]}>
           <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
-          <Text style={styles.actionText}>EDITAR TICKET</Text>
+          <Text style={styles.actionText}>{t('editar_ticket').toUpperCase()}</Text>
         </Pressable>
         <Text style={styles.rowDate}>{new Date(item.created_at).toLocaleString()}</Text>
       </View>

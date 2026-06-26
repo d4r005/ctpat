@@ -89,19 +89,19 @@ export default function ProfilePanel({ visible, onClose }: Props) {
                   style={[styles.langBtn, i18n.language === 'es' && styles.langBtnActive]}
                   onPress={() => changeLanguage('es')}
                 >
-                  <Text style={[styles.langBtnText, i18n.language === 'es' && styles.langBtnTextActive]}>Español</Text>
+                  <Text style={[styles.langBtnText, i18n.language === 'es' && styles.langBtnTextActive]}>{t('spanish')}</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.langBtn, i18n.language === 'en' && styles.langBtnActive]}
                   onPress={() => changeLanguage('en')}
                 >
-                  <Text style={[styles.langBtnText, i18n.language === 'en' && styles.langBtnTextActive]}>English</Text>
+                  <Text style={[styles.langBtnText, i18n.language === 'en' && styles.langBtnTextActive]}>{t('english')}</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.langBtn, i18n.language === 'zh' && styles.langBtnActive]}
                   onPress={() => changeLanguage('zh')}
                 >
-                  <Text style={[styles.langBtnText, i18n.language === 'zh' && styles.langBtnTextActive]}>中文</Text>
+                  <Text style={[styles.langBtnText, i18n.language === 'zh' && styles.langBtnTextActive]}>{t('chinese')}</Text>
                 </Pressable>
               </View>
             </View>

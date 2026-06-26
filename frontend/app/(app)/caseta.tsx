@@ -76,7 +76,7 @@ export default function Caseta() {
       if (pendingInspections.length === 0) return null;
       return (
         <View style={styles.pendingSection}>
-          <Text style={styles.sectionTitle}>UNIDADES PENDIENTES DE INSPECCIÓN</Text>
+          <Text style={styles.sectionTitle}>{t('unidades_pendientes_inspeccion')}</Text>
           {pendingInspections.map((r: VehicleRecord) => (
             <Pressable
               key={r.id}
@@ -97,7 +97,7 @@ export default function Caseta() {
                 <Text style={styles.cardSubText}>{r.entry.chofer_nombre}</Text>
               </View>
               <View style={[styles.miniStatusBadge, { backgroundColor: colors.warning }]}>
-                <Text style={styles.miniStatusText}>INSPECCIONAR</Text>
+                <Text style={styles.miniStatusText}>{t('inspeccionar').toUpperCase()}</Text>
               </View>
             </Pressable>
           ))}
@@ -142,7 +142,7 @@ export default function Caseta() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <MainHeader title="NAF" subtitle={`${t('caseta').toUpperCase()}: REGISTRO DE MOVIMIENTOS`} />
+      <MainHeader title="NAF" subtitle={`${t('caseta').toUpperCase()}: ${t('registro_movimientos').toUpperCase()}`} />
 
       <FlatList
         data={listData}

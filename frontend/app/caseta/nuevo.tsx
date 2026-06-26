@@ -12,6 +12,8 @@ import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
+import { useTranslation } from 'react-i18next';
+
 const TOTAL_STEPS = 4;
 
 const REGLAS = [
@@ -44,6 +46,7 @@ const DECLARACIONES = [
 export default function CasetaNuevo() {
   const router = useRouter();
   const { token } = useAuth();
+  const { t } = useTranslation();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const sigRef = React.useRef<any>(null);
@@ -102,7 +105,7 @@ export default function CasetaNuevo() {
     try {
       if (fromCamera) {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
-        if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
+        if (!perm.granted) { alert(t('acceso_restringido')); return; }
         const r = await ImagePicker.launchCameraAsync({
           mediaTypes: 'images',
           quality: 0.3, // Reducido para evitar errores de red (antes 0.5)
@@ -114,7 +117,7 @@ export default function CasetaNuevo() {
         }
       } else {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!perm.granted) { alert('Se necesita acceso a la galería'); return; }
+        if (!perm.granted) { alert(t('acceso_restringido')); return; }
         const r = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: 'images',
           quality: 0.3, // Reducido (antes 0.5)
@@ -125,7 +128,7 @@ export default function CasetaNuevo() {
           setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
         }
       }
-    } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
+    } catch (e: any) { alert(e.message || 'Error'); }
   };
 
   const handleSave = async () => {
@@ -171,7 +174,7 @@ export default function CasetaNuevo() {
       }).toString();
 
       if (Platform.OS === 'web') {
-        const proceed = window.confirm("✅ Entrada Registrada Correctamente. \n\n¿Deseas iniciar la inspección de 19 puntos para esta unidad ahora mismo?");
+        const proceed = window.confirm(t('inspeccion_guardada') + " \n\n" + t('desea_generar_ticket'));
         if (proceed) {
           router.replace(`/(app)/nueva?${nextParams}`);
         } else {
@@ -180,11 +183,11 @@ export default function CasetaNuevo() {
         }
       } else {
         Alert.alert(
-          "✅ Entrada Registrada",
-          "¿Desea proceder con la inspección de 19 puntos ahora?",
+          t('inspeccion_guardada'),
+          t('desea_generar_ticket'),
           [
-            { text: "MÁS TARDE (REGRESAR)", onPress: () => router.replace('/(app)/caseta') },
-            { text: "SÍ, INICIAR", onPress: () => router.replace(`/(app)/nueva?${nextParams}`) }
+            { text: t('atras'), onPress: () => router.replace('/(app)/caseta') },
+            { text: t('si_generar_ticket_caps'), onPress: () => router.replace(`/(app)/nueva?${nextParams}`) }
           ]
         );
       }
@@ -203,29 +206,29 @@ export default function CasetaNuevo() {
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="caseta-nuevo-screen">
       <View style={styles.topBar}>
         <Pressable onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} /></Pressable>
-        <Text style={styles.topTitle}>Registro Entrada</Text>
+        <Text style={styles.topTitle}>{t('nuevo_registro_entrada').toUpperCase()}</Text>
         <View style={{ width: 24 }} />
       </View>
       <View style={styles.progressBg}><View style={[styles.progressFill, { width: `${progress}%` }]} /></View>
-      <Text style={styles.stepLabel}>PASO {step + 1} DE {TOTAL_STEPS}: {['VEHÍCULO', 'FOTOGRAFÍAS', 'CARGA Y OPERACIÓN', 'REGLAS Y FIRMA'][step]}</Text>
+      <Text style={styles.stepLabel}>{t('paso').toUpperCase()} {step + 1} {t('de').toUpperCase()} {TOTAL_STEPS}</Text>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {step === 0 && (
             <View>
-              <Field label="SUCURSAL" value={sucursal} onChange={setSucursal} testID="caseta-sucursal" />
-              <Field label="DIRECCIÓN" value={direccion} onChange={setDireccion} testID="caseta-direccion" />
-              <Field label="LICENCIA DEL CONDUCTOR" value={licencia} onChange={setLicencia} testID="caseta-licencia" />
-              <Field label="PLACAS DEL VEHÍCULO *" value={placas} onChange={setPlacas} testID="caseta-placas" />
-              <Field label="NOMBRE DEL CHOFER *" value={chofer} onChange={setChofer} testID="caseta-chofer" />
-              <Field label="COMPAÑÍA DE TRANSPORTE" value={compania} onChange={setCompania} testID="caseta-compania" />
-              <Field label="# TRACTOR" value={tractor} onChange={setTractor} testID="caseta-tractor" />
-              <Field label="COMPAÑÍA CAJA" value={companiaCaja} onChange={setCompaniaCaja} testID="caseta-compania-caja" />
-              <Field label="# CAJA / TRÁILER" value={numeroCaja} onChange={setNumeroCaja} testID="caseta-numero-caja" />
+              <Field label={t('sucursal').toUpperCase() || "SUCURSAL"} value={sucursal} onChange={setSucursal} testID="caseta-sucursal" />
+              <Field label={t('direccion').toUpperCase() || "DIRECCIÓN"} value={direccion} onChange={setDireccion} testID="caseta-direccion" />
+              <Field label={t('licencia').toUpperCase() || "LICENCIA"} value={licencia} onChange={setLicencia} testID="caseta-licencia" />
+              <Field label={t('placas_unidad_caps')} value={placas} onChange={setPlacas} testID="caseta-placas" />
+              <Field label={t('nombre_chofer').toUpperCase() || "NOMBRE CHOFER"} value={chofer} onChange={setChofer} testID="caseta-chofer" />
+              <Field label={t('compania_transportista_caps')} value={compania} onChange={setCompania} testID="caseta-compania" />
+              <Field label={t('numero_tractor_caps') || "NÚMERO TRACTOR"} value={tractor} onChange={setTractor} testID="caseta-tractor" />
+              <Field label={t('compania_caja').toUpperCase() || "COMPAÑÍA CAJA"} value={companiaCaja} onChange={setCompaniaCaja} testID="caseta-compania-caja" />
+              <Field label={t('numero_caja_caps') || "NÚMERO CAJA"} value={numeroCaja} onChange={setNumeroCaja} testID="caseta-numero-caja" />
 
               <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
                 <View style={{ flex: 1 }}>
-                  <Field label="# SELLO DE ENTRADA" value={selloEntrada} onChange={setSelloEntrada} testID="caseta-sello-entrada" disabled={selloEntradaNA} />
+                  <Field label={t('numero_precinto_caps')} value={selloEntrada} onChange={setSelloEntrada} testID="caseta-sello-entrada" disabled={selloEntradaNA} />
                 </View>
                 <Pressable onPress={() => setSelloEntradaNA(!selloEntradaNA)} style={styles.naBox}>
                   <View style={[styles.naCheck, selloEntradaNA && styles.naCheckOn]}>
@@ -235,12 +238,12 @@ export default function CasetaNuevo() {
                 </Pressable>
               </View>
 
-              <ToggleRow label="¿ESCOLTA?" value={escoltaPresente} onChange={setEscoltaPresente} testID="caseta-escolta-toggle" />
+              <ToggleRow label={t('usa_escolta').toUpperCase() || "¿ESCOLTA?"} value={escoltaPresente} onChange={setEscoltaPresente} testID="caseta-escolta-toggle" t={t} />
               {escoltaPresente && (
                 <>
-                  <Field label="COMPAÑÍA ESCOLTA" value={escoltaCompania} onChange={setEscoltaCompania} testID="caseta-escolta-compania" />
-                  <Field label="# UNIDAD ESCOLTA" value={escoltaUnidad} onChange={setEscoltaUnidad} testID="caseta-escolta-unidad" />
-                  <Field label="PLACAS ESCOLTA" value={escoltaPlacas} onChange={setEscoltaPlacas} testID="caseta-escolta-placas" />
+                  <Field label={t('compania_escolta')} value={escoltaCompania} onChange={setEscoltaCompania} testID="caseta-escolta-compania" />
+                  <Field label={t('unidad_escolta')} value={escoltaUnidad} onChange={setEscoltaUnidad} testID="caseta-escolta-unidad" />
+                  <Field label={t('placas_escolta')} value={escoltaPlacas} onChange={setEscoltaPlacas} testID="caseta-escolta-placas" />
                 </>
               )}
             </View>
@@ -248,53 +251,56 @@ export default function CasetaNuevo() {
 
           {step === 1 && (
             <View>
-              <Text style={styles.stepTitle}>Registro Fotográfico</Text>
+              <Text style={styles.stepTitle}>{t('registro_fotografico')}</Text>
 
               <PhotoBox
-                label="UNIDAD (FRENTE) - Placa y Económico"
+                label={t('unidad_frente')}
                 value={fotoFrente}
                 onCamera={() => pickPhoto(setFotoFrente, true)}
                 onGallery={() => pickPhoto(setFotoFrente, false)}
                 onRemove={() => setFotoFrente('')}
+                t={t}
               />
 
               <PhotoBox
-                label="CAJA / TRÁILER (ATRÁS) - Placa y Económico"
+                label={t('caja_atras')}
                 value={fotoAtras}
                 onCamera={() => pickPhoto(setFotoAtras, true)}
                 onGallery={() => pickPhoto(setFotoAtras, false)}
                 onRemove={() => setFotoAtras('')}
+                t={t}
               />
 
               <PhotoBox
-                label="IDENTIFICACIÓN DEL CHOFER"
+                label={t('id_chofer')}
                 value={fotoId}
                 onCamera={() => pickPhoto(setFotoId, true)}
                 onGallery={() => pickPhoto(setFotoId, false)}
                 onRemove={() => setFotoId('')}
+                t={t}
               />
             </View>
           )}
 
           {step === 2 && (
             <View>
-              <Field label="CORTINA ASIGNADA" value={cortina} onChange={setCortina} testID="caseta-cortina" />
-              <Field label="NOMBRE GUARDIA CASETA *" value={guardiaCaseta} onChange={setGuardiaCaseta} testID="caseta-guardia" />
+              <Field label={t('cortina_asignada_caps')} value={cortina} onChange={setCortina} testID="caseta-cortina" />
+              <Field label={`${t('nombre_guardia_caseta')} *`} value={guardiaCaseta} onChange={setGuardiaCaseta} testID="caseta-guardia" />
 
-              <Text style={styles.fieldLabel}>CONDICIÓN DE CARGA *</Text>
+              <Text style={styles.fieldLabel}>{t('condicion_carga_caps')} *</Text>
               <View style={styles.optionsRow}>
                 {(['vacia', 'consolidada', 'otra', 'descarga'] as const).map((c) => (
                   <Pressable key={c} testID={`caseta-condicion-${c}`} onPress={() => setCondicionCarga(c)} style={[styles.optionChip, condicionCarga === c && styles.optionChipActive]}>
-                    <Text style={[styles.optionText, condicionCarga === c && styles.optionTextActive]}>{c.toUpperCase()}</Text>
+                    <Text style={[styles.optionText, condicionCarga === c && styles.optionTextActive]}>{t(c).toUpperCase()}</Text>
                   </Pressable>
                 ))}
               </View>
 
-              <Field label="DESCRIPCIÓN DE CARGA" value={descripcionCarga} onChange={setDescripcionCarga} testID="caseta-desc-carga" multiline />
+              <Field label={t('descripcion_carga').toUpperCase() || "DESCRIPCIÓN DE CARGA"} value={descripcionCarga} onChange={setDescripcionCarga} testID="caseta-desc-carga" multiline />
 
               <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
                 <View style={{ flex: 1 }}>
-                  <Field label="# GUÍA" value={numGuia} onChange={setNumGuia} testID="caseta-guia" disabled={numGuiaNA} />
+                  <Field label={t('guia_caps')} value={numGuia} onChange={setNumGuia} testID="caseta-guia" disabled={numGuiaNA} />
                 </View>
                 <Pressable onPress={() => setNumGuiaNA(!numGuiaNA)} style={styles.naBox}>
                   <View style={[styles.naCheck, numGuiaNA && styles.naCheckOn]}>
@@ -306,7 +312,7 @@ export default function CasetaNuevo() {
 
               <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
                 <View style={{ flex: 1 }}>
-                  <Field label="# REQUERIMIENTO" value={numReq} onChange={setNumReq} testID="caseta-requerimiento" disabled={numReqNA} />
+                  <Field label={t('requerimiento_caps')} value={numReq} onChange={setNumReq} testID="caseta-requerimiento" disabled={numReqNA} />
                 </View>
                 <Pressable onPress={() => setNumReqNA(!numReqNA)} style={styles.naBox}>
                   <View style={[styles.naCheck, numReqNA && styles.naCheckOn]}>
@@ -316,39 +322,39 @@ export default function CasetaNuevo() {
                 </Pressable>
               </View>
 
-              <ToggleRow label="¿ORDEN DE COMPRA?" value={ordenCompra} onChange={setOrdenCompra} testID="caseta-orden-compra" />
+              <ToggleRow label={t('orden_compra_pregunta')} value={ordenCompra} onChange={setOrdenCompra} testID="caseta-orden-compra" t={t} />
               {ordenCompra && (
-                <Field label="# ORDEN DE COMPRA" value={numOrdenCompra} onChange={setNumOrdenCompra} testID="caseta-num-orden-compra" />
+                <Field label={`# ${t('numero_orden_compra') || "ORDEN DE COMPRA"}`} value={numOrdenCompra} onChange={setNumOrdenCompra} testID="caseta-num-orden-compra" />
               )}
 
-              <Field label="DESTINO" value={destino} onChange={setDestino} testID="caseta-destino" />
+              <Field label={t('destino_caps')} value={destino} onChange={setDestino} testID="caseta-destino" />
             </View>
           )}
 
           {step === 3 && (
             <View>
-              <Text style={styles.declTitle}>INSTRUCCIONES DE SEGURIDAD</Text>
+              <Text style={styles.declTitle}>{t('instrucciones_seguridad')}</Text>
               <View style={styles.rulesBox}>
-                {REGLAS.map((r) => <Text key={r} style={styles.ruleItem}>{r}</Text>)}
+                {REGLAS.map((r, idx) => <Text key={idx} style={styles.ruleItem}>{r}</Text>)}
               </View>
 
-              <Text style={styles.declTitle}>DECLARACIONES DEL CONDUCTOR</Text>
+              <Text style={styles.declTitle}>{t('declaraciones_conductor')}</Text>
               <View style={styles.rulesBox}>
-                {DECLARACIONES.map((d) => <Text key={d} style={styles.ruleItem}>{d}</Text>)}
+                {DECLARACIONES.map((d, idx) => <Text key={idx} style={styles.ruleItem}>{d}</Text>)}
               </View>
 
               <Pressable testID="caseta-acepta" style={styles.checkRow} onPress={() => setAceptaTerminos(!aceptaTerminos)}>
                 <View style={[styles.checkbox, aceptaTerminos && styles.checkboxOn]}>
                   {aceptaTerminos && <Ionicons name="checkmark" size={18} color={colors.onSuccess} />}
                 </View>
-                <Text style={styles.checkLabel}>El conductor ha leído, entendido y ACEPTA las instrucciones y declaraciones</Text>
+                <Text style={styles.checkLabel}>{t('conductor_acepta')}</Text>
               </Pressable>
 
               <Pressable testID="caseta-firma-btn" style={styles.signatureBox} onPress={() => setShowSig(true)}>
                 {firmaOperador ? (
-                  <Text style={styles.firmaDone}>FIRMA CAPTURADA ✓ (Tocar para volver a firmar)</Text>
+                  <Text style={styles.firmaDone}>{t('firma_capturada_msg')}</Text>
                 ) : (
-                  <Text style={styles.firmaCta}>Toca para firma del operador</Text>
+                  <Text style={styles.firmaCta}>{t('toca_firma_operador')}</Text>
                 )}
               </Pressable>
             </View>
@@ -358,16 +364,16 @@ export default function CasetaNuevo() {
         <View style={styles.footer}>
           {step > 0 && (
             <Pressable testID="caseta-prev" style={styles.secBtn} onPress={() => setStep(step - 1)}>
-              <Text style={styles.secBtnText}>ATRÁS</Text>
+              <Text style={styles.secBtnText}>{t('atras')}</Text>
             </Pressable>
           )}
           {step < TOTAL_STEPS - 1 ? (
             <Pressable testID="caseta-next" style={[styles.priBtn, !canNext() && { opacity: 0.4 }]} onPress={() => canNext() && setStep(step + 1)} disabled={!canNext()}>
-              <Text style={styles.priBtnText}>SIGUIENTE</Text>
+              <Text style={styles.priBtnText}>{t('siguiente')}</Text>
             </Pressable>
           ) : (
             <Pressable testID="caseta-save" style={[styles.priBtn, (!canNext() || saving) && { opacity: 0.4 }]} onPress={handleSave} disabled={!canNext() || saving}>
-              {saving ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.priBtnText}>REGISTRAR ENTRADA</Text>}
+              {saving ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.priBtnText}>{t('registrar_entrada')}</Text>}
             </Pressable>
           )}
         </View>
@@ -376,7 +382,7 @@ export default function CasetaNuevo() {
       {showSig && (
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Firma del Operador</Text>
+            <Text style={styles.modalTitle}>{t('firma_operador')}</Text>
             <View style={{ height: 280, justifyContent: 'center', alignItems: 'center', backgroundColor: '#EEE', borderWidth: 2, borderColor: colors.borderStrong }}>
               <Signature
                 ref={sigRef}
@@ -388,14 +394,14 @@ export default function CasetaNuevo() {
             </View>
             <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
               <Pressable style={[styles.secBtn, { flex: 1 }]} onPress={() => setShowSig(false)} testID="caseta-firma-cancel">
-                <Text style={styles.secBtnText}>CANCELAR</Text>
+                <Text style={styles.secBtnText}>{t('cancelar_caps')}</Text>
               </Pressable>
               <Pressable
                 style={[styles.priBtn, { flex: 1 }]}
                 onPress={() => sigRef.current?.readSignature()}
                 testID="caseta-firma-save"
               >
-                <Text style={styles.priBtnText}>GUARDAR FIRMA</Text>
+                <Text style={styles.priBtnText}>{t('guardar_firma_caps')}</Text>
               </Pressable>
             </View>
           </View>
@@ -426,19 +432,19 @@ function Field({ label, value, onChange, testID, multiline, disabled }: any) {
     </>
   );
 }
-function ToggleRow({ label, value, onChange, testID }: any) {
+function ToggleRow({ label, value, onChange, testID, t }: any) {
   return (
     <Pressable testID={testID} style={styles.toggleRow} onPress={() => onChange(!value)}>
       <Text style={styles.toggleLabel}>{label}</Text>
       <View style={[styles.toggleSwitch, value && styles.toggleSwitchOn]}>
         <View style={[styles.toggleKnob, value && { right: 2 }, !value && { left: 2 }]} />
       </View>
-      <Text style={[styles.toggleValue, value && { color: colors.success }]}>{value ? 'SÍ' : 'NO'}</Text>
+      <Text style={[styles.toggleValue, value && { color: colors.success }]}>{value ? (t('si') || 'SÍ') : (t('no') || 'NO')}</Text>
     </Pressable>
   );
 }
 
-function PhotoBox({ label, value, onCamera, onGallery, onRemove }: any) {
+function PhotoBox({ label, value, onCamera, onGallery, onRemove, t }: any) {
   return (
     <View style={{ marginBottom: spacing.lg }}>
       <Text style={styles.fieldLabel}>{label} *</Text>
@@ -453,11 +459,11 @@ function PhotoBox({ label, value, onCamera, onGallery, onRemove }: any) {
         <View style={styles.photoActionRow}>
           <Pressable onPress={onCamera} style={styles.photoActionBtn}>
             <Ionicons name="camera" size={20} color={colors.onBrandPrimary} />
-            <Text style={styles.photoActionText}>CÁMARA</Text>
+            <Text style={styles.photoActionText}>{t('foto_caps')}</Text>
           </Pressable>
           <Pressable onPress={onGallery} style={[styles.photoActionBtn, { backgroundColor: colors.brandSecondary }]}>
             <Ionicons name="images" size={20} color={colors.onBrandSecondary} />
-            <Text style={[styles.photoActionText, { color: colors.onBrandSecondary }]}>GALERÍA</Text>
+            <Text style={[styles.photoActionText, { color: colors.onBrandSecondary }]}>{t('galeria_caps')}</Text>
           </Pressable>
         </View>
       )}

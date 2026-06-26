@@ -83,7 +83,7 @@ export default function Nueva() {
     try {
       if (fromCamera) {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
-        if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
+        if (!perm.granted) { alert(t('acceso_restringido')); return; }
         const r = await ImagePicker.launchCameraAsync({
           mediaTypes: 'images',
           quality: 0.3, // Optimizado (antes 0.5)
@@ -95,7 +95,7 @@ export default function Nueva() {
         }
       } else {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!perm.granted) { alert('Se necesita acceso a la galería'); return; }
+        if (!perm.granted) { alert(t('acceso_restringido')); return; }
         const r = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: 'images',
           quality: 0.3, // Optimizado (antes 0.5)
@@ -106,7 +106,7 @@ export default function Nueva() {
           updatePoint(idx, { photo: `data:image/jpeg;base64,${r.assets[0].base64}` });
         }
       }
-    } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
+    } catch (e: any) { alert(e.message || 'Error'); }
   };
 
   // Suspicious + signatures
@@ -203,7 +203,7 @@ export default function Nueva() {
         t('desea_generar_ticket'),
         [
           {
-            text: "REGRESAR AL PANEL",
+            text: t('regresar_panel_caps'),
             onPress: () => router.replace('/(app)/historico')
           },
           {
@@ -245,7 +245,7 @@ export default function Nueva() {
             <View style={{ marginBottom: spacing.xl }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.md }}>
                 <Ionicons name="time-outline" size={20} color={colors.warning} />
-                <Text style={[styles.selectorLabel, { marginBottom: 0, textAlign: 'left' }]}>PENDIENTES EN PATIO ({pendingInYard.length})</Text>
+                <Text style={[styles.selectorLabel, { marginBottom: 0, textAlign: 'left' }]}>{t('pendientes_patio').toUpperCase()} ({pendingInYard.length})</Text>
               </View>
               {pendingInYard.map((r) => (
                 <Pressable
@@ -259,17 +259,17 @@ export default function Nueva() {
                     router.setParams({ record_id: r.id });
 
                     if (Platform.OS === 'web') {
-                      const is9p = window.confirm("¿Deseas realizar inspección de 9 PUNTOS (CONTENEDOR)? \n\n(Aceptar = 9 Puntos / Cancelar = 19 Puntos)");
+                      const is9p = window.confirm(t('pregunta_tipo_inspeccion') + " (OK = 9 pts / Cancel = 19 pts)");
                       setSelectedType(is9p ? '9_puntos_contenedor' : '19_puntos');
                       setShowTypeSelector(false);
                     } else {
                       Alert.alert(
-                        "Iniciar Inspección",
-                        `¿Qué tipo de inspección realizarás para la unidad ${r.entry.placas_unidad}?`,
+                        t('iniciar_inspeccion'),
+                        `${t('pregunta_tipo_inspeccion')} ${r.entry.placas_unidad}?`,
                         [
                           { text: "19 PUNTOS", onPress: () => { setSelectedType('19_puntos'); setShowTypeSelector(false); } },
                           { text: "9 PUNTOS", onPress: () => { setSelectedType('9_puntos_contenedor'); setShowTypeSelector(false); } },
-                          { text: "CANCELAR", style: 'cancel' }
+                          { text: t('cancelar'), style: 'cancel' }
                         ]
                       );
                     }
@@ -426,7 +426,7 @@ export default function Nueva() {
                       {!p.photo && (
                         <View style={{ backgroundColor: colors.error + '11', padding: 8, marginTop: 8, borderWidth: 1, borderColor: colors.error }}>
                           <Text style={{ color: colors.error, fontSize: 10, fontWeight: '900', textAlign: 'center' }}>
-                            ⚠ LA FOTO ES OBLIGATORIA CUANDO HAY FALLA
+                            {t('foto_obligatoria_falla')}
                           </Text>
                         </View>
                       )}

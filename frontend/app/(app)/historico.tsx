@@ -120,19 +120,19 @@ export default function Historico() {
             style={[styles.chip, filter === f && styles.chipActive]}
           >
             <Text style={[styles.chipText, filter === f && styles.chipTextActive]}>
-              {f === 'todos' ? t('todos') : f === 'bueno' ? t('bueno') : t('con_falla')}
+              {f === 'todos' ? t('todos').toUpperCase() : f === 'bueno' ? t('bueno').toUpperCase() : t('falla').toUpperCase()}
             </Text>
           </Pressable>
         ))}
       </View>
 
-      <Text style={styles.sectionTitle}>{t('inspecciones').toUpperCase()}</Text>
+      <Text style={styles.sectionTitle}>{t('inspeccion').toUpperCase()}</Text>
     </>
   );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <MainHeader title="NAF" subtitle={`${t('historico').toUpperCase()}: ARCHIVO DIGITAL`} />
+      <MainHeader title="NAF" subtitle={`${t('historico').toUpperCase()}: ${t('archivo_digital') || 'ARCHIVO DIGITAL'}`} />
 
       <FlatList
         data={filtered}

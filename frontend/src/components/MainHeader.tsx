@@ -7,6 +7,8 @@ import { useRouter } from 'expo-router';
 import NotificationsPanel from './NotificationsPanel';
 import ProfilePanel from './ProfilePanel';
 
+import { useTranslation } from 'react-i18next';
+
 interface MainHeaderProps {
   title?: string;
   subtitle?: string;
@@ -15,6 +17,7 @@ interface MainHeaderProps {
 
 const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack }) => {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const router = useRouter();
   const [showNotifs, setShowNotifs] = React.useState(false);
   const [showProfile, setShowProfile] = React.useState(false);
@@ -30,7 +33,7 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack }) =>
         <View style={{ flex: 1 }}>
           <Text style={styles.brandLogo}>{title || 'NAF'}</Text>
           <Text style={styles.brandSubtitle}>
-            {subtitle || 'Sistema de Registro e Inspección de Unidades de Carga'}
+            {subtitle || t('sistema_registro')}
           </Text>
         </View>
       </View>
@@ -44,7 +47,7 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack }) =>
             <Text style={styles.avatarText}>{user?.name?.charAt(0).toUpperCase() || 'D'}</Text>
             <View style={styles.onlineIndicator} />
           </View>
-          <Text style={styles.onlineStatusText}>● ON LINE</Text>
+          <Text style={styles.onlineStatusText}>● {t('online')}</Text>
         </Pressable>
       </View>
       <NotificationsPanel visible={showNotifs} onClose={() => setShowNotifs(false)} />

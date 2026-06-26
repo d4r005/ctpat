@@ -6,12 +6,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { apiCall } from '@/src/api/client';
 import { useAuth, User } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
 export default function Usuarios({ nested = false }: { nested?: boolean }) {
   const { user, token } = useAuth();
+  const { t } = useTranslation();
   const isAdmin = user?.email?.toLowerCase().includes('d.trujillo') || user?.role === 'admin';
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
@@ -48,7 +50,7 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
 
   const handleDelete = async (u: User) => {
     if (u.id === user?.id) return;
-    if (!confirm(`¿Estás seguro de que deseas eliminar a ${u.name}?`)) return;
+    if (!confirm(`${t('confirmar_eliminar_usuario')} ${u.name}?`)) return;
     try {
       await apiCall(`/users/${u.id}`, { method: 'DELETE', token });
       await load();
@@ -83,11 +85,11 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
   const handleCreate = async () => {
     setError(null);
     if (!newName.trim() || !newEmail.trim()) {
-      setError('Completa nombre y correo');
+      setError(t('error_nombre_correo'));
       return;
     }
     if (!editingUser && newPassword.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres');
+      setError(t('contrasena_corta'));
       return;
     }
     setCreating(true);
@@ -121,7 +123,7 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
 
   if (!isSupervisorOrAdmin) {
     return (
-      <View style={styles.center}><Text style={{ color: colors.muted }}>Acceso restringido</Text></View>
+      <View style={styles.center}><Text style={{ color: colors.muted }}>{t('acceso_restringido')}</Text></View>
     );
   }
 
@@ -130,7 +132,7 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
       {!nested && (
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} testID="usuarios-back"><Ionicons name="arrow-back" size={24} color={colors.onSurface} /></Pressable>
-          <Text style={styles.title}>Gestión de Usuarios</Text>
+          <Text style={styles.title}>{t('gestion_usuarios')}</Text>
           <Pressable testID="usuarios-add-btn" onPress={() => setShowCreate(true)}>
             <Ionicons name="person-add" size={24} color={colors.brandPrimary} />
           </Pressable>
@@ -139,7 +141,7 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
 
       {nested && (
         <View style={{ padding: spacing.md, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-           <Text style={[styles.title, { fontSize: 14 }]}>CONTROL DE ACCESO</Text>
+           <Text style={[styles.title, { fontSize: 14 }]}>{t('control_acceso')}</Text>
            <Pressable testID="usuarios-add-btn" onPress={() => setShowCreate(true)} style={{ backgroundColor: colors.brandPrimary, padding: 8 }}>
             <Ionicons name="person-add" size={18} color="#FFF" />
           </Pressable>
@@ -166,7 +168,7 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
                   )}
                   {!item.active && (
                     <View style={[styles.roleChip, { backgroundColor: colors.error }]}>
-                      <Text style={styles.roleChipText}>INACTIVO</Text>
+                      <Text style={styles.roleChipText}>{t('inactivo').toUpperCase()}</Text>
                     </View>
                   )}
                 </View>
@@ -186,7 +188,7 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
                       style={[styles.toggleBtn, { backgroundColor: item.active ? colors.warning : colors.success, paddingHorizontal: spacing.sm }]}
                       onPress={() => handleToggle(item)}
                     >
-                      <Text style={[styles.toggleBtnText, { fontSize: 9 }]}>{item.active ? 'PAUSAR' : 'ACTIVAR'}</Text>
+                      <Text style={[styles.toggleBtnText, { fontSize: 9 }]}>{item.active ? t('pausar').toUpperCase() : t('activar').toUpperCase()}</Text>
                     </Pressable>
                     {isAdmin && (
                       <Pressable
@@ -209,9 +211,9 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
         <View style={styles.modalOverlay} testID="create-user-modal">
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', maxWidth: 480 }}>
             <ScrollView contentContainerStyle={styles.modalCard} keyboardShouldPersistTaps="handled">
-              <Text style={styles.modalTitle}>{editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}</Text>
+              <Text style={styles.modalTitle}>{editingUser ? t('editar_usuario') : t('nuevo_usuario')}</Text>
 
-              <Text style={styles.label}>NOMBRE</Text>
+              <Text style={styles.label}>{t('nombre')}</Text>
               <TextInput
                 testID="create-user-name"
                 autoCapitalize="characters"
@@ -220,13 +222,13 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
                 onChangeText={(text) => setNewName(text.toUpperCase())}
               />
 
-              <Text style={styles.label}>CORREO</Text>
+              <Text style={styles.label}>{t('correo')}</Text>
               <TextInput testID="create-user-email" style={styles.input} value={newEmail} onChangeText={setNewEmail} autoCapitalize="none" keyboardType="email-address" />
 
-              <Text style={styles.label}>CONTRASEÑA {editingUser && '(dejar en blanco para no cambiar)'}</Text>
+              <Text style={styles.label}>{t('contrasena')} {editingUser && t('contrasena_blanco_editar')}</Text>
               <TextInput testID="create-user-password" style={styles.input} value={newPassword} onChangeText={setNewPassword} secureTextEntry />
 
-              <Text style={styles.label}>ROL</Text>
+              <Text style={styles.label}>{t('rol')}</Text>
               <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                 {(['inspector', 'supervisor', 'admin'] as const).map((r) => (
                   <Pressable
@@ -244,10 +246,10 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
 
               <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg }}>
                 <Pressable testID="create-user-cancel" style={[styles.btn, styles.btnSecondary]} onPress={handleCloseModal}>
-                  <Text style={styles.btnSecondaryText}>CANCELAR</Text>
+                  <Text style={styles.btnSecondaryText}>{t('cancelar_caps')}</Text>
                 </Pressable>
                 <Pressable testID="create-user-submit" style={[styles.btn, styles.btnPrimary]} onPress={handleCreate} disabled={creating}>
-                  {creating ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.btnPrimaryText}>{editingUser ? 'GUARDAR' : 'CREAR'}</Text>}
+                  {creating ? <ActivityIndicator color={colors.onBrandPrimary} /> : <Text style={styles.btnPrimaryText}>{editingUser ? t('guardar').toUpperCase() : t('crear').toUpperCase()}</Text>}
                 </Pressable>
               </View>
             </ScrollView>

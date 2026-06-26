@@ -12,9 +12,12 @@ import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import { getInspectionPoints } from '@/src/constants/inspectionPoints';
 
+import { useTranslation } from 'react-i18next';
+
 export default function InspectionDetail() {
   const { id, edit } = useLocalSearchParams<{ id: string, edit?: string }>();
   const router = useRouter();
+  const { t } = useTranslation();
   const { getById, approveInspection, rejectInspection, updateInspection } = useInspections();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.email?.toLowerCase().includes('d.trujillo') || user?.email?.toLowerCase().includes('d4r005');
@@ -50,7 +53,7 @@ export default function InspectionDetail() {
     const points = editData.points || insp?.points || [];
     const missingPhoto = points.find(p => p.estado === 'malo' && !p.photo);
     if (missingPhoto) {
-      alert(`El punto ${missingPhoto.number} tiene falla. La foto es obligatoria.`);
+      alert(`${t('punto')} ${missingPhoto.number} ${t('con_falla')}. ${t('foto_obligatoria_falla')}`);
       return;
     }
 
@@ -59,7 +62,7 @@ export default function InspectionDetail() {
       await updateInspection(id, editData);
       setInsp(getById(id));
       setIsEditing(false);
-      alert('Cambios guardados correctamente');
+      alert(t('inspeccion_guardada'));
     } catch (e: any) { alert(e.message); }
     finally { setActing(false); }
   };
@@ -67,7 +70,7 @@ export default function InspectionDetail() {
   const pickPointPhoto = async (idx: number) => {
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
+      if (!perm.granted) { alert(t('acceso_restringido')); return; }
       const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
       if (!r.canceled && r.assets[0]?.base64) {
         const newPoints = [...(editData.points || insp?.points || [])];
@@ -86,13 +89,13 @@ export default function InspectionDetail() {
   const handleApprove = async () => {
     if (!id) return;
     if (!approvalSignature) {
-      alert('La firma del supervisor es obligatoria');
+      alert(t('firma_supervisor') + " " + t('es_obligatoria'));
       return;
     }
     setActing(true);
     try {
       await approveInspection(id, approvalNote.trim(), approvalName.trim(), approvalSignature);
-      alert('Inspección aprobada correctamente');
+      alert(t('inspeccion_guardada'));
       // Redirigir al panel de supervisor para continuar con otras tareas
       router.replace('/(app)/supervisor');
     } catch (e: any) { alert(e.message); }
@@ -102,17 +105,17 @@ export default function InspectionDetail() {
   const handleReject = async () => {
     if (!id) return;
     if (!approvalNote.trim()) {
-      alert('Por favor agrega una nota explicando el rechazo');
+      alert(t('nota_obligatoria_rechazo'));
       return;
     }
     if (!approvalSignature) {
-      alert('La firma del supervisor es obligatoria');
+      alert(t('firma_supervisor') + " " + t('es_obligatoria'));
       return;
     }
     setActing(true);
     try {
       await rejectInspection(id, approvalNote.trim(), approvalName.trim(), approvalSignature);
-      alert('Inspección rechazada');
+      alert(t('inspeccion_rechazada') || 'Inspección rechazada');
       // Redirigir al panel de supervisor
       router.replace('/(app)/supervisor');
     } catch (e: any) { alert(e.message); }
@@ -124,7 +127,7 @@ export default function InspectionDetail() {
       <SafeAreaView style={styles.safe}>
         <View style={styles.loadingBox}>
           <ActivityIndicator color={colors.brandPrimary} />
-          <Text style={{ marginTop: spacing.md, color: colors.muted }}>Cargando inspección...</Text>
+          <Text style={{ marginTop: spacing.md, color: colors.muted }}>{t('cargando_datos')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -158,49 +161,49 @@ export default function InspectionDetail() {
       <div style="color:#0A2540;font-size:12px;font-weight:bold;margin-top:5px;letter-spacing:0.5px;">North America Flooring</div>
     </div>
     <div style="text-align:right;">
-      <h1 style="margin:0;font-size:20px;color:#0A2540;">INSPECCIÓN ${i.points.length} PUNTOS</h1>
-      <p style="margin:5px 0 0 0;font-size:10px;color:#666;">Generado: ${new Date().toLocaleString('es-MX')}</p>
+      <h1 style="margin:0;font-size:20px;color:#0A2540;">${t('inspeccion').toUpperCase()} ${i.points.length} ${t('puntos').toUpperCase()}</h1>
+      <p style="margin:5px 0 0 0;font-size:10px;color:#666;">${t('generado')}: ${new Date().toLocaleString()}</p>
     </div>
   </div>
 
   <div style="background-color:${headerColor}; color:white; padding:10px; text-align:center; font-weight:bold; font-size:14px; margin-bottom:20px;">
-    ESTADO DE INSPECCIÓN: ${i.status_general.toUpperCase()}
+    ${t('estado').toUpperCase()}: ${t(i.status_general === 'bueno' ? 'aprobada' : 'falla').toUpperCase()}
   </div>
 
-  <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">Datos Generales</h2>
+  <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">${t('datos_generales')}</h2>
   <table style="width:100%;border-collapse:collapse;">
-    <tr><td style="padding:6px;border:1px solid #999;width:35%;"><b>Compañía Transportista</b></td><td style="padding:6px;border:1px solid #999;">${i.compania_transportista}</td></tr>
-    <tr><td style="padding:6px;border:1px solid #999;"><b>Placas de la Unidad</b></td><td style="padding:6px;border:1px solid #999;">${i.placas_unidad}</td></tr>
-    <tr><td style="padding:6px;border:1px solid #999;"><b>Número Tráiler/Contenedor</b></td><td style="padding:6px;border:1px solid #999;">${i.numero_trailer}</td></tr>
-    <tr><td style="padding:6px;border:1px solid #999;"><b>Número de Precinto</b></td><td style="padding:6px;border:1px solid #999;">${i.numero_precinto}</td></tr>
-    <tr><td style="padding:6px;border:1px solid #999;"><b>Sello de Alta Seguridad</b></td><td style="padding:6px;border:1px solid #999;">${i.sello_alta_seguridad}</td></tr>
-    <tr><td style="padding:6px;border:1px solid #999;"><b>Sello Verificado</b></td><td style="padding:6px;border:1px solid #999;">${i.sello_verificado ? 'SÍ' : 'NO'}</td></tr>
-    <tr><td style="padding:6px;border:1px solid #999;"><b>Fecha y Hora</b></td><td style="padding:6px;border:1px solid #999;">${new Date(i.fecha_hora).toLocaleString('es-MX')}</td></tr>
-    <tr><td style="padding:6px;border:1px solid #999;"><b>Estado General</b></td><td style="padding:6px;border:1px solid #999;background:${i.status_general === 'bueno' ? '#dcfce7' : '#fee2e2'};font-weight:bold;">${i.status_general.toUpperCase()}</td></tr>
+    <tr><td style="padding:6px;border:1px solid #999;width:35%;"><b>${t('compania_transportista_caps')}</b></td><td style="padding:6px;border:1px solid #999;">${i.compania_transportista}</td></tr>
+    <tr><td style="padding:6px;border:1px solid #999;"><b>${t('placas_unidad_caps')}</b></td><td style="padding:6px;border:1px solid #999;">${i.placas_unidad}</td></tr>
+    <tr><td style="padding:6px;border:1px solid #999;"><b>${t('numero_trailer_caps')}</b></td><td style="padding:6px;border:1px solid #999;">${i.numero_trailer}</td></tr>
+    <tr><td style="padding:6px;border:1px solid #999;"><b>${t('numero_precinto_caps')}</b></td><td style="padding:6px;border:1px solid #999;">${i.numero_precinto}</td></tr>
+    <tr><td style="padding:6px;border:1px solid #999;"><b>${t('sello_alta_seguridad_caps')}</b></td><td style="padding:6px;border:1px solid #999;">${i.sello_alta_seguridad}</td></tr>
+    <tr><td style="padding:6px;border:1px solid #999;"><b>${t('sello_verificado_msg')}</b></td><td style="padding:6px;border:1px solid #999;">${i.sello_verificado ? t('si') : t('no')}</td></tr>
+    <tr><td style="padding:6px;border:1px solid #999;"><b>${t('fecha_hora')}</b></td><td style="padding:6px;border:1px solid #999;">${new Date(i.fecha_hora).toLocaleString()}</td></tr>
+    <tr><td style="padding:6px;border:1px solid #999;"><b>${t('estado')}</b></td><td style="padding:6px;border:1px solid #999;background:${i.status_general === 'bueno' ? '#dcfce7' : '#fee2e2'};font-weight:bold;">${t(i.status_general === 'bueno' ? 'bueno' : 'malo').toUpperCase()}</td></tr>
   </table>
 
-  <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">Examen de Inspección — ${i.points.length} Puntos</h2>
+  <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">${t('inspeccion').toUpperCase()} — ${i.points.length} ${t('puntos')}</h2>
   <table style="width:100%;border-collapse:collapse;">
     <tr style="background:#E4E4E7;font-weight:bold;">
       <td style="padding:6px;border:1px solid #999;width:5%;">#</td>
-      <td style="padding:6px;border:1px solid #999;width:35%;">Punto</td>
-      <td style="padding:6px;border:1px solid #999;width:15%;">Estado</td>
-      <td style="padding:6px;border:1px solid #999;width:45%;">Comentarios</td>
+      <td style="padding:6px;border:1px solid #999;width:35%;">${t('puntos')}</td>
+      <td style="padding:6px;border:1px solid #999;width:15%;">${t('estado')}</td>
+      <td style="padding:6px;border:1px solid #999;width:45%;">${t('observaciones')}</td>
     </tr>
     ${pointRows}
   </table>
 
-  <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">Actividad Sospechosa</h2>
-  <p style="border:1px solid #999;padding:10px;min-height:40px;">${i.actividad_sospechosa || 'Sin reporte de actividad sospechosa.'}</p>
+  <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">${t('actividad_sospechosa')}</h2>
+  <p style="border:1px solid #999;padding:10px;min-height:40px;">${i.actividad_sospechosa || t('sin_reporte') || 'Sin reporte.'}</p>
 
-  <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">Firmas</h2>
+  <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">${t('firmas')}</h2>
   <table style="width:100%;border-collapse:collapse;">
     <tr>
       <td style="padding:10px;border:1px solid #999;width:50%;vertical-align:top;">
-        <b>INSPECCIÓN REALIZADA POR:</b><br/>${i.inspector_nombre}<br/><br/>${inspectorImg}
+        <b>${t('inspeccion_realizada_por') || "INSPECCIÓN REALIZADA POR"}:</b><br/>${i.inspector_nombre}<br/><br/>${inspectorImg}
       </td>
       <td style="padding:10px;border:1px solid #999;width:50%;vertical-align:top;">
-        <b>APROBACIÓN / RECHAZO POR:</b><br/>${i.approved_by_name || '-'}<br/><br/>${appSigImg}
+        <b>${t('aprobacion_rechazo_por') || "APROBACIÓN / RECHAZO POR"}:</b><br/>${i.approved_by_name || '-'}<br/><br/>${appSigImg}
       </td>
     </tr>
   </table>
@@ -239,7 +242,7 @@ export default function InspectionDetail() {
         >
           <Ionicons name="arrow-back" size={28} color={colors.onBrandPrimary} />
         </Pressable>
-        <Text style={styles.topTitle}>{isEditing ? 'Editar Inspección' : 'Inspección'}</Text>
+        <Text style={styles.topTitle}>{isEditing ? t('editar_inspeccion') : t('inspeccion')}</Text>
         <View style={{ flexDirection: 'row', gap: 12 }}>
           {canEdit && !isEditing && (
             <Pressable onPress={() => setIsEditing(true)}>
@@ -262,12 +265,12 @@ export default function InspectionDetail() {
         <View style={[styles.statusBanner, { backgroundColor: insp.status_general === 'bueno' ? colors.success : colors.error }]}>
           <Ionicons name={insp.status_general === 'bueno' ? 'checkmark-circle' : 'warning'} size={28} color="#FFF" />
           <View style={{ marginLeft: spacing.md, flex: 1 }}>
-            <Text style={styles.statusTitle}>{insp.status_general === 'bueno' ? 'INSPECCIÓN APROBADA' : 'INSPECCIÓN CON FALLAS'}</Text>
-            <Text style={styles.statusSub}>{insp.points.filter((p) => p.estado === 'malo').length} punto(s) con falla</Text>
+            <Text style={styles.statusTitle}>{insp.status_general === 'bueno' ? t('inspeccion_aprobada').toUpperCase() : t('inspeccion_con_fallas').toUpperCase()}</Text>
+            <Text style={styles.statusSub}>{insp.points.filter((p) => p.estado === 'malo').length} {t('punto').toLowerCase()}(s) {t('con_falla').toLowerCase()}</Text>
           </View>
           {insp.approval_status && insp.approval_status !== 'pendiente' && (
             <View style={[styles.approvBadge, { backgroundColor: insp.approval_status === 'aprobada' ? colors.success : colors.error, borderColor: '#FFF' }]}>
-              <Text style={styles.approvBadgeText}>{insp.approval_status.toUpperCase()}</Text>
+              <Text style={styles.approvBadgeText}>{t(insp.approval_status).toUpperCase()}</Text>
             </View>
           )}
         </View>
@@ -275,13 +278,13 @@ export default function InspectionDetail() {
         {insp.approval_status && insp.approval_status !== 'pendiente' && (
           <View style={styles.approvalInfo} testID="approval-info">
             <Text style={styles.approvalLabel}>
-              {insp.approval_status === 'aprobada' ? 'APROBADA POR' : 'RECHAZADA POR'}
+              {insp.approval_status === 'aprobada' ? t('aprobada_por').toUpperCase() : t('rechazada_por').toUpperCase()}
             </Text>
             <Text style={styles.approvalValue}>{insp.approved_by_name}</Text>
-            {insp.approved_at ? <Text style={styles.approvalDate}>{new Date(insp.approved_at).toLocaleString('es-MX')}</Text> : null}
+            {insp.approved_at ? <Text style={styles.approvalDate}>{new Date(insp.approved_at).toLocaleString()}</Text> : null}
             {insp.approval_note ? (
               <>
-                <Text style={[styles.approvalLabel, { marginTop: spacing.sm }]}>NOTA</Text>
+                <Text style={[styles.approvalLabel, { marginTop: spacing.sm }]}>{t('nota').toUpperCase()}</Text>
                 <Text style={styles.approvalValue}>{insp.approval_note}</Text>
               </>
             ) : null}
@@ -290,50 +293,56 @@ export default function InspectionDetail() {
 
         {(isSupervisor || isAdmin) && (insp.approval_status || 'pendiente') === 'pendiente' && (
           <View style={styles.approvalActionBox} testID="approval-action-box">
-            <Text style={styles.sectionTitleLocal}>ACCIÓN DE SUPERVISOR</Text>
+            <Text style={styles.sectionTitleLocal}>{t('accion_supervisor').toUpperCase()}</Text>
 
-            <Text style={styles.approvalLabel}>NOMBRE DEL SUPERVISOR</Text>
+            <Text style={styles.approvalLabel}>{t('nombre_supervisor_caps')}</Text>
             <TextInput
               style={[styles.noteInput, { minHeight: 48, marginBottom: spacing.md }]}
               value={approvalName}
               onChangeText={setApprovalName}
-              placeholder="Nombre del supervisor"
+              placeholder={t('nombre_supervisor_placeholder')}
             />
 
-            <Text style={styles.approvalLabel}>NOTA</Text>
+            <Text style={styles.approvalLabel}>{t('nota').toUpperCase()}</Text>
             <TextInput
               testID="approval-note-input"
               style={styles.noteInput}
-              placeholder="Nota (obligatoria para rechazar)"
+              placeholder={t('nota_placeholder_rechazo')}
               placeholderTextColor={colors.muted}
               value={approvalNote}
               onChangeText={setApprovalNote}
               multiline
             />
 
-            <Pressable testID="approval-firma-btn" style={styles.signatureBox} onPress={() => setShowSigModal(true)}>
+            <Pressable testID="approval-firma-btn" style={styles.signatureBox} onPress={() => {
+              setSigModalConfig({
+                title: t('firma_supervisor'),
+                onSave: (sig) => setApprovalSignature(sig)
+              });
+              setShowSigModal(true);
+            }}>
               {approvalSignature ? (
-                <Text style={styles.signatureDone}>FIRMA CAPTURADA ✓ (Tocar para volver a firmar)</Text>
+                <Text style={styles.signatureDone}>{t('firma_capturada_msg')}</Text>
               ) : (
-                <Text style={styles.signatureCta}>Toca para firmar aprobación/rechazo</Text>
+                <Text style={styles.signatureCta}>{t('toca_para_firmar_aprobacion')}</Text>
               )}
             </Pressable>
 
             <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
               <Pressable testID="approval-approve-btn" style={[styles.actionBtn, { backgroundColor: colors.success }]} onPress={handleApprove} disabled={acting}>
-                {acting ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="checkmark-circle" size={20} color="#FFF" /><Text style={styles.actionBtnText}>APROBAR</Text></>}
+                {acting ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="checkmark-circle" size={20} color="#FFF" /><Text style={styles.actionBtnText}>{t('aprobar').toUpperCase()}</Text></>}
               </Pressable>
               <Pressable testID="approval-reject-btn" style={[styles.actionBtn, { backgroundColor: colors.error }]} onPress={handleReject} disabled={acting}>
-                {acting ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="close-circle" size={20} color="#FFF" /><Text style={styles.actionBtnText}>RECHAZAR</Text></>}
+                {acting ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="close-circle" size={20} color="#FFF" /><Text style={styles.actionBtnText}>{t('rechazar').toUpperCase()}</Text></>}
               </Pressable>
             </View>
           </View>
         )}
 
-        <Section title="DATOS GENERALES">
+        <Section title={t('datos_generales').toUpperCase()}>
           {isAdmin && isEditing && (
             <View style={styles.row}>
-              <Text style={styles.rowLabel}>Tipo Inspección</Text>
+              <Text style={styles.rowLabel}>{t('tipo_inspeccion') || 'Tipo Inspección'}</Text>
               <Pressable
                 style={{ flex: 1, backgroundColor: colors.brandTertiary, padding: 8, borderRadius: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.brandPrimary }}
                 onPress={() => {
@@ -344,22 +353,22 @@ export default function InspectionDetail() {
                 }}
               >
                 <Text style={{ color: colors.brandPrimary, fontWeight: '900', fontSize: 13 }}>
-                  {((editData.inspection_type || insp.inspection_type) || '19_puntos').replace('_', ' ').toUpperCase()}
+                  {(editData.inspection_type || insp.inspection_type) === '9_puntos_contenedor' ? t('inspeccion_9_puntos').toUpperCase() : t('inspeccion_19_puntos').toUpperCase()}
                 </Text>
                 <Ionicons name="swap-horizontal" size={18} color={colors.brandPrimary} />
               </Pressable>
             </View>
           )}
-          <Row label="Compañía" value={insp.compania_transportista} isEdit={isEditing} onEdit={(v) => setEditData({...editData, compania_transportista: v})} />
-          <Row label="Placas" value={insp.placas_unidad} isEdit={isEditing} onEdit={(v) => setEditData({...editData, placas_unidad: v})} />
-          <Row label="Tráiler" value={insp.numero_trailer} isEdit={isEditing} onEdit={(v) => setEditData({...editData, numero_trailer: v})} />
-          <Row label="Precinto" value={insp.numero_precinto} isEdit={isEditing} onEdit={(v) => setEditData({...editData, numero_precinto: v})} />
-          <Row label="Sello Alta Seg." value={insp.sello_alta_seguridad} isEdit={isEditing} onEdit={(v) => setEditData({...editData, sello_alta_seguridad: v})} />
-          <Row label="Sello Verificado" value={insp.sello_verificado ? 'SÍ' : 'NO'} />
-          <Row label="Fecha y Hora" value={new Date(insp.fecha_hora).toLocaleString('es-MX')} />
+          <Row label={t('compania')} value={insp.compania_transportista} isEdit={isEditing} onEdit={(v) => setEditData({...editData, compania_transportista: v})} />
+          <Row label={t('placas')} value={insp.placas_unidad} isEdit={isEditing} onEdit={(v) => setEditData({...editData, placas_unidad: v})} />
+          <Row label={t('trailer')} value={insp.numero_trailer} isEdit={isEditing} onEdit={(v) => setEditData({...editData, numero_trailer: v})} />
+          <Row label={t('precinto')} value={insp.numero_precinto} isEdit={isEditing} onEdit={(v) => setEditData({...editData, numero_precinto: v})} />
+          <Row label={t('sello_alta_seguridad_label') || "Sello Alta Seg."} value={insp.sello_alta_seguridad} isEdit={isEditing} onEdit={(v) => setEditData({...editData, sello_alta_seguridad: v})} />
+          <Row label={t('sello_verificado_label') || "Sello Verificado"} value={insp.sello_verificado ? t('si') : t('no')} />
+          <Row label={t('fecha_hora')} value={new Date(insp.fecha_hora).toLocaleString()} />
         </Section>
 
-        <Section title="PUNTOS DE INSPECCIÓN">
+        <Section title={t('puntos_inspeccion')}>
           {(isEditing ? editData.points : insp.points)?.map((p, idx) => (
             <View key={p.number} style={styles.pointRow} testID={`detail-point-${p.number}`}>
               <Text style={styles.pointNum}>{p.number}.</Text>
@@ -369,7 +378,7 @@ export default function InspectionDetail() {
 
                 {isEditing && p.estado === 'malo' && !p.photo && (
                   <Text style={{ color: colors.error, fontSize: 10, fontWeight: '900', marginTop: 4 }}>
-                    ⚠ FOTO OBLIGATORIA POR FALLA
+                    {t('foto_obligatoria_falla')}
                   </Text>
                 )}
 
@@ -389,24 +398,24 @@ export default function InspectionDetail() {
                       style={[styles.pointPhoto, { borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface }]}
                     >
                       <Ionicons name="camera" size={32} color={colors.brandPrimary} />
-                      <Text style={{ fontSize: 10, color: colors.brandPrimary, fontWeight: '900', marginTop: 4 }}>AGREGAR FOTO</Text>
+                      <Text style={{ fontSize: 10, color: colors.brandPrimary, fontWeight: '900', marginTop: 4 }}>{t('agregar_foto')}</Text>
                     </Pressable>
                   ) : null}
                 </View>
               </View>
               <View style={[styles.pointChip, { backgroundColor: p.estado === 'bueno' ? colors.success : p.estado === 'malo' ? colors.error : colors.muted }]}>
-                <Text style={styles.pointChipText}>{(p.estado || 'NA').toUpperCase()}</Text>
+                <Text style={styles.pointChipText}>{(p.estado === 'bueno' ? t('bueno') : p.estado === 'malo' ? t('malo') : 'NA').toUpperCase()}</Text>
               </View>
             </View>
           ))}
         </Section>
 
-        <Section title="ACTIVIDAD SOSPECHOSA">
-          <Text style={styles.bodyText}>{insp.actividad_sospechosa || 'Sin reporte.'}</Text>
+        <Section title={t('actividad_sospechosa').toUpperCase()}>
+          <Text style={styles.bodyText}>{insp.actividad_sospechosa || t('sin_reporte')}</Text>
         </Section>
 
-        <Section title="FIRMAS">
-          <Text style={styles.label}>INSPECTOR</Text>
+        <Section title={t('firmas').toUpperCase()}>
+          <Text style={styles.label}>{t('inspector').toUpperCase()}</Text>
           {isEditing ? (
             <TextInput
               style={[styles.value, { borderBottomWidth: 1, borderBottomColor: colors.border }]}
@@ -425,7 +434,7 @@ export default function InspectionDetail() {
               />
             ) : (
               <View style={[styles.firmaWrap, { borderStyle: 'dashed', borderWidth: 1, height: 100, justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={{ color: colors.muted }}>Sin firma</Text>
+                <Text style={{ color: colors.muted }}>{t('sin_foto')}</Text>
               </View>
             )}
 
@@ -434,22 +443,22 @@ export default function InspectionDetail() {
                 style={[styles.actionBtn, { backgroundColor: colors.brandPrimary, marginTop: 8 }]}
                 onPress={() => {
                   setSigModalConfig({
-                    title: 'Editar Firma del Inspector',
+                    title: t('editar_firma_operador'),
                     onSave: (sig) => setEditData({ ...editData, inspector_firma: sig })
                   });
                   setShowSigModal(true);
                 }}
               >
                 <Ionicons name="brush" size={20} color="#FFF" />
-                <Text style={styles.actionBtnText}>CAMBIAR FIRMA INSPECTOR</Text>
+                <Text style={styles.actionBtnText}>{t('cambiar_firma_operador')}</Text>
               </Pressable>
             )}
-            <Text style={[styles.firmaLabel, { marginTop: 4 }]}>FIRMA INSPECTOR</Text>
+            <Text style={[styles.firmaLabel, { marginTop: 4 }]}>{t('firma_inspector').toUpperCase()}</Text>
           </View>
 
           {(insp.approved_by_signature || isEditing) ? (
             <>
-              <Text style={[styles.label, { marginTop: spacing.md }]}>APROBACIÓN / RECHAZO POR</Text>
+              <Text style={[styles.label, { marginTop: spacing.md }]}>{t('aprobacion_rechazo_por') || "APROBACIÓN / RECHAZO POR"}</Text>
               {isEditing ? (
                 <TextInput
                   style={[styles.value, { borderBottomWidth: 1, borderBottomColor: colors.border }]}
@@ -468,7 +477,7 @@ export default function InspectionDetail() {
                   />
                 ) : (
                   <View style={[styles.firmaWrap, { borderStyle: 'dashed', borderWidth: 1, height: 100, justifyContent: 'center', alignItems: 'center' }]}>
-                    <Text style={{ color: colors.muted }}>Sin firma de aprobación</Text>
+                    <Text style={{ color: colors.muted }}>{t('sin_foto')}</Text>
                   </View>
                 )}
 
@@ -477,17 +486,17 @@ export default function InspectionDetail() {
                     style={[styles.actionBtn, { backgroundColor: colors.brandPrimary, marginTop: 8 }]}
                     onPress={() => {
                       setSigModalConfig({
-                        title: 'Editar Firma del Supervisor',
+                        title: t('editar_firma_operador'),
                         onSave: (sig) => setEditData({ ...editData, approved_by_signature: sig })
                       });
                       setShowSigModal(true);
                     }}
                   >
                     <Ionicons name="brush" size={20} color="#FFF" />
-                    <Text style={styles.actionBtnText}>CAMBIAR FIRMA SUPERVISOR</Text>
+                    <Text style={styles.actionBtnText}>{t('cambiar_firma_operador')}</Text>
                   </Pressable>
                 )}
-                <Text style={[styles.firmaLabel, { color: (isEditing ? (editData.approval_status || insp.approval_status) : insp.approval_status) === 'aprobada' ? colors.success : colors.error, marginTop: 4 }]}>FIRMA AUTORIZACIÓN</Text>
+                <Text style={[styles.firmaLabel, { color: (isEditing ? (editData.approval_status || insp.approval_status) : insp.approval_status) === 'aprobada' ? colors.success : colors.error, marginTop: 4 }]}>{t('firma_autorizacion_caps')}</Text>
               </View>
             </>
           ) : null}
@@ -504,7 +513,7 @@ export default function InspectionDetail() {
           ) : (
             <>
               <Ionicons name="document-text" size={24} color={colors.onBrandSecondary} />
-              <Text style={styles.exportText}>EXPORTAR Y COMPARTIR PDF</Text>
+              <Text style={styles.exportText}>{t('exportar_compartir_pdf')}</Text>
             </>
           )}
         </Pressable>
@@ -520,7 +529,7 @@ export default function InspectionDetail() {
   );
 }
 
-function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSave: (sig: string) => void; title: string }) {
+function SignatureModal({ onClose, onSave, title, t }: { onClose: () => void; onSave: (sig: string) => void; title: string, t: any }) {
   const sigRef = React.useRef<any>(null);
   const handleOK = (signature: string) => onSave(signature);
   const style = `.m-signature-pad--footer {display: none; margin: 0px;}
@@ -534,9 +543,9 @@ function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSav
           <Signature
             ref={sigRef}
             onOK={handleOK}
-            descriptionText="Firme dentro del recuadro"
-            clearText="Borrar"
-            confirmText="Guardar"
+            descriptionText={t('firme_dentro_desc')}
+            clearText={t('borrar')}
+            confirmText={t('guardar')}
             webStyle={style}
             autoClear={false}
             imageType="image/jpeg"
@@ -544,14 +553,14 @@ function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSav
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
           <Pressable style={[styles.secondaryBtn, { flex: 1 }]} onPress={onClose} testID="signature-cancel">
-            <Text style={styles.secondaryBtnText}>CANCELAR</Text>
+            <Text style={styles.secondaryBtnText}>{t('cancelar_caps')}</Text>
           </Pressable>
           <Pressable
             style={[styles.primaryBtn, { flex: 1 }]}
             onPress={() => sigRef.current?.readSignature()}
             testID="signature-save"
           >
-            <Text style={styles.primaryBtnText}>GUARDAR FIRMA</Text>
+            <Text style={styles.primaryBtnText}>{t('guardar_firma_caps')}</Text>
           </Pressable>
         </View>
       </View>

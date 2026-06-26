@@ -89,7 +89,7 @@ export default function Login() {
                   onChangeText={setEmail}
                   autoCapitalize="none"
                   keyboardType="email-address"
-                  placeholder="ejemplo@brancoindustries.com"
+                  placeholder={t('email_placeholder')}
                   placeholderTextColor="#A1A1AA"
                 />
               </View>

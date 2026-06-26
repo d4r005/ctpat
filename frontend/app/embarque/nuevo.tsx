@@ -51,7 +51,7 @@ export default function EmbarqueNuevo() {
     try {
       if (fromCamera) {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
-        if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
+        if (!perm.granted) { alert(t('acceso_restringido')); return; }
         const r = await ImagePicker.launchCameraAsync({
           mediaTypes: 'images',
           quality: 0.3, // Optimizado (antes 0.5)
@@ -63,7 +63,7 @@ export default function EmbarqueNuevo() {
         }
       } else {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!perm.granted) { alert('Se necesita acceso a la galería'); return; }
+        if (!perm.granted) { alert(t('acceso_restringido')); return; }
         const r = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: 'images',
           quality: 0.3, // Optimizado (antes 0.5)
@@ -74,12 +74,12 @@ export default function EmbarqueNuevo() {
           set(field, `data:image/jpeg;base64,${r.assets[0].base64}`);
         }
       }
-    } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
+    } catch (e: any) { alert(e.message || 'Error'); }
   };
 
   const save = async () => {
     if (!form.almacenista.trim() || !form.cliente.trim()) {
-      alert('Almacenista y Cliente son obligatorios');
+      alert(t('obligatorios_msg'));
       return;
     }
     setSaving(true);
@@ -99,18 +99,18 @@ export default function EmbarqueNuevo() {
       };
 
       if (Platform.OS === 'web') {
-        const proceed = window.confirm("Ticket de Embarque Guardado. ¿Desea proceder a registrar la SALIDA de la unidad?");
+        const proceed = window.confirm(t('ticket_guardado_msg') + ". " + t('proceder_salida_msg'));
         if (proceed) nextStep();
         else router.replace('/(app)/embarque'); // Regresar al panel de embarque
         return;
       }
 
       Alert.alert(
-        "Ticket Guardado",
-        "¿Desea proceder a registrar la SALIDA de la unidad ahora?",
+        t('ticket_guardado_msg'),
+        t('proceder_salida_msg'),
         [
-          { text: "REGRESAR AL PANEL", onPress: () => router.replace('/(app)/embarque') },
-          { text: "SÍ, REGISTRAR SALIDA", onPress: nextStep }
+          { text: t('regresar_panel'), onPress: () => router.replace('/(app)/embarque') },
+          { text: t('registrar_salida_btn'), onPress: nextStep }
         ]
       );
     } catch (e: any) {
@@ -135,39 +135,39 @@ export default function EmbarqueNuevo() {
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <Section title={t('almacen', 'ALMACÉN')}>
-            <F label={`${t('almacenista', 'ALMACENISTA')} *`} v={form.almacenista} on={(t: string) => set('almacenista', t)} tid="emb-almacenista" />
-            <F label={t('area', 'ÁREA')} v={form.area} on={(t: string) => set('area', t)} tid="emb-area" />
-            <F label={t('sellos', 'SELLO(S)')} v={form.sellos} on={(t: string) => set('sellos', t)} tid="emb-sellos" />
+          <Section title={t('almacen')}>
+            <F label={`${t('almacenista_caps')} *`} v={form.almacenista} on={(t: string) => set('almacenista', t)} tid="emb-almacenista" />
+            <F label={t('area')} v={form.area} on={(t: string) => set('area', t)} tid="emb-area" />
+            <F label={t('sellos_caps')} v={form.sellos} on={(t: string) => set('sellos', t)} tid="emb-sellos" />
           </Section>
 
-          <Section title={t('material_a_carga', 'MATERIAL A CARGA (Llenado por Seguridad)')}>
-            <F label={`${t('cliente', 'CLIENTE')} *`} v={form.cliente} on={(t: string) => set('cliente', t)} tid="emb-cliente" />
-            <F label={t('operador_nombre', 'NOMBRE DEL OPERADOR')} v={form.operador} on={(t: string) => set('operador', t)} tid="emb-operador" />
-            <F label={t('linea_transporte', 'LÍNEA DE TRANSPORTE')} v={form.linea_transporte} on={(t: string) => set('linea_transporte', t)} tid="emb-linea" />
-            <F label={t('numero_economico_unidad', '# ECONÓMICO UNIDAD')} v={form.numero_economico} on={(t: string) => set('numero_economico', t)} tid="emb-economico" />
-            <F label={t('placas_unidad_caps', 'PLACAS DE UNIDAD')} v={form.placas_unidad} on={(t: string) => set('placas_unidad', t)} tid="emb-placas-unidad" />
-            <F label={t('numero_caja_caps', '# CAJA / CONTENEDOR')} v={form.numero_caja} on={(t: string) => set('numero_caja', t)} tid="emb-caja" />
-            <F label={t('placas_caja_caps', 'PLACAS CAJA / CONTENEDOR')} v={form.placas_caja} on={(t: string) => set('placas_caja', t)} tid="emb-placas-caja" />
+          <Section title={t('material_a_carga')}>
+            <F label={`${t('cliente_caps')} *`} v={form.cliente} on={(t: string) => set('cliente', t)} tid="emb-cliente" />
+            <F label={t('operador_nombre')} v={form.operador} on={(t: string) => set('operador', t)} tid="emb-operador" />
+            <F label={t('linea_transporte_caps')} v={form.linea_transporte} on={(t: string) => set('linea_transporte', t)} tid="emb-linea" />
+            <F label={t('numero_economico_unidad')} v={form.numero_economico} on={(t: string) => set('numero_economico', t)} tid="emb-economico" />
+            <F label={t('placas_unidad_caps')} v={form.placas_unidad} on={(t: string) => set('placas_unidad', t)} tid="emb-placas-unidad" />
+            <F label={t('numero_caja_caps')} v={form.numero_caja} on={(t: string) => set('numero_caja', t)} tid="emb-caja" />
+            <F label={t('placas_caja_caps')} v={form.placas_caja} on={(t: string) => set('placas_caja', t)} tid="emb-placas-caja" />
           </Section>
 
-          <Section title={t('tiempos_y_carga', 'TIEMPOS Y CARGA')}>
-            <F label={t('hora_llegada_caseta', 'HORA DE LLEGADA (CASETA)')} v={form.hora_llegada} on={(t: string) => set('hora_llegada', t)} tid="emb-hora-llegada" placeholder="HH:MM" />
-            <F label={t('hora_apertura_cortina', 'HORA APERTURA CORTINA')} v={form.hora_apertura_cortina} on={(t: string) => set('hora_apertura_cortina', t)} tid="emb-hora-apertura" placeholder="HH:MM" />
-            <F label={t('hora_cierre_cortina', 'HORA CIERRE CORTINA')} v={form.hora_cierre_cortina} on={(t: string) => set('hora_cierre_cortina', t)} tid="emb-hora-cierre" placeholder="HH:MM" />
-            <F label={t('hora_salida_desenrampe', 'HORA DE SALIDA (DESENRAMPE)')} v={form.hora_salida} on={(t: string) => set('hora_salida', t)} tid="emb-hora-salida" placeholder="HH:MM" />
-            <F label={t('numero_pallets', 'NÚMERO DE PALLETS')} v={form.numero_pallets} on={(t: string) => set('numero_pallets', t)} tid="emb-pallets" kb="numeric" />
-            <F label={t('numero_sello', 'NÚMERO DE SELLO')} v={form.numero_sello} on={(t: string) => set('numero_sello', t)} tid="emb-sello" />
+          <Section title={t('tiempos_y_carga')}>
+            <F label={t('hora_llegada_caseta')} v={form.hora_llegada} on={(t: string) => set('hora_llegada', t)} tid="emb-hora-llegada" placeholder="HH:MM" />
+            <F label={t('hora_apertura_cortina_caps')} v={form.hora_apertura_cortina} on={(t: string) => set('hora_apertura_cortina', t)} tid="emb-hora-apertura" placeholder="HH:MM" />
+            <F label={t('hora_cierre_cortina_caps')} v={form.hora_cierre_cortina} on={(t: string) => set('hora_cierre_cortina', t)} tid="emb-hora-cierre" placeholder="HH:MM" />
+            <F label={t('hora_salida_desenrampe')} v={form.hora_salida} on={(t: string) => set('hora_salida', t)} tid="emb-hora-salida" placeholder="HH:MM" />
+            <F label={t('numero_pallets_caps')} v={form.numero_pallets} on={(t: string) => set('numero_pallets', t)} tid="emb-pallets" kb="numeric" />
+            <F label={t('numero_sello_caps')} v={form.numero_sello} on={(t: string) => set('numero_sello', t)} tid="emb-sello" />
           </Section>
 
-          <Section title={t('observaciones_y_danos', 'OBSERVACIONES Y DAÑOS')}>
-            <F label={t('observaciones', 'OBSERVACIONES')} v={form.observaciones} on={(t: string) => set('observaciones', t)} tid="emb-obs" multiline />
-            <F label={t('danos_caja_desc', 'SEÑALA EL DAÑO EN LA CAJA (descripción)')} v={form.daño_caja} on={(t: string) => set('daño_caja', t)} tid="emb-dano" multiline />
+          <Section title={t('observaciones_y_danos')}>
+            <F label={t('observaciones').toUpperCase()} v={form.observaciones} on={(t: string) => set('observaciones', t)} tid="emb-obs" multiline />
+            <F label={t('danos_caja_desc')} v={form.daño_caja} on={(t: string) => set('daño_caja', t)} tid="emb-dano" multiline />
           </Section>
 
-          <Section title={t('evidencia_carga', 'EVIDENCIA DE CARGA')}>
+          <Section title={t('evidencia_carga')}>
             <PhotoField
-              label={t('foto_inicio_carga', 'FOTO INICIO DE CARGA')}
+              label={t('foto_inicio_carga')}
               value={form.foto_inicio_carga}
               onCamera={() => pickPhoto('foto_inicio_carga', true)}
               onGallery={() => pickPhoto('foto_inicio_carga', false)}
@@ -175,7 +175,7 @@ export default function EmbarqueNuevo() {
               t={t}
             />
             <PhotoField
-              label={t('foto_media_carga', 'FOTO MEDIA CARGA')}
+              label={t('foto_media_carga')}
               value={form.foto_media_carga}
               onCamera={() => pickPhoto('foto_media_carga', true)}
               onGallery={() => pickPhoto('foto_media_carga', false)}
@@ -183,7 +183,7 @@ export default function EmbarqueNuevo() {
               t={t}
             />
             <PhotoField
-              label={t('foto_final_carga', 'FOTO FINALIZACIÓN DE CARGA')}
+              label={t('foto_final_carga')}
               value={form.foto_final_carga}
               onCamera={() => pickPhoto('foto_final_carga', true)}
               onGallery={() => pickPhoto('foto_final_carga', false)}
@@ -192,22 +192,22 @@ export default function EmbarqueNuevo() {
             />
           </Section>
 
-          <Section title={t('firmas', 'FIRMAS')}>
-            <F label={t('nombre_guardia_seguridad', 'NOMBRE DEL GUARDIA DE SEGURIDAD')} v={form.nombre_guardia} on={(t: string) => set('nombre_guardia', t)} tid="emb-guardia" />
+          <Section title={t('firmas').toUpperCase()}>
+            <F label={t('nombre_guardia_seguridad')} v={form.nombre_guardia} on={(t: string) => set('nombre_guardia', t)} tid="emb-guardia" />
             <Pressable testID="emb-firma-almacenista" style={styles.signatureBox} onPress={() => setSigTarget('almacenista')}>
               <Text style={form.firma_almacenista ? styles.firmaDone : styles.firmaCta}>
-                {form.firma_almacenista ? t('firma_almacenista_caps', 'FIRMA ALMACENISTA ✓') : t('firma_almacenista', 'Firma del Almacenista')}
+                {form.firma_almacenista ? t('firma_almacenista_caps') : t('firma_almacenista')}
               </Text>
             </Pressable>
             <Pressable testID="emb-firma-guardia" style={styles.signatureBox} onPress={() => setSigTarget('guardia')}>
               <Text style={form.firma_guardia ? styles.firmaDone : styles.firmaCta}>
-                {form.firma_guardia ? t('firma_guardia_caps', 'FIRMA GUARDIA ✓') : t('firma_guardia', 'Firma del Guardia')}
+                {form.firma_guardia ? t('firma_guardia_caps') : t('firma_guardia')}
               </Text>
             </Pressable>
           </Section>
 
           <Pressable testID="emb-save" style={[styles.bigBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
-            {saving ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="checkmark" size={24} color={colors.onBrandPrimary} /><Text style={styles.bigBtnText}>{t('guardar_ticket', 'GUARDAR TICKET')}</Text></>}
+            {saving ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="checkmark" size={24} color={colors.onBrandPrimary} /><Text style={styles.bigBtnText}>{t('guardar_ticket_caps')}</Text></>}
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>

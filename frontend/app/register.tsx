@@ -5,12 +5,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, radius, typography } from '@/src/constants/theme';
 
 export default function Register() {
   const router = useRouter();
   const { signUp } = useAuth();
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,11 +22,11 @@ export default function Register() {
   const handle = async () => {
     setError(null);
     if (!name.trim() || !email.trim() || !password) {
-      setError('Completa todos los campos');
+      setError(t('completa_campos'));
       return;
     }
     if (password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres');
+      setError(t('contrasena_corta'));
       return;
     }
     setLoading(true);
@@ -32,7 +34,7 @@ export default function Register() {
       await signUp(email.trim(), password, name.trim());
       router.replace('/(app)/inicio');
     } catch (e: any) {
-      setError(e.message || 'Error al registrar');
+      setError(e.message || t('error_registro'));
     } finally {
       setLoading(false);
     }
@@ -42,20 +44,20 @@ export default function Register() {
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          <Text style={styles.title}>Crear cuenta</Text>
-          <Text style={styles.subtitle}>Registra tu cuenta de inspector</Text>
+          <Text style={styles.title}>{t('crear_cuenta')}</Text>
+          <Text style={styles.subtitle}>{t('registra_cuenta_inspector')}</Text>
 
-          <Text style={styles.label}>NOMBRE COMPLETO</Text>
+          <Text style={styles.label}>{t('nombre_completo').toUpperCase()}</Text>
           <TextInput
             testID="register-name-input"
             style={styles.input}
             value={name}
             onChangeText={setName}
-            placeholder="Juan Pérez"
+            placeholder={t('nombre_completo_placeholder')}
             placeholderTextColor={colors.muted}
           />
 
-          <Text style={styles.label}>CORREO ELECTRÓNICO</Text>
+          <Text style={styles.label}>{t('correo_electronico').toUpperCase()}</Text>
           <TextInput
             testID="register-email-input"
             style={styles.input}
@@ -63,18 +65,18 @@ export default function Register() {
             onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
-            placeholder="inspector@empresa.com"
+            placeholder={t('email_placeholder')}
             placeholderTextColor={colors.muted}
           />
 
-          <Text style={styles.label}>CONTRASEÑA</Text>
+          <Text style={styles.label}>{t('contrasena').toUpperCase()}</Text>
           <TextInput
             testID="register-password-input"
             style={styles.input}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
-            placeholder="Mínimo 6 caracteres"
+            placeholder={t('contrasena_min_chars')}
             placeholderTextColor={colors.muted}
           />
 
@@ -93,15 +95,15 @@ export default function Register() {
             {loading ? (
               <ActivityIndicator color={colors.onBrandPrimary} />
             ) : (
-              <Text style={styles.primaryBtnText}>REGISTRARSE</Text>
+              <Text style={styles.primaryBtnText}>{t('registrarse')}</Text>
             )}
           </Pressable>
 
           <View style={styles.footerRow}>
-            <Text style={styles.footerText}>¿Ya tienes cuenta? </Text>
+            <Text style={styles.footerText}>{t('ya_tienes_cuenta')} </Text>
             <Link href="/login" asChild>
               <Pressable testID="register-go-login">
-                <Text style={styles.link}>Inicia sesión</Text>
+                <Text style={styles.link}>{t('inicia_sesion')}</Text>
               </Pressable>
             </Link>
           </View>

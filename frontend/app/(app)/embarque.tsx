@@ -156,7 +156,7 @@ export default function Embarque() {
       if (pendingExits.length === 0) return null;
       return (
         <View style={[styles.pendingSection, { marginTop: spacing.xl }]}>
-          <Text style={styles.sectionTitle}>UNIDADES LISTAS PARA SALIDA</Text>
+          <Text style={styles.sectionTitle}>{t('unidades_listas_salida')}</Text>
           {pendingExits.map((r) => (
             <Pressable
               key={r.id}
@@ -168,7 +168,7 @@ export default function Embarque() {
                 <Text style={styles.cardSubText}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
               </View>
               <View style={[styles.miniStatusBadge, { backgroundColor: colors.success }]}>
-                <Text style={styles.miniStatusText}>DAR SALIDA</Text>
+                <Text style={styles.miniStatusText}>{t('dar_salida').toUpperCase()}</Text>
               </View>
             </Pressable>
           ))}
@@ -212,7 +212,7 @@ export default function Embarque() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <MainHeader title="NAF" subtitle={`${t('tickets_embarque').toUpperCase()}: DESPACHO DE CARGA`} />
+      <MainHeader title="NAF" subtitle={`${t('tickets_embarque').toUpperCase()}: ${t('despacho_carga').toUpperCase()}`} />
 
       <FlatList
         data={listData}

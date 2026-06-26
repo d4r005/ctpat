@@ -9,9 +9,12 @@ import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
+import { useTranslation } from 'react-i18next';
+
 export default function CasetaDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { t } = useTranslation();
   const { token, user } = useAuth();
   const [rec, setRec] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -41,7 +44,7 @@ export default function CasetaDetail() {
   const pickPhoto = async (type: 'entry' | 'exit', field: string) => {
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) { alert('Se necesita acceso a la cámara'); return; }
+      if (!perm.granted) { alert(t('acceso_restringido')); return; }
 
       // En web launchCameraAsync puede fallar, usamos launchImageLibraryAsync como fallback
       let r;
@@ -83,7 +86,7 @@ export default function CasetaDetail() {
       }
     } catch (e: any) {
       console.error(e);
-      alert("Error al cargar datos");
+      alert(t('error_cargar_datos'));
     } finally { setLoading(false); }
   };
 
@@ -107,7 +110,7 @@ export default function CasetaDetail() {
   };
 
   const handleRemoveExitPhoto = async (field: string) => {
-    if (!confirm('¿Quitar esta foto del registro de salida?')) return;
+    if (!confirm(t('quitar_foto_salida'))) return;
     setSaving(true);
     try {
       const updatedExit = { ...exitData, [field]: '' };
@@ -150,7 +153,7 @@ export default function CasetaDetail() {
 
   const saveExit = async () => {
     if (!exitData.guardia_salida_nombre?.trim() || !exitData.condicion_salida || !exitData.sello_vvtt_estado) {
-      alert('Completa guardia, condición de salida e inspección de sello VVTT'); return;
+      alert(t('completar_datos_salida')); return;
     }
     setSaving(true);
     try {
@@ -176,7 +179,7 @@ export default function CasetaDetail() {
   if (!rec || !rec.entry) {
     return (
       <SafeAreaView style={styles.safe}>
-        <View style={styles.center}><Text style={{ color: colors.muted }}>Error al cargar los datos del vehículo</Text></View>
+        <View style={styles.center}><Text style={{ color: colors.muted }}>{t('error_cargar_datos')}</Text></View>
       </SafeAreaView>
     );
   }
@@ -190,21 +193,21 @@ export default function CasetaDetail() {
         >
           <Ionicons name="arrow-back" size={28} color={colors.onBrandPrimary} />
         </Pressable>
-        <Text style={styles.topTitle}>Registro {e.placas_unidad}</Text>
+        <Text style={styles.topTitle}>{t('registro')} {e.placas_unidad}</Text>
         <View style={[styles.statusChip, { backgroundColor: STATUS_COLOR[rec.status] }]}>
-          <Text style={styles.statusChipText}>{rec.status.toUpperCase()}</Text>
+          <Text style={styles.statusChipText}>{t(rec.status).toUpperCase()}</Text>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxxl }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
-          <Text style={[styles.secTitle, { flex: 1, marginBottom: 0 }]}>ENTRADA — DATOS DEL VEHÍCULO</Text>
+          <Text style={[styles.secTitle, { flex: 1, marginBottom: 0 }]}>{t('entrada_datos_unidad')}</Text>
           {isAdmin && (
             <Pressable
               onPress={() => editEntry ? handleUpdateEntry() : setEditEntry(true)}
               style={{ backgroundColor: editEntry ? colors.success : colors.brandSecondary, paddingHorizontal: 12, paddingVertical: 6, marginLeft: 8 }}
             >
-              <Text style={{ color: '#FFF', fontWeight: '900', fontSize: 10 }}>{editEntry ? 'GUARDAR' : 'EDITAR'}</Text>
+              <Text style={{ color: '#FFF', fontWeight: '900', fontSize: 10 }}>{editEntry ? t('guardar').toUpperCase() : t('editar').toUpperCase()}</Text>
             </Pressable>
           )}
         </View>
@@ -212,85 +215,88 @@ export default function CasetaDetail() {
         <Section>
           {editEntry ? (
             <View style={{ padding: spacing.sm }}>
-              <EditField label="PLACAS" v={entryForm.placas_unidad} on={(t: string) => setEntryForm({...entryForm, placas_unidad: t})} />
-              <EditField label="CHOFER" v={entryForm.chofer_nombre} on={(t: string) => setEntryForm({...entryForm, chofer_nombre: t})} />
-              <EditField label="COMPAÑÍA" v={entryForm.compania_transporte} on={(t: string) => setEntryForm({...entryForm, compania_transporte: t})} />
-              <EditField label="TRAILER" v={entryForm.numero_caja} on={(t: string) => setEntryForm({...entryForm, numero_caja: t})} />
-              <EditField label="SELLO" v={entryForm.sello_entrada} on={(t: string) => setEntryForm({...entryForm, sello_entrada: t})} />
-              <EditField label="CORTINA" v={entryForm.cortina_asignada} on={(t: string) => setEntryForm({...entryForm, cortina_asignada: t})} />
+              <EditField label={t('placas_unidad_caps')} v={entryForm.placas_unidad} on={(t: string) => setEntryForm({...entryForm, placas_unidad: t})} />
+              <EditField label={t('nombre_chofer').toUpperCase() || "CHOFER"} v={entryForm.chofer_nombre} on={(t: string) => setEntryForm({...entryForm, chofer_nombre: t})} />
+              <EditField label={t('compania_transportista_caps')} v={entryForm.compania_transporte} on={(t: string) => setEntryForm({...entryForm, compania_transporte: t})} />
+              <EditField label={t('numero_caja_caps')} v={entryForm.numero_caja} on={(t: string) => setEntryForm({...entryForm, numero_caja: t})} />
+              <EditField label={t('sello').toUpperCase() || "SELLO"} v={entryForm.sello_entrada} on={(t: string) => setEntryForm({...entryForm, sello_entrada: t})} />
+              <EditField label={t('cortina_asignada_caps')} v={entryForm.cortina_asignada} on={(t: string) => setEntryForm({...entryForm, cortina_asignada: t})} />
             </View>
           ) : (
             <>
-              <Row label="Placas" value={e.placas_unidad} />
-              <Row label="Chofer" value={e.chofer_nombre} />
-              <Row label="Licencia" value={e.licencia_conductor} />
-              <Row label="Compañía" value={e.compania_transporte} />
-              <Row label="# Tractor" value={e.numero_tractor} />
-              <Row label="Caja / Tráiler" value={`${e.compania_caja} · ${e.numero_caja}`} />
-              <Row label="Sello entrada" value={e.sello_entrada} />
-              <Row label="Cortina" value={e.cortina_asignada} />
-              <Row label="Guardia caseta" value={e.guardia_caseta_nombre} />
-              <Row label="Fecha entrada" value={new Date(e.fecha_entrada).toLocaleString('es-MX')} />
+              <Row label={t('placas')} value={e.placas_unidad} />
+              <Row label={t('nombre_chofer') || "Chofer"} value={e.chofer_nombre} />
+              <Row label={t('licencia')} value={e.licencia_conductor} />
+              <Row label={t('compania')} value={e.compania_transporte} />
+              <Row label={t('numero_tractor_caps') || "# Tractor"} value={e.numero_tractor} />
+              <Row label={t('caja_atras') || "Caja / Tráiler"} value={`${e.compania_caja} · ${e.numero_caja}`} />
+              <Row label={t('sello_entrada') || "Sello entrada"} value={e.sello_entrada} />
+              <Row label={t('cortina')} value={e.cortina_asignada} />
+              <Row label={t('guardia_caseta') || "Guardia caseta"} value={e.guardia_caseta_nombre} />
+              <Row label={t('fecha_entrada') || "Fecha entrada"} value={new Date(e.fecha_entrada).toLocaleString()} />
             </>
           )}
         </Section>
 
-        <Section title="CARGA">
-          <Row label="Condición" value={(e.condicion_carga || '').toUpperCase()} />
-          <Row label="Descripción" value={e.descripcion_carga || '-'} />
-          <Row label="# Guía" value={e.numero_guia || '-'} />
-          <Row label="# Requerimiento" value={e.numero_requerimiento || '-'} />
-          <Row label="Orden compra" value={e.orden_compra ? (e.numero_orden_compra || 'SÍ') : 'NO'} />
-          <Row label="Destino" value={e.destino || '-'} />
+        <Section title={t('carga')}>
+          <Row label={t('condicion')} value={(e.condicion_carga || '').toUpperCase()} />
+          <Row label={t('observaciones') || "Descripción"} value={e.descripcion_carga || '-'} />
+          <Row label={t('guia_caps')} value={e.numero_guia || '-'} />
+          <Row label={t('requerimiento_caps')} value={e.numero_requerimiento || '-'} />
+          <Row label={t('orden_compra')} value={e.orden_compra ? (e.numero_orden_compra || t('si')) : t('no')} />
+          <Row label={t('destino')} value={e.destino || '-'} />
         </Section>
 
         {e.escolta?.presente && (
-          <Section title="ESCOLTA ENTRADA">
-            <Row label="Compañía" value={e.escolta.compania} />
-            <Row label="# Unidad" value={e.escolta.unidad} />
-            <Row label="Placas" value={e.escolta.placas} />
+          <Section title={t('escolta_entrada')}>
+            <Row label={t('compania')} value={e.escolta.compania} />
+            <Row label={t('numero_economico_unidad') || "# Unidad"} value={e.escolta.unidad} />
+            <Row label={t('placas')} value={e.escolta.placas} />
           </Section>
         )}
 
-        <Section title="FOTOGRAFÍAS DE ENTRADA">
+        <Section title={t('fotografias_entrada')}>
           <View style={styles.photoGrid}>
             <PhotoBox
-              label="FRENTE UNIDAD"
+              label={t('frente_unidad')}
               uri={entryForm?.foto_frente_unidad}
               onPress={() => editEntry && pickPhoto('entry', 'foto_frente_unidad')}
               onRemove={() => {
-                if (confirm('¿Borrar esta foto?')) {
+                if (confirm(t('borrar_foto_pregunta'))) {
                   setEntryForm({...entryForm, foto_frente_unidad: ''});
                 }
               }}
               isEdit={editEntry}
+              t={t}
             />
             <PhotoBox
-              label="ATRÁS CAJA"
+              label={t('atras_caja')}
               uri={entryForm?.foto_atras_caja}
               onPress={() => editEntry && pickPhoto('entry', 'foto_atras_caja')}
               onRemove={() => {
-                if (confirm('¿Borrar esta foto?')) {
+                if (confirm(t('borrar_foto_pregunta'))) {
                   setEntryForm({...entryForm, foto_atras_caja: ''});
                 }
               }}
               isEdit={editEntry}
+              t={t}
             />
             <PhotoBox
-              label="ID CHOFER"
+              label={t('id_chofer_caps')}
               uri={entryForm?.foto_id_chofer}
               onPress={() => editEntry && pickPhoto('entry', 'foto_id_chofer')}
               onRemove={() => {
-                if (confirm('¿Borrar esta foto?')) {
+                if (confirm(t('borrar_foto_pregunta'))) {
                   setEntryForm({...entryForm, foto_id_chofer: ''});
                 }
               }}
               isEdit={editEntry}
+              t={t}
             />
           </View>
         </Section>
 
-        <Section title="FIRMA DEL OPERADOR">
+        <Section title={t('firma_operador').toUpperCase()}>
            <View style={{ padding: spacing.md, alignItems: 'center' }}>
              {(editEntry ? (entryForm.firma_operador || e.firma_operador) : e.firma_operador) ? (
                <Image
@@ -298,7 +304,7 @@ export default function CasetaDetail() {
                  style={{ width: '80%', height: 100, resizeMode: 'contain', backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border }}
                />
              ) : (
-               <Text style={{ color: colors.muted, fontStyle: 'italic' }}>Sin firma capturada</Text>
+               <Text style={{ color: colors.muted, fontStyle: 'italic' }}>{t('sin_firma_capturada')}</Text>
              )}
 
              {editEntry && (
@@ -306,13 +312,13 @@ export default function CasetaDetail() {
                  style={[styles.bigBtn, { height: 48, minHeight: 48, padding: 0, marginTop: 10, width: '100%' }]}
                  onPress={() => {
                    setSigModalConfig({
-                     title: 'Editar Firma del Operador',
+                     title: t('editar_firma_operador'),
                      onSave: (sig) => setEntryForm({ ...entryForm, firma_operador: sig })
                    });
                    setShowSigModal(true);
                  }}
                >
-                 <Text style={[styles.bigBtnText, { fontSize: 12 }]}>CAMBIAR FIRMA DEL OPERADOR</Text>
+                 <Text style={[styles.bigBtnText, { fontSize: 12 }]}>{t('cambiar_firma_operador')}</Text>
                </Pressable>
              )}
            </View>
@@ -321,46 +327,48 @@ export default function CasetaDetail() {
         {rec.status === 'entrada' && (
           <Pressable testID="caseta-go-inspeccion" style={styles.bigBtn} onPress={goInspeccion}>
             <Ionicons name="clipboard" size={24} color={colors.onBrandPrimary} />
-            <Text style={styles.bigBtnText}>INICIAR INSPECCIÓN 19 PUNTOS</Text>
+            <Text style={styles.bigBtnText}>{t('iniciar_inspeccion_19')}</Text>
           </Pressable>
         )}
         {rec.inspection_id && (
           <Pressable testID="caseta-view-inspeccion" style={[styles.bigBtn, { backgroundColor: colors.info }]} onPress={() => router.push(`/inspection/${rec.inspection_id}`)}>
             <Ionicons name="document-text" size={24} color={colors.onInfo} />
-            <Text style={styles.bigBtnText}>VER INSPECCIÓN VINCULADA</Text>
+            <Text style={styles.bigBtnText}>{t('ver_inspeccion_vinculada')}</Text>
           </Pressable>
         )}
 
         {x ? (
-          <Section title="SALIDA">
-            <Row label="Fecha salida" value={new Date(x.fecha_salida).toLocaleString('es-MX')} />
-            <Row label="Cortina salida" value={x.cortina_salida} />
-            <Row label="Hora apertura" value={x.hora_apertura_cortina} />
-            <Row label="Hora cierre" value={x.hora_cierre_cortina} />
-            <Row label="Sello salida" value={x.sello_salida} />
-            <Row label="Condición" value={(x.condicion_salida || '').toUpperCase().replace('_', ' ')} />
-            <Row label="Destino" value={x.destino} />
-            <Row label="# Tractor salida" value={x.numero_tractor_salida || '-'} />
-            <Row label="# Caja salida" value={x.numero_caja_salida || '-'} />
-            <Row label="Pallets / Cajas / Bultos" value={`${x.pallets || 0} / ${x.cajas || 0} / ${x.bultos || 0}`} />
-            <Row label="Sello VVTT" value={(x.sello_vvtt_estado || '-').toUpperCase()} />
+          <Section title={t('salida')}>
+            <Row label={t('fecha_salida') || "Fecha salida"} value={new Date(x.fecha_salida).toLocaleString()} />
+            <Row label={t('cortina_salida') || "Cortina salida"} value={x.cortina_salida} />
+            <Row label={t('hora_apertura')} value={x.hora_apertura_cortina} />
+            <Row label={t('hora_cierre')} value={x.hora_cierre_cortina} />
+            <Row label={t('sello_salida_caps') || "Sello salida"} value={x.sello_salida} />
+            <Row label={t('condicion')} value={(x.condicion_salida || '').toUpperCase().replace('_', ' ')} />
+            <Row label={t('destino')} value={x.destino} />
+            <Row label={t('numero_tractor_salida')} value={x.numero_tractor_salida || '-'} />
+            <Row label={t('numero_caja_salida')} value={x.numero_caja_salida || '-'} />
+            <Row label={t('pallets_cajas_bultos')} value={`${x.pallets || 0} / ${x.cajas || 0} / ${x.bultos || 0}`} />
+            <Row label={t('sello_vvtt')} value={(x.sello_vvtt_estado || '-').toUpperCase()} />
             <View style={styles.photoGrid}>
               <PhotoBox
-                label="SELLO VVTT"
+                label={t('sello_vvtt').toUpperCase()}
                 uri={exitData.sello_vvtt_foto || x.sello_vvtt_foto}
                 onPress={() => isAdmin && pickPhoto('exit', 'sello_vvtt_foto')}
                 onRemove={() => isAdmin && handleRemoveExitPhoto('sello_vvtt_foto')}
                 isEdit={isAdmin}
+                t={t}
               />
             </View>
-            <Row label="Guardia salida" value={x.guardia_salida_nombre} />
+            <Row label={t('guardia_salida')} value={x.guardia_salida_nombre} />
           </Section>
         ) : (
           <Pressable testID="caseta-open-exit" style={[styles.bigBtn, { backgroundColor: colors.success }]} onPress={openExitForm}>
             <Ionicons name="exit" size={24} color={colors.onSuccess} />
-            <Text style={styles.bigBtnText}>REGISTRAR SALIDA</Text>
+            <Text style={styles.bigBtnText}>{t('registrar_salida')}</Text>
           </Pressable>
         )}
+      </ScrollView>
       </ScrollView>
 
       {showSigModal && (
@@ -375,37 +383,37 @@ export default function CasetaDetail() {
         <View style={styles.modalOverlay}>
           <SafeAreaView style={styles.modalSheet} edges={['top', 'bottom']}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Registrar Salida</Text>
+              <Text style={styles.modalTitle}>{t('registrar_salida')}</Text>
               <Pressable onPress={() => setShowExit(false)}><Ionicons name="close" size={28} color={colors.onSurface} /></Pressable>
             </View>
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
               <ScrollView contentContainerStyle={{ padding: spacing.lg }} keyboardShouldPersistTaps="handled">
-                <ExitField label="HORA APERTURA CORTINA" v={exitData.hora_apertura_cortina} on={(t: string) => setExitData({ ...exitData, hora_apertura_cortina: t })} tid="exit-apertura" />
-                <ExitField label="HORA CIERRE CORTINA" v={exitData.hora_cierre_cortina} on={(t: string) => setExitData({ ...exitData, hora_cierre_cortina: t })} tid="exit-cierre" />
-                <ExitField label="CORTINA #" v={exitData.cortina_salida} on={(t: string) => setExitData({ ...exitData, cortina_salida: t })} tid="exit-cortina" />
-                <ExitField label="# SELLO SALIDA" v={exitData.sello_salida} on={(t: string) => setExitData({ ...exitData, sello_salida: t })} tid="exit-sello" />
-                <Text style={styles.label}>CONDICIÓN DE SALIDA *</Text>
+                <ExitField label={t('hora_apertura_cortina_label')} v={exitData.hora_apertura_cortina} on={(t: string) => setExitData({ ...exitData, hora_apertura_cortina: t })} tid="exit-apertura" />
+                <ExitField label={t('hora_cierre_cortina_label')} v={exitData.hora_cierre_cortina} on={(t: string) => setExitData({ ...exitData, hora_cierre_cortina: t })} tid="exit-cierre" />
+                <ExitField label={t('cortina_num')} v={exitData.cortina_salida} on={(t: string) => setExitData({ ...exitData, cortina_salida: t })} tid="exit-cortina" />
+                <ExitField label={t('sello_salida_label')} v={exitData.sello_salida} on={(t: string) => setExitData({ ...exitData, sello_salida: t })} tid="exit-sello" />
+                <Text style={styles.label}>{t('condicion_salida_label')} *</Text>
                 <View style={styles.optRow}>
                   {(['vacio', 'carga_cliente', 'consolidado'] as const).map((c) => (
                     <Pressable key={c} testID={`exit-cond-${c}`} onPress={() => setExitData({ ...exitData, condicion_salida: c })} style={[styles.optChip, exitData.condicion_salida === c && styles.optChipOn]}>
-                      <Text style={[styles.optText, exitData.condicion_salida === c && styles.optTextOn]}>{c.replace('_', ' ').toUpperCase()}</Text>
+                      <Text style={[styles.optText, exitData.condicion_salida === c && styles.optTextOn]}>{t(c).toUpperCase()}</Text>
                     </Pressable>
                   ))}
                 </View>
-                <ExitField label="DESTINO" v={exitData.destino} on={(t: string) => setExitData({ ...exitData, destino: t })} tid="exit-destino" />
-                <ExitField label="# TRACTOR SALIDA (si distinto)" v={exitData.numero_tractor_salida} on={(t: string) => setExitData({ ...exitData, numero_tractor_salida: t })} tid="exit-tractor" />
-                <ExitField label="# CAJA SALIDA (si distinto)" v={exitData.numero_caja_salida} on={(t: string) => setExitData({ ...exitData, numero_caja_salida: t })} tid="exit-caja" />
+                <ExitField label={t('destino_caps')} v={exitData.destino} on={(t: string) => setExitData({ ...exitData, destino: t })} tid="exit-destino" />
+                <ExitField label={t('tractor_salida_si_distinto')} v={exitData.numero_tractor_salida} on={(t: string) => setExitData({ ...exitData, numero_tractor_salida: t })} tid="exit-tractor" />
+                <ExitField label={t('caja_salida_si_distinto')} v={exitData.numero_caja_salida} on={(t: string) => setExitData({ ...exitData, numero_caja_salida: t })} tid="exit-caja" />
                 <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                  <View style={{ flex: 1 }}><ExitField label="PALLETS" v={exitData.pallets} on={(t: string) => setExitData({ ...exitData, pallets: t })} tid="exit-pallets" kb="numeric" /></View>
-                  <View style={{ flex: 1 }}><ExitField label="CAJAS" v={exitData.cajas} on={(t: string) => setExitData({ ...exitData, cajas: t })} tid="exit-cajas" kb="numeric" /></View>
-                  <View style={{ flex: 1 }}><ExitField label="BULTOS" v={exitData.bultos} on={(t: string) => setExitData({ ...exitData, bultos: t })} tid="exit-bultos" kb="numeric" /></View>
+                  <View style={{ flex: 1 }}><ExitField label={t('pallets').toUpperCase()} v={exitData.pallets} on={(t: string) => setExitData({ ...exitData, pallets: t })} tid="exit-pallets" kb="numeric" /></View>
+                  <View style={{ flex: 1 }}><ExitField label={t('caja').toUpperCase()} v={exitData.cajas} on={(t: string) => setExitData({ ...exitData, cajas: t })} tid="exit-cajas" kb="numeric" /></View>
+                  <View style={{ flex: 1 }}><ExitField label={t('bultos').toUpperCase() || "BULTOS"} v={exitData.bultos} on={(t: string) => setExitData({ ...exitData, bultos: t })} tid="exit-bultos" kb="numeric" /></View>
                 </View>
 
-                <Text style={styles.label}>INSPECCIÓN SELLOS VVTT *</Text>
+                <Text style={styles.label}>{t('inspeccion_sellos_vvtt')} *</Text>
                 <View style={styles.optRow}>
                   {(['bueno', 'malo'] as const).map((s) => (
                     <Pressable key={s} onPress={() => setExitData({ ...exitData, sello_vvtt_estado: s })} style={[styles.optChip, { flex: 1 }, exitData.sello_vvtt_estado === s && (s === 'bueno' ? { backgroundColor: colors.success, borderColor: colors.success } : { backgroundColor: colors.error, borderColor: colors.error })]}>
-                      <Text style={[styles.optText, exitData.sello_vvtt_estado === s && { color: '#FFF' }]}>{s.toUpperCase()}</Text>
+                      <Text style={[styles.optText, exitData.sello_vvtt_estado === s && { color: '#FFF' }]}>{t(s).toUpperCase()}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -421,15 +429,15 @@ export default function CasetaDetail() {
                     style={{ borderWidth: 2, borderColor: colors.borderStrong, borderStyle: 'dashed', padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, backgroundColor: colors.surfaceSecondary }}
                   >
                     <Ionicons name="camera" size={32} color={colors.brandPrimary} />
-                    <Text style={{ fontWeight: '900', color: colors.brandPrimary, marginTop: 4 }}>FOTO DEL SELLO VVTT</Text>
+                    <Text style={{ fontWeight: '900', color: colors.brandPrimary, marginTop: 4 }}>{t('foto_sello_vvtt')}</Text>
                   </Pressable>
                 )}
 
-                <ExitField label="NOMBRE GUARDIA SALIDA *" v={exitData.guardia_salida_nombre} on={(t: string) => setExitData({ ...exitData, guardia_salida_nombre: t })} tid="exit-guardia" />
+                <ExitField label={`${t('nombre_guardia_salida') || "NOMBRE GUARDIA SALIDA"} *`} v={exitData.guardia_salida_nombre} on={(t: string) => setExitData({ ...exitData, guardia_salida_nombre: t })} tid="exit-guardia" />
               </ScrollView>
               <View style={styles.modalFooter}>
                 <Pressable style={[styles.bigBtn, { backgroundColor: colors.success, margin: 0 }]} onPress={saveExit} testID="exit-save" disabled={saving}>
-                  {saving ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="checkmark" size={24} color={colors.onSuccess} /><Text style={styles.bigBtnText}>GUARDAR SALIDA</Text></>}
+                  {saving ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="checkmark" size={24} color={colors.onSuccess} /><Text style={styles.bigBtnText}>{t('guardar_salida')}</Text></>}
                 </Pressable>
               </View>
             </KeyboardAvoidingView>
@@ -457,7 +465,7 @@ function Row({ label, value }: { label: string; value: any }) {
   );
 }
 
-function PhotoBox({ label, uri, onPress, onRemove, isEdit }: any) {
+function PhotoBox({ label, uri, onPress, onRemove, isEdit, t }: any) {
   return (
     <View style={styles.photoItem}>
       <Text style={styles.photoLabel}>{label}</Text>
@@ -478,7 +486,7 @@ function PhotoBox({ label, uri, onPress, onRemove, isEdit }: any) {
         >
           <Ionicons name="camera" size={32} color={isEdit ? colors.brandPrimary : colors.border} />
           <Text style={{ fontSize: 9, color: isEdit ? colors.brandPrimary : colors.border, fontWeight: '900', marginTop: 4 }}>
-            {isEdit ? 'AGREGAR FOTO' : 'SIN FOTO'}
+            {isEdit ? t('agregar_foto') : t('sin_foto')}
           </Text>
         </Pressable>
       )}
@@ -502,7 +510,7 @@ function ExitField({ label, v, on, tid, kb }: any) {
   );
 }
 
-function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSave: (sig: string) => void; title: string }) {
+function SignatureModal({ onClose, onSave, title, t }: { onClose: () => void; onSave: (sig: string) => void; title: string; t: any }) {
   const sigRef = React.useRef<any>(null);
   const handleOK = (signature: string) => onSave(signature);
   const style = `.m-signature-pad--footer {display: none; margin: 0px;}
@@ -516,9 +524,9 @@ function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSav
           <Signature
             ref={sigRef}
             onOK={handleOK}
-            descriptionText="Firme dentro del recuadro"
-            clearText="Borrar"
-            confirmText="Guardar"
+            descriptionText={t('firme_dentro_desc')}
+            clearText={t('borrar')}
+            confirmText={t('guardar')}
             webStyle={style}
             autoClear={false}
             imageType="image/jpeg"
@@ -526,13 +534,13 @@ function SignatureModal({ onClose, onSave, title }: { onClose: () => void; onSav
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
           <Pressable style={[styles.secondaryBtn, { flex: 1 }]} onPress={onClose}>
-            <Text style={styles.secondaryBtnText}>CANCELAR</Text>
+            <Text style={styles.secondaryBtnText}>{t('cancelar_caps')}</Text>
           </Pressable>
           <Pressable
             style={[styles.primaryBtn, { flex: 1 }]}
             onPress={() => sigRef.current?.readSignature()}
           >
-            <Text style={styles.primaryBtnText}>GUARDAR FIRMA</Text>
+            <Text style={styles.primaryBtnText}>{t('guardar_firma_caps')}</Text>
           </Pressable>
         </View>
       </View>

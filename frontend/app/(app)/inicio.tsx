@@ -112,8 +112,8 @@ export default function Inicio() {
         <Text style={styles.cardSubText}>{a.subtitle}</Text>
         <Text style={styles.cardMetaText}>{formatTime(a.created_at)} • {a.user_name}</Text>
       </View>
-      {a.status === 'malo' && <View style={styles.miniStatusBadgeError}><Text style={styles.miniStatusText}>CON FALLA</Text></View>}
-      {a.status === 'bueno' && a.type === 'inspection' && <View style={styles.miniStatusBadgeSuccess}><Text style={styles.miniStatusText}>BUENO</Text></View>}
+      {a.status === 'malo' && <View style={styles.miniStatusBadgeError}><Text style={styles.miniStatusText}>{t('con_falla').toUpperCase()}</Text></View>}
+      {a.status === 'bueno' && a.type === 'inspection' && <View style={styles.miniStatusBadgeSuccess}><Text style={styles.miniStatusText}>{t('bueno').toUpperCase()}</Text></View>}
     </Pressable>
   );
 
@@ -122,20 +122,20 @@ export default function Inicio() {
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
           <Text style={styles.statValue}>{todayInspections.length}</Text>
-          <Text style={styles.statLabel}>HOY</Text>
+          <Text style={styles.statLabel}>{t('hoy').toUpperCase()}</Text>
         </View>
         <View style={[styles.statCard, { borderLeftWidth: 1, borderLeftColor: colors.border }]}>
           <Text style={[styles.statValue, { color: colors.success }]}>{totalBuenas}</Text>
-          <Text style={styles.statLabel}>APROBADA</Text>
+          <Text style={styles.statLabel}>{t('aprobada').toUpperCase()}</Text>
         </View>
         <View style={[styles.statCard, { borderLeftWidth: 1, borderLeftColor: colors.border }]}>
           <Text style={[styles.statValue, { color: colors.error }]}>{totalMalas}</Text>
-          <Text style={styles.statLabel}>CON FALLAS</Text>
+          <Text style={styles.statLabel}>{t('con_fallas').toUpperCase()}</Text>
         </View>
       </View>
 
       <View style={styles.processHeader}>
-        <Text style={styles.processTitle}>UNIDADES EN PATIO (ACTIVO)</Text>
+        <Text style={styles.processTitle}>{t('unidades_en_patio_activo')}</Text>
         <Ionicons name="refresh-circle" size={24} color={colors.brandPrimary} onPress={() => loadActivities(true)} />
       </View>
     </>
@@ -143,7 +143,7 @@ export default function Inicio() {
 
   const ListEmpty = () => (
     <View style={styles.emptyInline}>
-      <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '700' }}>No hay unidades activas en patio</Text>
+      <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '700' }}>{t('no_hay_unidades_patio')}</Text>
     </View>
   );
 
@@ -156,14 +156,14 @@ export default function Inicio() {
     };
 
     // Determine the primary status label
-    let statusLabel = 'REGISTRADO';
+    let statusLabel = t('registrado').toUpperCase();
     let statusColor = colors.info;
 
     if (r.status === 'inspeccionado') {
-      statusLabel = 'INSPECCIONADO';
+      statusLabel = t('inspeccionado').toUpperCase();
       statusColor = colors.success;
     } else if (r.has_shipping_ticket) {
-      statusLabel = 'EN EMBARQUE';
+      statusLabel = t('en_embarque').toUpperCase();
       statusColor = colors.brandSecondary;
     }
 
@@ -203,7 +203,7 @@ export default function Inicio() {
         ListEmptyComponent={ListEmpty}
         ListFooterComponent={() => (
            <>
-             <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>ACTIVIDAD RECIENTE (LOG)</Text>
+             <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>{t('actividad_reciente_log')}</Text>
              {activities.slice(0, 5).map((a) => (
                 <Pressable key={`act-${a.id}-${a.type}`} style={[styles.activityCard, { opacity: 0.8 }]} onPress={() => navigateToActivity(a)}>
                   <View style={[styles.iconCircleSmall, { backgroundColor: a.status === 'malo' ? colors.error : colors.borderStrong }]}>
