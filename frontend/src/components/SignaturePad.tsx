@@ -38,23 +38,20 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
     readSignature: () => {
       if (Platform.OS === 'web') {
         if (webRef.current && !webRef.current.isEmpty()) {
-          // Solución al cuadro negro: Usar un fondo blanco explícito antes de exportar
           const canvas = webRef.current.getCanvas();
-          const context = canvas.getContext('2d');
+          // Crear un canvas temporal para forzar fondo blanco y evitar transparencia (cuadros negros)
           const tempCanvas = document.createElement('canvas');
           tempCanvas.width = canvas.width;
           tempCanvas.height = canvas.height;
           const tempCtx = tempCanvas.getContext('2d');
 
           if (tempCtx) {
-            // Dibujar fondo blanco
             tempCtx.fillStyle = '#FFFFFF';
             tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-            // Dibujar la firma encima
             tempCtx.drawImage(canvas, 0, 0);
 
-            // Exportar como JPEG ligero (calidad 0.6) para velocidad máxima
-            const base64 = tempCanvas.toDataURL('image/jpeg', 0.6);
+            // Exportar como JPEG con calidad balanceada para velocidad y nitidez
+            const base64 = tempCanvas.toDataURL('image/jpeg', 0.7);
             props.onOK(base64);
           }
         } else {
@@ -94,13 +91,14 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
     <NativeSignature
       ref={nativeRef}
       onOK={props.onOK}
+      backgroundColor="#FFFFFF" // Forzar fondo blanco nativo
       bg="#FFFFFF"
       descriptionText={props.descriptionText}
       clearText={props.clearText}
       confirmText={props.confirmText}
       webStyle={props.webStyle || `.m-signature-pad { background-color: #FFFFFF; }`}
       autoClear={false}
-      imageType="image/jpeg"
+      imageType="image/jpeg" // Siempre JPEG para evitar transparencia
     />
   );
 });
