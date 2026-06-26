@@ -67,9 +67,9 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
   const getPhotoHtml = (url: string, label: string) => {
     if (!url || !url.startsWith('data:image')) return '';
     return `
-      <div style="display:inline-block; width:30%; margin:1%; vertical-align:top; border:1px solid #eee; padding:5px; background:#f9fafb; text-align:center;">
+      <div style="display:inline-block; width:30%; margin:1%; vertical-align:top; border:1px solid #eee; padding:5px; background:#FFFFFF; text-align:center;">
         <p style="margin:0 0 5px 0; font-size:7px; font-weight:bold; color:#666; text-transform:uppercase;">${label}</p>
-        <img src="${url}" style="width:100%; height:100px; object-fit:cover; border:1px solid #ddd;" />
+        <img src="${url}" style="width:100%; height:100px; object-fit:cover; border:1px solid #ddd; background-color:#FFFFFF;" />
       </div>
     `;
   };
@@ -156,18 +156,20 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
 <head>
   <meta charset="utf-8">
   <style>
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; padding: 20px; font-size: 10px; line-height: 1.3; }
-    .header { border-bottom: 3px solid #0A2540; padding-bottom: 10px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: flex-end; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; padding: 20px; font-size: 10px; line-height: 1.3; background-color: #FFFFFF; }
+    .header { border-bottom: 3px solid #0A2540; padding-bottom: 10px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: flex-end; background-color: #FFFFFF; }
     .section-title { background: #0A2540; color: #fff; padding: 6px 10px; margin-top: 15px; margin-bottom: 8px; font-size: 12px; font-weight: bold; }
-    table { width: 100%; border-collapse: collapse; }
+    table { width: 100%; border-collapse: collapse; background-color: #FFFFFF; }
+    td { background-color: #FFFFFF; }
     b { color: #0A2540; }
+    img { background-color: #FFFFFF; }
     .status-badge { display: inline-block; padding: 3px 6px; font-weight: bold; color: white; border-radius: 3px; font-size: 9px; }
     .bg-success { background-color: #16a34a; }
     .bg-error { background-color: #dc2626; }
     .bg-warning { background-color: #f59e0b; }
   </style>
 </head>
-<body>
+<body style="background-color: #FFFFFF;">
   <div class="header">
     <div>
       <div style="background:#0A2540; color:white; padding:8px 15px; font-size:20px; font-weight:900; display:inline-block;">NAF</div>

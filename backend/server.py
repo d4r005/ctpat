@@ -526,7 +526,32 @@ async def create_inspector(body: UserRegister, current_user: Dict[str, Any] = De
 
 
 # ========== Inspections ==========
+def ensure_clean_image(base64_str: str) -> str:
+    """Asegura que la imagen tenga fondo blanco y esté optimizada para PDF/Email"""
+    if not base64_str or not isinstance(base64_str, str) or not base64_str.startswith('data:image'):
+        return base64_str
+
+    # Si ya parece ser un JPEG sin transparencia, devolvemos rápido
+    if "image/jpeg" in base64_str and ";base64," in base64_str:
+        # Podríamos optimizar más, pero por ahora lo dejamos así para velocidad
+        return base64_str
+
+    return add_watermark(base64_str)
+
 def _serialize_inspection(doc: Dict[str, Any]) -> Inspection:
+    # Si doc tiene fotos o firmas, las "limpiamos" para evitar cuadros negros en PDF
+    if doc.get("inspector_firma"):
+        doc["inspector_firma"] = ensure_clean_image(doc["inspector_firma"])
+    if doc.get("verificador_firma"):
+        doc["verificador_firma"] = ensure_clean_image(doc["verificador_firma"])
+    if doc.get("approved_by_signature"):
+        doc["approved_by_signature"] = ensure_clean_image(doc["approved_by_signature"])
+
+    if "points" in doc:
+        for p in doc["points"]:
+            if p.get("photo"):
+                p["photo"] = ensure_clean_image(p["photo"])
+
     return Inspection(
         id=doc["id"],
         user_id=doc["user_id"],
@@ -1380,6 +1405,17 @@ async def get_vehicle_record(rec_id: str, current_user: Dict[str, Any] = Depends
     doc = await db.vehicle_records.find_one(filt, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
+
+    # Limpieza de imágenes en tiempo real para reportes
+    if "entry" in doc:
+        for f in ["foto_frente_unidad", "foto_atras_caja", "foto_id_chofer", "firma_operador"]:
+            if doc["entry"].get(f):
+                doc["entry"][f] = ensure_clean_image(doc["entry"][f])
+    if doc.get("exit"):
+        for f in ["sello_vvtt_foto", "firma_guardia"]:
+            if doc["exit"].get(f):
+                doc["exit"][f] = ensure_clean_image(doc["exit"][f])
+
     return VehicleRecord(**doc)
 
 
@@ -1903,6 +1939,12 @@ async def get_ticket(ticket_id: str, current_user: Dict[str, Any] = Depends(get_
     doc = await db.shipping_tickets.find_one(filt, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Ticket no encontrado")
+
+    # Limpieza de imágenes para reportes
+    for f in ["foto_inicio_carga", "foto_media_carga", "foto_final_carga", "firma_almacenista", "firma_guardia"]:
+        if doc.get(f):
+            doc[f] = ensure_clean_image(doc[f])
+
     return ShippingTicket(**doc)
 
 
