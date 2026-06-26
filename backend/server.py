@@ -1379,6 +1379,63 @@ async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any]
     return VehicleRecord(**{k: v for k, v in doc.items() if k != "_id"})
 
 
+async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Busca y vincula inspecciones y tickets de embarque si no están vinculados directamente.
+    Esto repara la trazabilidad del proceso en tiempo real.
+    """
+    rec_id = record["id"]
+    placas = record["entry"].get("placas_unidad", "").strip()
+    if not placas:
+        return record
+
+    updated = False
+
+    # 1. Vincular Inspección
+    if not record.get("inspection_id"):
+        # Buscar inspección reciente para estas placas (mismo día)
+        start_dt = datetime.fromisoformat(record["created_at"].replace('Z', '+00:00')) - timedelta(hours=24)
+        insp = await db.inspections.find_one({
+            "placas_unidad": placas,
+            "created_at": {"$gte": start_dt.isoformat()}
+        }, sort=[("created_at", -1)])
+
+        if insp:
+            record["inspection_id"] = insp["id"]
+            if record["status"] == "entrada":
+                record["status"] = "inspeccionado"
+            updated = True
+
+    # 2. Vincular Ticket de Embarque
+    if not record.get("shipping_ticket_id"):
+        start_dt = datetime.fromisoformat(record["created_at"].replace('Z', '+00:00')) - timedelta(hours=12)
+        ticket = await db.shipping_tickets.find_one({
+            "placas_unidad": placas,
+            "created_at": {"$gte": start_dt.isoformat()}
+        }, sort=[("created_at", -1)])
+
+        if ticket:
+            record["shipping_ticket_id"] = ticket["id"]
+            record["has_shipping_ticket"] = True
+            updated = True
+    elif not record.get("has_shipping_ticket"):
+        record["has_shipping_ticket"] = True
+        updated = True
+
+    if updated:
+        await db.vehicle_records.update_one(
+            {"id": rec_id},
+            {"$set": {
+                "inspection_id": record.get("inspection_id"),
+                "shipping_ticket_id": record.get("shipping_ticket_id"),
+                "has_shipping_ticket": record.get("has_shipping_ticket", False),
+                "status": record["status"]
+            }}
+        )
+
+    return record
+
+
 @api_router.get("/vehicle-records", response_model=List[VehicleRecord])
 async def list_vehicle_records(
     current_user: Dict[str, Any] = Depends(get_current_user),
@@ -1402,36 +1459,16 @@ async def list_vehicle_records(
         "exit.sello_vvtt_foto": 0, "exit.firma_guardia": 0
     }
 
-    docs = await db.vehicle_records.find(filt, projection).sort("created_at", -1).to_list(500)
+    docs = await db.vehicle_records.find(filt, projection).sort("created_at", -1).to_list(200)
 
     if not docs:
         return []
 
-    # Optimización: Carga masiva de tickets de embarque para evitar N+1 queries
-    plates = list(set(d["entry"].get("placas_unidad") for d in docs if d["entry"].get("placas_unidad")))
-    min_date = docs[-1]["created_at"]
-
-    tickets = await db.shipping_tickets.find(
-        {"placas_unidad": {"$in": plates}, "created_at": {"$gte": min_date}},
-        {"placas_unidad": 1, "created_at": 1}
-    ).to_list(len(docs) * 2)
-
-    tickets_map = {}
-    for t in tickets:
-        p = t["placas_unidad"]
-        tickets_map.setdefault(p, []).append(t["created_at"])
-
+    # Aplicar vinculación inteligente a cada registro para asegurar que los puntos del proceso se vean bien
     res = []
     for d in docs:
-        p = d["entry"].get("placas_unidad")
-        has_ticket = False
-        if p in tickets_map:
-            for t_date in tickets_map[p]:
-                if t_date >= d["created_at"]:
-                    has_ticket = True
-                    break
-        d["has_shipping_ticket"] = has_ticket
-        res.append(VehicleRecord(**d))
+        linked_d = await _ensure_record_links(d)
+        res.append(VehicleRecord(**linked_d))
 
     return res
 
@@ -1445,6 +1482,9 @@ async def get_vehicle_record(rec_id: str, current_user: Dict[str, Any] = Depends
     doc = await db.vehicle_records.find_one(filt, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
+
+    # Asegurar vínculos antes de devolver
+    doc = await _ensure_record_links(doc)
 
     # Limpieza de imágenes en tiempo real para reportes
     if "entry" in doc:
@@ -1565,96 +1605,21 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
         logger.error(f"Reporte cancelado: No existe el registro {rec_id}")
         return False
 
-    placas = record["entry"].get("placas_unidad", "").strip()
+    # ASEGURAR VÍNCULOS (REPARACIÓN DE TRAZABILIDAD)
+    # Esto busca inspecciones y tickets por placas si no están vinculados explícitamente
+    record = await _ensure_record_links(record)
 
-    # Buscar inspección vinculada o por placas (con búsqueda flexible)
+    # Cargar los objetos vinculados
     inspection = None
     if record.get("inspection_id"):
         inspection = await db.inspections.find_one({"id": record["inspection_id"]})
 
-    # Buscar ticket de embarque vinculado
     ticket = None
     if record.get("shipping_ticket_id"):
         ticket = await db.shipping_tickets.find_one({"id": record["shipping_ticket_id"]})
 
-    if not inspection and placas:
-        # Intentar búsqueda exacta primero
-        inspection = await db.inspections.find_one(
-            {"placas_unidad": placas},
-            sort=[("created_at", -1)]
-        )
-        if not inspection:
-            # Búsqueda flexible (solo letras y números)
-            norm_placas = re.sub(r'[^a-zA-Z0-9]', '', placas)
-            if norm_placas:
-                flex_regex = ".*".join(list(norm_placas))
-                inspection = await db.inspections.find_one(
-                    {"placas_unidad": {"$regex": flex_regex, "$options": "i"}},
-                    sort=[("created_at", -1)]
-                )
-
-    # Buscar ticket de embarque con búsqueda flexible si no hay vínculo directo
-    if not ticket and placas:
-        fecha_inicio = record["created_at"]
-        fecha_fin = record.get("exit", {}).get("fecha_salida") or datetime.now(timezone.utc).isoformat()
-        # Expandimos rango de búsqueda a 3 horas para mayor seguridad
-        start_dt = datetime.fromisoformat(fecha_inicio.replace('Z', '+00:00')) - timedelta(hours=3)
-        end_dt = datetime.fromisoformat(fecha_fin.replace('Z', '+00:00')) + timedelta(hours=3)
-
-        # Intento exacto
-        ticket = await db.shipping_tickets.find_one({
-            "placas_unidad": placas,
-            "created_at": {"$gte": start_dt.isoformat(), "$lte": end_dt.isoformat()}
-        })
-        if not ticket:
-            # Intento flexible
-            norm_placas = re.sub(r'[^a-zA-Z0-9]', '', placas)
-            if norm_placas:
-                flex_regex = ".*".join(list(norm_placas))
-                ticket = await db.shipping_tickets.find_one({
-                    "placas_unidad": {"$regex": flex_regex, "$options": "i"},
-                    "created_at": {"$gte": start_dt.isoformat(), "$lte": end_dt.isoformat()}
-                })
-        # Intentar búsqueda exacta primero
-        inspection = await db.inspections.find_one(
-            {"placas_unidad": placas},
-            sort=[("created_at", -1)]
-        )
-        if not inspection:
-            # Búsqueda flexible (solo letras y números)
-            norm_placas = re.sub(r'[^a-zA-Z0-9]', '', placas)
-            if norm_placas:
-                flex_regex = ".*".join(list(norm_placas))
-                inspection = await db.inspections.find_one(
-                    {"placas_unidad": {"$regex": flex_regex, "$options": "i"}},
-                    sort=[("created_at", -1)]
-                )
-
-    # Buscar ticket de embarque con búsqueda flexible
-    ticket = None
-    if placas:
-        fecha_inicio = record["created_at"]
-        fecha_fin = record.get("exit", {}).get("fecha_salida") or datetime.now(timezone.utc).isoformat()
-        # Expandimos rango de búsqueda a 3 horas para mayor seguridad
-        start_dt = datetime.fromisoformat(fecha_inicio.replace('Z', '+00:00')) - timedelta(hours=3)
-        end_dt = datetime.fromisoformat(fecha_fin.replace('Z', '+00:00')) + timedelta(hours=3)
-
-        # Intento exacto
-        ticket = await db.shipping_tickets.find_one({
-            "placas_unidad": placas,
-            "created_at": {"$gte": start_dt.isoformat(), "$lte": end_dt.isoformat()}
-        })
-        if not ticket:
-            # Intento flexible
-            norm_placas = re.sub(r'[^a-zA-Z0-9]', '', placas)
-            if norm_placas:
-                flex_regex = ".*".join(list(norm_placas))
-                ticket = await db.shipping_tickets.find_one({
-                    "placas_unidad": {"$regex": flex_regex, "$options": "i"},
-                    "created_at": {"$gte": start_dt.isoformat(), "$lte": end_dt.isoformat()}
-                })
-
-    logger.info(f"Datos encontrados - Inspección: {'SI' if inspection else 'NO'}, Ticket: {'SI' if ticket else 'NO'}")
+    placas = record["entry"].get("placas_unidad", "").strip()
+    logger.info(f"Reporte Consolidado - Placas: {placas} - Inspección: {'SI' if inspection else 'NO'}, Ticket: {'SI' if ticket else 'NO'}")
 
     # PRE-PROCESAR FIRMAS PARA EVITAR CUADROS NEGROS Y ASEGURAR VISIBILIDAD DE FIRMAS ANTIGUAS
     f_operador = ensure_clean_image(record["entry"].get("firma_operador", ""))
