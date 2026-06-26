@@ -369,13 +369,13 @@ export default function CasetaDetail() {
           </Pressable>
         )}
       </ScrollView>
-      </ScrollView>
 
       {showSigModal && (
         <SignatureModal
           onClose={() => setShowSigModal(false)}
           onSave={(sig) => { sigModalConfig.onSave(sig); setShowSigModal(false); }}
           title={sigModalConfig.title}
+          t={t}
         />
       )}
 
