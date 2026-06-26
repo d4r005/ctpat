@@ -17,6 +17,7 @@ export default function InspectionDetail() {
   const router = useRouter();
   const { getById, approveInspection, rejectInspection, updateInspection } = useInspections();
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.email?.toLowerCase().includes('d.trujillo') || user?.email?.toLowerCase().includes('d4r005');
   const [insp, setInsp] = useState<Inspection | undefined>(undefined);
   const [generating, setGenerating] = useState(false);
   const [isEditing, setIsEditing] = useState(edit === 'true' && isAdmin);
@@ -27,7 +28,6 @@ export default function InspectionDetail() {
   const [showSigModal, setShowSigModal] = useState(false);
   const [acting, setActing] = useState(false);
   const isSupervisor = user?.role === 'supervisor';
-  const isAdmin = user?.role === 'admin' || user?.email?.toLowerCase().includes('d.trujillo') || user?.email?.toLowerCase().includes('d4r005');
 
   const canEdit = isAdmin; // Solo administrador puede editar/modificar/borrar
 
@@ -247,7 +247,7 @@ export default function InspectionDetail() {
               {acting ? <ActivityIndicator size={20} color="#FFF" /> : <Ionicons name="save" size={24} color="#FFF" />}
             </Pressable>
           ) : (
-            <Pressable onPress={handlePrintPdf} disabled={generating}>
+            <Pressable onPress={handleExportPDF} disabled={generating}>
               {generating ? <ActivityIndicator size={20} color="#FFF" /> : <Ionicons name="download" size={24} color="#FFF" />}
             </Pressable>
           )}
