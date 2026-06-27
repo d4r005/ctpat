@@ -125,35 +125,47 @@ export default function Supervisor() {
       const normalize = (s: string) => s?.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() || '';
       const normPlates = normalize(cleanPlates);
 
-      // Búsqueda mucho más flexible y robusta (incluye normalización de caracteres)
-      const insp = allInspections.find(i =>
-        (record?.inspection_id && i.id === record.inspection_id) ||
-        (normalize(i.placas_unidad) === normPlates) ||
-        (normalize(i.numero_trailer) === normPlates)
-      );
+      // Robust search for linked inspections (supporting both single and list)
+      let inspectionsToReport: Inspection[] = [];
 
-      const ticket = allTickets.find(t => normalize(t.placas_unidad) === normPlates);
+      if (record?.inspection_ids && record.inspection_ids.length > 0) {
+        inspectionsToReport = allInspections.filter(i => record.inspection_ids.includes(i.id));
+      } else if (record?.inspection_id) {
+        const found = allInspections.find(i => i.id === record.inspection_id);
+        if (found) inspectionsToReport = [found];
+      }
 
-      if (!insp) {
-          console.log("Debug - Placas buscadas (norm):", normPlates);
+      // Fallback to plates search if none found by ID
+      if (inspectionsToReport.length === 0) {
+        inspectionsToReport = allInspections.filter(i => normalize(i.placas_unidad) === normPlates);
+      }
+
+      if (inspectionsToReport.length === 0) {
           throw new Error('No se encontró inspección digital vinculada. Verifique que las placas coincidan.');
       }
 
-      const html = generateConsolidatedReportHtml({ inspection: insp, caseta: record, embarque: ticket }, 'es');
+      // Sort inspections by date
+      inspectionsToReport.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+      const ticket = allTickets.find(t => normalize(t.placas_unidad) === normPlates);
+
+      // Use the first inspection as reference for the main object, but pass all in the array
+      const html = generateConsolidatedReportHtml({
+        inspection: inspectionsToReport[0],
+        inspections: inspectionsToReport,
+        caseta: record,
+        embarque: ticket
+      }, 'es');
 
       if (Platform.OS === 'web') {
-        // En web, abrimos una ventana nueva y escribimos el HTML para evitar capturar el panel
-        const win = window.open('', '_blank');
-        if (win) {
-          win.document.write(html);
-          win.document.close();
-          // Esperar un momento a que las imágenes (base64) se rendericen
-          setTimeout(() => {
-            win.print();
-          }, 800);
-        } else {
-          alert('El bloqueador de ventanas impidió abrir el reporte.');
-        }
+        const { uri } = await Print.printToFileAsync({ html, base64: false });
+        const res = await fetch(uri);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `reporte_consolidado_${normPlates}.pdf`;
+        link.click();
       } else {
         const { uri } = await Print.printToFileAsync({ html, base64: false });
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Reporte Consolidado' });

@@ -51,6 +51,9 @@ export default function CasetaNuevo() {
   const [saving, setSaving] = useState(false);
   const sigRef = React.useRef<any>(null);
 
+  // Unit Type
+  const [tipoUnidad, setTipoUnidad] = useState<'sencillo' | 'full'>('sencillo');
+
   // Step 1 — Datos del vehículo
   const [sucursal, setSucursal] = useState('Escobedo');
   const [direccion, setDireccion] = useState('Av. Expansion #350');
@@ -59,10 +62,19 @@ export default function CasetaNuevo() {
   const [chofer, setChofer] = useState('');
   const [compania, setCompania] = useState('');
   const [tractor, setTractor] = useState('');
+
+  // Caja 1
   const [companiaCaja, setCompaniaCaja] = useState('');
   const [numeroCaja, setNumeroCaja] = useState('');
   const [selloEntrada, setSelloEntrada] = useState('');
   const [selloEntradaNA, setSelloEntradaNA] = useState(false);
+
+  // Caja 2 (Full)
+  const [companiaCaja2, setCompaniaCaja2] = useState('');
+  const [numeroCaja2, setNumeroCaja2] = useState('');
+  const [selloEntrada2, setSelloEntrada2] = useState('');
+  const [selloEntradaNA2, setSelloEntradaNA2] = useState(false);
+
   const [escoltaPresente, setEscoltaPresente] = useState(false);
   const [escoltaCompania, setEscoltaCompania] = useState('');
   const [escoltaUnidad, setEscoltaUnidad] = useState('');
@@ -71,6 +83,7 @@ export default function CasetaNuevo() {
   // Step 1 — Fotografías
   const [fotoFrente, setFotoFrente] = useState('');
   const [fotoAtras, setFotoAtras] = useState('');
+  const [fotoAtras2, setFotoAtras2] = useState('');
   const [fotoId, setFotoId] = useState('');
 
   // Step 2 — Carga y operación
@@ -95,8 +108,16 @@ export default function CasetaNuevo() {
   const progress = ((step + 1) / TOTAL_STEPS) * 100;
 
   const canNext = () => {
-    if (step === 0) return placas.trim() && chofer.trim();
-    if (step === 1) return fotoFrente && fotoAtras && fotoId;
+    if (step === 0) {
+      const basic = placas.trim() && chofer.trim() && numeroCaja.trim();
+      if (tipoUnidad === 'full') return basic && numeroCaja2.trim();
+      return basic;
+    }
+    if (step === 1) {
+      const basic = fotoFrente && fotoAtras && fotoId;
+      if (tipoUnidad === 'full') return basic && fotoAtras2;
+      return basic;
+    }
     if (step === 2) return guardiaCaseta.trim() && condicionCarga;
     if (step === 3) return aceptaTerminos && firmaOperador;
     return false;
@@ -142,11 +163,16 @@ export default function CasetaNuevo() {
       }
 
       const body = {
+        tipo_unidad: tipoUnidad,
         sucursal, direccion, licencia_conductor: licencia,
         placas_unidad: placas.trim().toUpperCase(), chofer_nombre: chofer.trim().toUpperCase(),
         compania_transporte: compania.trim().toUpperCase(), numero_tractor: tractor.trim().toUpperCase(),
         compania_caja: companiaCaja.trim().toUpperCase(), numero_caja: numeroCaja.trim().toUpperCase(),
         sello_entrada: selloEntradaNA ? 'N/A' : selloEntrada.trim().toUpperCase(),
+        // Support for FULL (2nd trailer)
+        compania_caja_2: tipoUnidad === 'full' ? companiaCaja2.trim().toUpperCase() : '',
+        numero_caja_2: tipoUnidad === 'full' ? numeroCaja2.trim().toUpperCase() : '',
+        sello_entrada_2: tipoUnidad === 'full' ? (selloEntradaNA2 ? 'N/A' : selloEntrada2.trim().toUpperCase()) : '',
         escolta: {
           presente: escoltaPresente,
           compania: escoltaCompania.trim().toUpperCase(),
@@ -155,6 +181,7 @@ export default function CasetaNuevo() {
         },
         foto_frente_unidad: fotoFrente,
         foto_atras_caja: fotoAtras,
+        foto_atras_caja_2: tipoUnidad === 'full' ? fotoAtras2 : '',
         foto_id_chofer: fotoId,
         cortina_asignada: cortina.trim().toUpperCase(), guardia_caseta_nombre: guardiaCaseta.trim().toUpperCase(),
         condicion_carga: condicionCarga, descripcion_carga: descripcionCarga.trim().toUpperCase(),
@@ -222,6 +249,15 @@ export default function CasetaNuevo() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {step === 0 && (
             <View>
+              <Text style={styles.fieldLabel}>{t('tipo_unidad_caps') || "TIPO DE UNIDAD"} *</Text>
+              <View style={[styles.optionsRow, { marginBottom: spacing.md }]}>
+                {(['sencillo', 'full'] as const).map((u) => (
+                  <Pressable key={u} onPress={() => setTipoUnidad(u)} style={[styles.optionChip, tipoUnidad === u && styles.optionChipActive]}>
+                    <Text style={[styles.optionText, tipoUnidad === u && styles.optionTextActive]}>{u.toUpperCase()}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
               <Field label={t('sucursal').toUpperCase() || "SUCURSAL"} value={sucursal} onChange={setSucursal} testID="caseta-sucursal" />
               <Field label={t('direccion').toUpperCase() || "DIRECCIÓN"} value={direccion} onChange={setDireccion} testID="caseta-direccion" />
               <Field label={t('licencia').toUpperCase() || "LICENCIA"} value={licencia} onChange={setLicencia} testID="caseta-licencia" />
@@ -229,6 +265,8 @@ export default function CasetaNuevo() {
               <Field label={t('nombre_chofer').toUpperCase() || "NOMBRE CHOFER"} value={chofer} onChange={setChofer} testID="caseta-chofer" />
               <Field label={t('compania_transportista_caps')} value={compania} onChange={setCompania} testID="caseta-compania" />
               <Field label={t('numero_tractor_caps') || "NÚMERO TRACTOR"} value={tractor} onChange={setTractor} testID="caseta-tractor" />
+
+              <Text style={[styles.declTitle, { marginTop: spacing.lg, marginBottom: spacing.sm }]}>{t('caja_1_caps') || "CAJA 1"}</Text>
               <Field label={t('compania_caja').toUpperCase() || "COMPAÑÍA CAJA"} value={companiaCaja} onChange={setCompaniaCaja} testID="caseta-compania-caja" />
               <Field label={t('numero_caja_caps') || "NÚMERO CAJA"} value={numeroCaja} onChange={setNumeroCaja} testID="caseta-numero-caja" />
 
@@ -243,6 +281,26 @@ export default function CasetaNuevo() {
                   <Text style={styles.naText}>N/A</Text>
                 </Pressable>
               </View>
+
+              {tipoUnidad === 'full' && (
+                <>
+                  <Text style={[styles.declTitle, { marginTop: spacing.xl, marginBottom: spacing.sm }]}>{t('caja_2_caps') || "CAJA 2 (FULL)"}</Text>
+                  <Field label={t('compania_caja').toUpperCase() || "COMPAÑÍA CAJA 2"} value={companiaCaja2} onChange={setCompaniaCaja2} testID="caseta-compania-caja-2" />
+                  <Field label={t('numero_caja_caps') || "NÚMERO CAJA 2"} value={numeroCaja2} onChange={setNumeroCaja2} testID="caseta-numero-caja-2" />
+
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
+                    <View style={{ flex: 1 }}>
+                      <Field label={t('numero_precinto_caps')} value={selloEntrada2} onChange={setSelloEntrada2} testID="caseta-sello-entrada-2" disabled={selloEntradaNA2} />
+                    </View>
+                    <Pressable onPress={() => setSelloEntradaNA2(!selloEntradaNA2)} style={styles.naBox}>
+                      <View style={[styles.naCheck, selloEntradaNA2 && styles.naCheckOn]}>
+                        {selloEntradaNA2 && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                      </View>
+                      <Text style={styles.naText}>N/A</Text>
+                    </Pressable>
+                  </View>
+                </>
+              )}
 
               <ToggleRow label={t('usa_escolta').toUpperCase() || "¿ESCOLTA?"} value={escoltaPresente} onChange={setEscoltaPresente} testID="caseta-escolta-toggle" t={t} />
               {escoltaPresente && (
@@ -269,13 +327,24 @@ export default function CasetaNuevo() {
               />
 
               <PhotoBox
-                label={t('caja_atras')}
+                label={t('caja_atras') + " (1)"}
                 value={fotoAtras}
                 onCamera={() => pickPhoto(setFotoAtras, true)}
                 onGallery={() => pickPhoto(setFotoAtras, false)}
                 onRemove={() => setFotoAtras('')}
                 t={t}
               />
+
+              {tipoUnidad === 'full' && (
+                <PhotoBox
+                  label={t('caja_atras') + " (2)"}
+                  value={fotoAtras2}
+                  onCamera={() => pickPhoto(setFotoAtras2, true)}
+                  onGallery={() => pickPhoto(setFotoAtras2, false)}
+                  onRemove={() => setFotoAtras2('')}
+                  t={t}
+                />
+              )}
 
               <PhotoBox
                 label={t('id_chofer')}

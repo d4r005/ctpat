@@ -23,11 +23,12 @@ export default function CasetaDetail() {
   const [showExit, setShowExit] = useState(false);
   const [exitData, setExitData] = useState<any>({
     hora_apertura_cortina: '', hora_cierre_cortina: '', cortina_salida: '',
-    sello_salida: '', condicion_salida: '', destino: '',
-    numero_tractor_salida: '', numero_caja_salida: '',
+    sello_salida: '', sello_salida_2: '', condicion_salida: '', destino: '',
+    numero_tractor_salida: '', numero_caja_salida: '', numero_caja_salida_2: '',
     escolta: { presente: false, compania: '', unidad: '', placas: '' },
     pallets: '', cajas: '', bultos: '',
     sello_vvtt_estado: '', sello_vvtt_foto: '',
+    sello_vvtt_estado_2: '', sello_vvtt_foto_2: '',
     guardia_salida_nombre: '',
   });
   const [saving, setSaving] = useState(false);
@@ -96,12 +97,12 @@ export default function CasetaDetail() {
       ...exitData,
       numero_tractor_salida: rec.entry.numero_tractor || '',
       numero_caja_salida: rec.entry.numero_caja || '',
+      numero_caja_salida_2: rec.entry.numero_caja_2 || '',
       destino: rec.entry.destino || ticket?.observaciones?.replace('Destino: ', '') || '',
       pallets: ticket?.numero_pallets || '',
       sello_salida: ticket?.numero_sello || '',
       condicion_salida: rec.entry.condicion_carga === 'descarga' ? 'vacio' : 'carga_cliente',
       guardia_salida_nombre: user?.name || '',
-      // Nuevos datos prellenados desde Tiempos y Carga del Ticket
       hora_apertura_cortina: ticket?.hora_apertura_cortina || '',
       hora_cierre_cortina: ticket?.hora_cierre_cortina || '',
       cortina_salida: ticket?.area || '',
@@ -139,20 +140,34 @@ export default function CasetaDetail() {
 
   useEffect(() => { if (id) load(); }, [id, token]);
 
-  const goInspeccion = () => {
+  const goInspeccion = (trailerNum?: string, selloNum?: string) => {
     if (!rec) return;
     const params = new URLSearchParams({
       record_id: rec.id,
       compania: rec.entry.compania_transporte || '',
       placas: rec.entry.placas_unidad || '',
-      trailer: rec.entry.numero_caja || '',
-      sello: rec.entry.sello_entrada || '',
+      trailer: trailerNum || rec.entry.numero_caja || '',
+      sello: selloNum || rec.entry.sello_entrada || '',
     });
     router.push(`/(app)/nueva?${params.toString()}`);
   };
 
   const saveExit = async () => {
-    if (!exitData.guardia_salida_nombre?.trim() || !exitData.condicion_salida || !exitData.sello_vvtt_estado) {
+    const isFull = rec.entry.tipo_unidad === 'full';
+    const isDescarga = rec.entry.condicion_carga === 'descarga';
+
+    const basicCheck = exitData.guardia_salida_nombre?.trim() && exitData.condicion_salida;
+
+    // Si es descarga, no validamos sellos VVTT ni sellos de salida
+    let validationPassed = basicCheck;
+
+    if (!isDescarga) {
+      const sealCheck = exitData.sello_vvtt_estado && exitData.sello_salida;
+      const fullCheck = !isFull || (exitData.sello_vvtt_estado_2 && exitData.sello_salida_2);
+      validationPassed = basicCheck && sealCheck && fullCheck;
+    }
+
+    if (!validationPassed) {
       alert(t('completar_datos_salida')); return;
     }
     setSaving(true);
@@ -237,8 +252,25 @@ export default function CasetaDetail() {
               <Row label={t('licencia')} value={e.licencia_conductor} />
               <Row label={t('compania')} value={e.compania_transporte} />
               <Row label={t('numero_tractor_caps') || "# Tractor"} value={e.numero_tractor} />
-              <Row label={t('caja_atras') || "Caja / Tráiler"} value={`${e.compania_caja} · ${e.numero_caja}`} />
+
+              <Text style={[styles.declTitle, { marginTop: spacing.md, marginBottom: spacing.xs, backgroundColor: colors.info, color: '#FFF' }]}>
+                {t('caja_1_caps') || "CAJA 1"}
+              </Text>
+              <Row label={t('compania')} value={e.compania_caja} />
+              <Row label={t('numero_caja_caps') || "Número Caja"} value={e.numero_caja} />
               <Row label={t('sello_entrada') || "Sello entrada"} value={e.sello_entrada} />
+
+              {e.tipo_unidad === 'full' && (
+                <>
+                  <Text style={[styles.declTitle, { marginTop: spacing.md, marginBottom: spacing.xs, backgroundColor: colors.info, color: '#FFF' }]}>
+                    {t('caja_2_caps') || "CAJA 2"}
+                  </Text>
+                  <Row label={t('compania')} value={e.compania_caja_2} />
+                  <Row label={t('numero_caja_caps') || "Número Caja"} value={e.numero_caja_2} />
+                  <Row label={t('sello_entrada') || "Sello entrada"} value={e.sello_entrada_2} />
+                </>
+              )}
+
               <Row label={t('cortina')} value={e.cortina_asignada} />
               <Row label={t('guardia_caseta') || "Guardia caseta"} value={e.guardia_caseta_nombre} />
               <Row label={t('fecha_entrada') || "Fecha entrada"} value={new Date(e.fecha_entrada).toLocaleString()} />
@@ -278,7 +310,7 @@ export default function CasetaDetail() {
               t={t}
             />
             <PhotoBox
-              label={t('atras_caja')}
+              label={t('atras_caja') + " (1)"}
               uri={entryForm?.foto_atras_caja}
               onPress={() => editEntry && pickPhoto('entry', 'foto_atras_caja')}
               onRemove={() => {
@@ -289,6 +321,20 @@ export default function CasetaDetail() {
               isEdit={editEntry}
               t={t}
             />
+            {e.tipo_unidad === 'full' && (
+              <PhotoBox
+                label={t('atras_caja') + " (2)"}
+                uri={entryForm?.foto_atras_caja_2}
+                onPress={() => editEntry && pickPhoto('entry', 'foto_atras_caja_2')}
+                onRemove={() => {
+                  if (confirm(t('borrar_foto_pregunta'))) {
+                    setEntryForm({...entryForm, foto_atras_caja_2: ''});
+                  }
+                }}
+                isEdit={editEntry}
+                t={t}
+              />
+            )}
             <PhotoBox
               label={t('id_chofer_caps')}
               uri={entryForm?.foto_id_chofer}
@@ -332,17 +378,43 @@ export default function CasetaDetail() {
            </View>
         </Section>
 
-        {rec.status === 'entrada' && (
-          <Pressable testID="caseta-go-inspeccion" style={styles.bigBtn} onPress={goInspeccion}>
-            <Ionicons name="clipboard" size={24} color={colors.onBrandPrimary} />
-            <Text style={styles.bigBtnText}>{t('iniciar_inspeccion_19')}</Text>
-          </Pressable>
+        {(rec.status === 'entrada' || rec.status === 'inspeccionado') && (
+          <View>
+            <Pressable testID="caseta-go-inspeccion" style={styles.bigBtn} onPress={() => goInspeccion(e.numero_caja, e.sello_entrada)}>
+              <Ionicons name="clipboard" size={24} color={colors.onBrandPrimary} />
+              <Text style={styles.bigBtnText}>
+                {e.tipo_unidad === 'full' ? `${t('iniciar_inspeccion_19')} (CAJA 1)` : t('iniciar_inspeccion_19')}
+              </Text>
+            </Pressable>
+
+            {e.tipo_unidad === 'full' && (
+              <Pressable testID="caseta-go-inspeccion-2" style={[styles.bigBtn, { marginTop: -spacing.sm }]} onPress={() => goInspeccion(e.numero_caja_2, e.sello_entrada_2)}>
+                <Ionicons name="clipboard" size={24} color={colors.onBrandPrimary} />
+                <Text style={styles.bigBtnText}>{t('iniciar_inspeccion_19')} (CAJA 2)</Text>
+              </Pressable>
+            )}
+          </View>
         )}
-        {rec.inspection_id && (
-          <Pressable testID="caseta-view-inspeccion" style={[styles.bigBtn, { backgroundColor: colors.info }]} onPress={() => router.push(`/inspection/${rec.inspection_id}`)}>
-            <Ionicons name="document-text" size={24} color={colors.onInfo} />
-            <Text style={styles.bigBtnText}>{t('ver_inspeccion_vinculada')}</Text>
-          </Pressable>
+
+        {(rec.inspection_ids && rec.inspection_ids.length > 0) ? (
+          rec.inspection_ids.map((inspId: string, idx: number) => (
+            <Pressable
+              key={inspId}
+              testID={`caseta-view-inspeccion-${idx}`}
+              style={[styles.bigBtn, { backgroundColor: colors.info, marginTop: idx === 0 ? 0 : -spacing.sm }]}
+              onPress={() => router.push(`/inspection/${inspId}`)}
+            >
+              <Ionicons name="document-text" size={24} color={colors.onInfo} />
+              <Text style={styles.bigBtnText}>{t('ver_inspeccion_vinculada')} {e.tipo_unidad === 'full' ? `(${idx+1})` : ''}</Text>
+            </Pressable>
+          ))
+        ) : (
+          rec.inspection_id && (
+            <Pressable testID="caseta-view-inspeccion" style={[styles.bigBtn, { backgroundColor: colors.info }]} onPress={() => router.push(`/inspection/${rec.inspection_id}`)}>
+              <Ionicons name="document-text" size={24} color={colors.onInfo} />
+              <Text style={styles.bigBtnText}>{t('ver_inspeccion_vinculada')}</Text>
+            </Pressable>
+          )
         )}
 
         {x ? (
@@ -351,22 +423,49 @@ export default function CasetaDetail() {
             <Row label={t('cortina_salida') || "Cortina salida"} value={x.cortina_salida} />
             <Row label={t('hora_apertura')} value={x.hora_apertura_cortina} />
             <Row label={t('hora_cierre')} value={x.hora_cierre_cortina} />
-            <Row label={t('sello_salida_caps') || "Sello salida"} value={x.sello_salida} />
-            <Row label={t('condicion')} value={(x.condicion_salida || '').toUpperCase().replace('_', ' ')} />
             <Row label={t('destino')} value={x.destino} />
             <Row label={t('numero_tractor_salida')} value={x.numero_tractor_salida || '-'} />
+
+            <Text style={[styles.declTitle, { marginTop: spacing.md, marginBottom: spacing.xs, backgroundColor: colors.success, color: '#FFF' }]}>
+              {t('caja_1_caps') || "CAJA 1"}
+            </Text>
             <Row label={t('numero_caja_salida')} value={x.numero_caja_salida || '-'} />
-            <Row label={t('pallets_cajas_bultos')} value={`${x.pallets || 0} / ${x.cajas || 0} / ${x.bultos || 0}`} />
+            <Row label={t('sello_salida_caps') || "Sello salida"} value={x.sello_salida} />
             <Row label={t('sello_vvtt')} value={(x.sello_vvtt_estado || '-').toUpperCase()} />
+
+            {e.tipo_unidad === 'full' && (
+              <>
+                <Text style={[styles.declTitle, { marginTop: spacing.md, marginBottom: spacing.xs, backgroundColor: colors.success, color: '#FFF' }]}>
+                  {t('caja_2_caps') || "CAJA 2"}
+                </Text>
+                <Row label={t('numero_caja_salida')} value={x.numero_caja_salida_2 || '-'} />
+                <Row label={t('sello_salida_caps') || "Sello salida"} value={x.sello_salida_2} />
+                <Row label={t('sello_vvtt')} value={(x.sello_vvtt_estado_2 || '-').toUpperCase()} />
+              </>
+            )}
+
+            <Row label={t('condicion')} value={(x.condicion_salida || '').toUpperCase().replace('_', ' ')} />
+            <Row label={t('pallets_cajas_bultos')} value={`${x.pallets || 0} / ${x.cajas || 0} / ${x.bultos || 0}`} />
+
             <View style={styles.photoGrid}>
               <PhotoBox
-                label={t('sello_vvtt').toUpperCase()}
-                uri={exitData.sello_vvtt_foto || x.sello_vvtt_foto}
+                label={t('sello_vvtt') + " (1)"}
+                uri={x.sello_vvtt_foto}
                 onPress={() => isAdmin && pickPhoto('exit', 'sello_vvtt_foto')}
                 onRemove={() => isAdmin && handleRemoveExitPhoto('sello_vvtt_foto')}
                 isEdit={isAdmin}
                 t={t}
               />
+              {e.tipo_unidad === 'full' && (
+                <PhotoBox
+                  label={t('sello_vvtt') + " (2)"}
+                  uri={x.sello_vvtt_foto_2}
+                  onPress={() => isAdmin && pickPhoto('exit', 'sello_vvtt_foto_2')}
+                  onRemove={() => isAdmin && handleRemoveExitPhoto('sello_vvtt_foto_2')}
+                  isEdit={isAdmin}
+                  t={t}
+                />
+              )}
             </View>
             <Row label={t('guardia_salida')} value={x.guardia_salida_nombre} />
           </Section>
@@ -399,7 +498,69 @@ export default function CasetaDetail() {
                 <ExitField label={t('hora_apertura_cortina_label')} v={exitData.hora_apertura_cortina} on={(t: string) => setExitData({ ...exitData, hora_apertura_cortina: t })} tid="exit-apertura" />
                 <ExitField label={t('hora_cierre_cortina_label')} v={exitData.hora_cierre_cortina} on={(t: string) => setExitData({ ...exitData, hora_cierre_cortina: t })} tid="exit-cierre" />
                 <ExitField label={t('cortina_num')} v={exitData.cortina_salida} on={(t: string) => setExitData({ ...exitData, cortina_salida: t })} tid="exit-cortina" />
-                <ExitField label={t('sello_salida_label')} v={exitData.sello_salida} on={(t: string) => setExitData({ ...exitData, sello_salida: t })} tid="exit-sello" />
+                <ExitField label={t('destino_caps')} v={exitData.destino} on={(t: string) => setExitData({ ...exitData, destino: t })} tid="exit-destino" />
+                <ExitField label={t('tractor_salida_si_distinto')} v={exitData.numero_tractor_salida} on={(t: string) => setExitData({ ...exitData, numero_tractor_salida: t })} tid="exit-tractor" />
+
+                <Text style={[styles.declTitle, { marginTop: spacing.md, backgroundColor: colors.info, color: '#FFF' }]}>{t('caja_1_caps') || "CAJA 1"}</Text>
+                <ExitField label={t('caja_salida_si_distinto')} v={exitData.numero_caja_salida} on={(t: string) => setExitData({ ...exitData, numero_caja_salida: t })} tid="exit-caja" />
+
+                {rec.entry.condicion_carga !== 'descarga' && (
+                  <>
+                    <ExitField label={t('sello_salida_label')} v={exitData.sello_salida} on={(t: string) => setExitData({ ...exitData, sello_salida: t })} tid="exit-sello" />
+                    <Text style={styles.label}>{t('inspeccion_sellos_vvtt')} (1) *</Text>
+                    <View style={styles.optRow}>
+                      {(['bueno', 'malo'] as const).map((s) => (
+                        <Pressable key={s} onPress={() => setExitData({ ...exitData, sello_vvtt_estado: s })} style={[styles.optChip, { flex: 1 }, exitData.sello_vvtt_estado === s && (s === 'bueno' ? { backgroundColor: colors.success, borderColor: colors.success } : { backgroundColor: colors.error, borderColor: colors.error })]}>
+                          <Text style={[styles.optText, exitData.sello_vvtt_estado === s && { color: '#FFF' }]}>{t(s).toUpperCase()}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                    {exitData.sello_vvtt_foto ? (
+                      <View style={{ marginTop: spacing.sm }}>
+                        <Image source={{ uri: exitData.sello_vvtt_foto }} style={{ width: '100%', height: 150, resizeMode: 'cover', borderWidth: 2, borderColor: colors.borderStrong }} />
+                        <Pressable onPress={() => setExitData({ ...exitData, sello_vvtt_foto: '' })} style={{ position: 'absolute', top: 5, right: 5, backgroundColor: '#FFF', borderRadius: 15 }}><Ionicons name="close-circle" size={30} color={colors.error} /></Pressable>
+                      </View>
+                    ) : (
+                      <Pressable onPress={() => pickPhoto('exit', 'sello_vvtt_foto')} style={styles.photoUploadBtn}>
+                        <Ionicons name="camera" size={32} color={colors.brandPrimary} />
+                        <Text style={styles.photoUploadText}>{t('foto_sello_vvtt')} (1)</Text>
+                      </Pressable>
+                    )}
+                  </>
+                )}
+
+                {rec.entry.tipo_unidad === 'full' && (
+                  <>
+                    <Text style={[styles.declTitle, { marginTop: spacing.xl, backgroundColor: colors.info, color: '#FFF' }]}>{t('caja_2_caps') || "CAJA 2"}</Text>
+                    <ExitField label={t('caja_salida_si_distinto')} v={exitData.numero_caja_salida_2} on={(t: string) => setExitData({ ...exitData, numero_caja_salida_2: t })} tid="exit-caja-2" />
+
+                    {rec.entry.condicion_carga !== 'descarga' && (
+                      <>
+                        <ExitField label={t('sello_salida_label')} v={exitData.sello_salida_2} on={(t: string) => setExitData({ ...exitData, sello_salida_2: t })} tid="exit-sello-2" />
+                        <Text style={styles.label}>{t('inspeccion_sellos_vvtt')} (2) *</Text>
+                        <View style={styles.optRow}>
+                          {(['bueno', 'malo'] as const).map((s) => (
+                            <Pressable key={s} onPress={() => setExitData({ ...exitData, sello_vvtt_estado_2: s })} style={[styles.optChip, { flex: 1 }, exitData.sello_vvtt_estado_2 === s && (s === 'bueno' ? { backgroundColor: colors.success, borderColor: colors.success } : { backgroundColor: colors.error, borderColor: colors.error })]}>
+                              <Text style={[styles.optText, exitData.sello_vvtt_estado_2 === s && { color: '#FFF' }]}>{t(s).toUpperCase()}</Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                        {exitData.sello_vvtt_foto_2 ? (
+                          <View style={{ marginTop: spacing.sm }}>
+                            <Image source={{ uri: exitData.sello_vvtt_foto_2 }} style={{ width: '100%', height: 150, resizeMode: 'cover', borderWidth: 2, borderColor: colors.borderStrong }} />
+                            <Pressable onPress={() => setExitData({ ...exitData, sello_vvtt_foto_2: '' })} style={{ position: 'absolute', top: 5, right: 5, backgroundColor: '#FFF', borderRadius: 15 }}><Ionicons name="close-circle" size={30} color={colors.error} /></Pressable>
+                          </View>
+                        ) : (
+                          <Pressable onPress={() => pickPhoto('exit', 'sello_vvtt_foto_2')} style={styles.photoUploadBtn}>
+                            <Ionicons name="camera" size={32} color={colors.brandPrimary} />
+                            <Text style={styles.photoUploadText}>{t('foto_sello_vvtt')} (2)</Text>
+                          </Pressable>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+
                 <Text style={styles.label}>{t('condicion_salida_label')} *</Text>
                 <View style={styles.optRow}>
                   {(['vacio', 'carga_cliente', 'consolidado'] as const).map((c) => (
@@ -408,38 +569,12 @@ export default function CasetaDetail() {
                     </Pressable>
                   ))}
                 </View>
-                <ExitField label={t('destino_caps')} v={exitData.destino} on={(t: string) => setExitData({ ...exitData, destino: t })} tid="exit-destino" />
-                <ExitField label={t('tractor_salida_si_distinto')} v={exitData.numero_tractor_salida} on={(t: string) => setExitData({ ...exitData, numero_tractor_salida: t })} tid="exit-tractor" />
-                <ExitField label={t('caja_salida_si_distinto')} v={exitData.numero_caja_salida} on={(t: string) => setExitData({ ...exitData, numero_caja_salida: t })} tid="exit-caja" />
+
                 <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                   <View style={{ flex: 1 }}><ExitField label={t('pallets').toUpperCase()} v={exitData.pallets} on={(t: string) => setExitData({ ...exitData, pallets: t })} tid="exit-pallets" kb="numeric" /></View>
                   <View style={{ flex: 1 }}><ExitField label={t('caja').toUpperCase()} v={exitData.cajas} on={(t: string) => setExitData({ ...exitData, cajas: t })} tid="exit-cajas" kb="numeric" /></View>
                   <View style={{ flex: 1 }}><ExitField label={t('bultos').toUpperCase() || "BULTOS"} v={exitData.bultos} on={(t: string) => setExitData({ ...exitData, bultos: t })} tid="exit-bultos" kb="numeric" /></View>
                 </View>
-
-                <Text style={styles.label}>{t('inspeccion_sellos_vvtt')} *</Text>
-                <View style={styles.optRow}>
-                  {(['bueno', 'malo'] as const).map((s) => (
-                    <Pressable key={s} onPress={() => setExitData({ ...exitData, sello_vvtt_estado: s })} style={[styles.optChip, { flex: 1 }, exitData.sello_vvtt_estado === s && (s === 'bueno' ? { backgroundColor: colors.success, borderColor: colors.success } : { backgroundColor: colors.error, borderColor: colors.error })]}>
-                      <Text style={[styles.optText, exitData.sello_vvtt_estado === s && { color: '#FFF' }]}>{t(s).toUpperCase()}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-
-                {exitData.sello_vvtt_foto ? (
-                  <View style={{ marginTop: spacing.sm }}>
-                    <Image source={{ uri: exitData.sello_vvtt_foto }} style={{ width: '100%', height: 150, resizeMode: 'cover', borderWidth: 2, borderColor: colors.borderStrong }} />
-                    <Pressable onPress={() => setExitData({ ...exitData, sello_vvtt_foto: '' })} style={{ position: 'absolute', top: 5, right: 5, backgroundColor: '#FFF', borderRadius: 15 }}><Ionicons name="close-circle" size={30} color={colors.error} /></Pressable>
-                  </View>
-                ) : (
-                  <Pressable
-                    onPress={() => pickPhoto('exit', 'sello_vvtt_foto')}
-                    style={{ borderWidth: 2, borderColor: colors.borderStrong, borderStyle: 'dashed', padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, backgroundColor: colors.surfaceSecondary }}
-                  >
-                    <Ionicons name="camera" size={32} color={colors.brandPrimary} />
-                    <Text style={{ fontWeight: '900', color: colors.brandPrimary, marginTop: 4 }}>{t('foto_sello_vvtt')}</Text>
-                  </Pressable>
-                )}
 
                 <ExitField label={`${t('nombre_guardia_salida') || "NOMBRE GUARDIA SALIDA"} *`} v={exitData.guardia_salida_nombre} on={(t: string) => setExitData({ ...exitData, guardia_salida_nombre: t })} tid="exit-guardia" />
               </ScrollView>
@@ -603,6 +738,9 @@ const styles = StyleSheet.create({
   photoLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, marginBottom: 4, letterSpacing: 0.5 },
   photoImg: { width: '100%', height: 120, resizeMode: 'cover', borderWidth: 2, borderColor: colors.borderStrong },
   noPhoto: { fontSize: 10, color: colors.muted, fontStyle: 'italic' },
+  declTitle: { fontWeight: '900', fontSize: 11, color: colors.onBrandPrimary, backgroundColor: colors.brandPrimary, padding: 6, letterSpacing: 1 },
+  photoUploadBtn: { borderWidth: 2, borderColor: colors.borderStrong, borderStyle: 'dashed', padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, backgroundColor: colors.surfaceSecondary },
+  photoUploadText: { fontWeight: '900', color: colors.brandPrimary, marginTop: 4, fontSize: 11 },
 
   // Signature Modal styles
   modalCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong, width: '100%' },

@@ -3,6 +3,7 @@ import { INSPECTION_POINTS_19, INSPECTION_POINTS_9 } from '../constants/inspecti
 
 interface ReportData {
   inspection: Inspection;
+  inspections?: Inspection[];
   caseta: any;
   embarque?: any;
 }
@@ -26,12 +27,10 @@ const DECLARACIONES = [
 ];
 
 export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string) => {
-  const { inspection: i, caseta, embarque } = data;
+  const { inspection: i, inspections, caseta, embarque } = data;
 
-  // CORRECCIÓN: Detectamos 19 o 9 puntos de forma definitiva
-  const hasPoint10 = i.points?.some(p => p.number >= 10);
-  const is9Points = i.inspection_type === '9_puntos_contenedor' || !hasPoint10;
-  const numPoints = is9Points ? '9' : '19';
+  // Use all provided inspections if available (for FULL units), otherwise just the primary one
+  const activeInspections = inspections && inspections.length > 0 ? inspections : [i];
 
   const p = {
     title: 'REPORTE CONSOLIDADO / 综合报告',
@@ -105,8 +104,27 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
       <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.license}</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.licencia_conductor || '-'}</td></tr>
       <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.company}</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.compania_transporte}</td></tr>
       <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.tractor}</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.numero_tractor || '-'}</td></tr>
+
+      <tr style="background:#f1f5f9;"><td colspan="2" style="padding:5px; font-weight:bold;">CAJA 1 / 货箱 1</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.company} 1</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.compania_caja}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.tractor} 1</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.numero_caja}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.seal} 1</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.sello_entrada}</td></tr>
+
+      ${caseta.entry.tipo_unidad === 'full' ? `
+      <tr style="background:#f1f5f9;"><td colspan="2" style="padding:5px; font-weight:bold;">CAJA 2 / 货箱 2</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.company} 2</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.compania_caja_2}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.tractor} 2</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.numero_caja_2}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.seal} 2</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.sello_entrada_2}</td></tr>
+      ` : ''}
+
       <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.entryDate}</b></td><td style="padding:6px;border:1px solid #ddd;">${new Date(caseta.entry.fecha_entrada).toLocaleString()}</td></tr>
-      ${caseta.exit ? `<tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.exitDate}</b></td><td style="padding:6px;border:1px solid #ddd;">${new Date(caseta.exit.fecha_salida).toLocaleString()}</td></tr>` : ''}
+      ${caseta.exit ? `
+        <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.exitDate}</b></td><td style="padding:6px;border:1px solid #ddd;">${new Date(caseta.exit.fecha_salida).toLocaleString()}</td></tr>
+        ${caseta.entry.condicion_carga !== 'descarga' ? `
+          <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.seal} (Salida 1)</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.sello_salida || '-'}</td></tr>
+          ${caseta.entry.tipo_unidad === 'full' ? `<tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.seal} (Salida 2)</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.sello_salida_2 || '-'}</td></tr>` : ''}
+        ` : ''}
+      ` : ''}
     </table>
 
     <div style="background: #f1f5f9; padding: 10px; border: 1px solid #ddd; margin-bottom: 10px; font-size: 8px;">
@@ -120,9 +138,11 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
 
     <div style="margin-bottom:15px;">
       ${getPhotoHtml(caseta.entry.foto_frente_unidad, 'FRONTAL')}
-      ${getPhotoHtml(caseta.entry.foto_atras_caja, 'TRASERA')}
+      ${getPhotoHtml(caseta.entry.foto_atras_caja, 'TRASERA 1')}
+      ${caseta.entry.tipo_unidad === 'full' ? getPhotoHtml(caseta.entry.foto_atras_caja_2, 'TRASERA 2') : ''}
       ${getPhotoHtml(caseta.entry.foto_id_chofer, 'ID CHOFER')}
-      ${caseta.exit ? getPhotoHtml(caseta.exit.sello_vvtt_foto, 'SELLO VVTT') : ''}
+      ${caseta.exit && caseta.entry.condicion_carga !== 'descarga' ? getPhotoHtml(caseta.exit.sello_vvtt_foto, 'VVTT 1') : ''}
+      ${caseta.exit && caseta.entry.condicion_carga !== 'descarga' && caseta.entry.tipo_unidad === 'full' ? getPhotoHtml(caseta.exit.sello_vvtt_foto_2, 'VVTT 2') : ''}
     </div>
   ` : `<p style="color:#666;font-style:italic;">${p.noData}</p>`;
 
@@ -192,55 +212,68 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
   ${casetaHtml}
 
   <div class="section-title">${p.sectionInspection}</div>
-  <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
-    <tr>
-      <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;width:40%;"><b>${p.result}</b></td>
-      <td style="padding:6px;border:1px solid #ddd;">
-        <span class="status-badge ${i.status_general === 'bueno' ? 'bg-success' : 'bg-error'}">${i.status_general === 'bueno' ? p.good : p.bad}</span>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.status}</b></td>
-      <td style="padding:6px;border:1px solid #ddd;">
-        <span class="status-badge ${i.approval_status === 'aprobada' ? 'bg-success' : i.approval_status === 'rechazada' ? 'bg-error' : 'bg-warning'}">${approvalStatusLabel}</span>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.inspector}</b></td>
-      <td style="padding:6px;border:1px solid #ddd;">
-        ${i.inspector_nombre}<br/>
-        ${i.inspector_firma ? `<img src="${i.inspector_firma}" style="height:45px; margin-top:5px; border-bottom:1px solid #0A2540;" />` : ''}
-      </td>
-    </tr>
-    ${i.approved_by_name ? `
-    <tr>
-      <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.supervisor}</b></td>
-      <td style="padding:6px;border:1px solid #ddd;">
-        ${i.approved_by_name}<br/>
-        ${i.approved_by_signature ? `<img src="${i.approved_by_signature}" style="height:45px; margin-top:5px; border-bottom:1px solid #0A2540;" />` : ''}
-      </td>
-    </tr>` : ''}
-  </table>
+  ${activeInspections.map((insp, idx) => {
+    const rows = insp.points.map(t => {
+      const allDefs = [...INSPECTION_POINTS_19, ...INSPECTION_POINTS_9];
+      const def = allDefs.find(d => d.number === t.number);
+      const bilingualName = def ? `${def.name_es} / ${def.name_zh}` : t.name;
 
-  <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
-    <tr style="background:#f1f5f9; font-weight:bold;">
-      <td style="padding:4px;border:1px solid #ddd;width:30px;">#</td>
-      <td style="padding:4px;border:1px solid #ddd;">Punto / 检查点</td>
-      <td style="padding:4px;border:1px solid #ddd;width:100px;">${p.status}</td>
-      <td style="padding:4px;border:1px solid #ddd;">${p.comments}</td>
-    </tr>
-    ${inspectionRows}
-  </table>
+      return `
+      <tr>
+        <td style="padding:4px;border:1px solid #ddd;width:30px;">${t.number}</td>
+        <td style="padding:4px;border:1px solid #ddd;">${bilingualName}</td>
+        <td style="padding:4px;border:1px solid #ddd;font-weight:bold;color:${t.estado === 'bueno' ? '#16a34a' : '#dc2626'}">${t.estado === 'bueno' ? p.good : (t.estado === 'malo' ? p.bad : 'N/A')}</td>
+        <td style="padding:4px;border:1px solid #ddd;">${t.comentarios || '-'}</td>
+      </tr>
+    `}).join('');
 
-  ${inspectionPhotos ? `
-    <div style="margin-top:10px; margin-bottom:15px; border:1px solid #ddd; padding:10px;">
-      <p style="font-weight:bold; color:#0A2540; margin:0 0 10px 0; border-bottom:1px solid #eee;">${p.sectionPhotos} (INSPECCIÓN):</p>
-      ${inspectionPhotos}
-    </div>
+    const currentAppStatus = insp.approval_status === 'aprobada' ? p.approved : (insp.approval_status === 'rechazada' ? p.rejected : p.pending);
+
+    return `
+      <div style="margin-bottom:20px; border:1px solid #0A2540; padding:10px;">
+        <p style="font-weight:bold; background:#eee; padding:5px; margin-top:0;">
+          ${insp.inspection_type === '9_puntos_contenedor' ? '9 PUNTOS' : '19 PUNTOS'} - ${insp.numero_trailer}
+        </p>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
+          <tr>
+            <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;width:40%;"><b>${p.result}</b></td>
+            <td style="padding:6px;border:1px solid #ddd;">
+              <span class="status-badge ${insp.status_general === 'bueno' ? 'bg-success' : 'bg-error'}">${insp.status_general === 'bueno' ? p.good : p.bad}</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.status}</b></td>
+            <td style="padding:6px;border:1px solid #ddd;">
+              <span class="status-badge ${insp.approval_status === 'aprobada' ? 'bg-success' : insp.approval_status === 'rechazada' ? 'bg-error' : 'bg-warning'}">${currentAppStatus}</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.inspector}</b></td>
+            <td style="padding:6px;border:1px solid #ddd;">${insp.inspector_nombre}</td>
+          </tr>
+        </table>
+
+        <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
+          <tr style="background:#f1f5f9; font-weight:bold;">
+            <td style="padding:4px;border:1px solid #ddd;width:30px;">#</td>
+            <td style="padding:4px;border:1px solid #ddd;">Punto / 检查点</td>
+            <td style="padding:4px;border:1px solid #ddd;width:100px;">${p.status}</td>
+            <td style="padding:4px;border:1px solid #ddd;">${p.comments}</td>
+          </tr>
+          ${rows}
+        </table>
+
+        <div style="margin-top:10px;">
+          ${insp.points.filter(p => p.photo).map(p => getPhotoHtml(p.photo!, `PUNTO ${p.number}`)).join('')}
+        </div>
+      </div>
+    `;
+  }).join('')}
+
+  ${caseta.entry.condicion_carga !== 'descarga' ? `
+    <div class="section-title">${p.sectionShipping}</div>
+    ${shippingHtml}
   ` : ''}
-
-  <div class="section-title">${p.sectionShipping}</div>
-  ${shippingHtml}
 
   <div style="margin-top:30px; border-top:1px solid #eee; padding-top:10px; text-align:center; color:#999; font-size:9px;">
     &copy; ${new Date().getFullYear()} Branco Industries - SRIUC System / 版权所有
