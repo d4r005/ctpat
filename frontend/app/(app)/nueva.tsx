@@ -43,16 +43,37 @@ export default function Nueva() {
     if (!token) return;
     setLoadingPending(true);
     try {
-      // Filtrar por status=entrada en el backend para mayor velocidad
-      const data = await apiCall<any[]>('/vehicle-records?status=entrada', { token });
-      // Registros que no tienen inspección vinculada
-      setPendingInYard(data.filter(r => !r.inspection_id));
-    } catch {} finally { setLoadingPending(false); }
+      // Traemos tanto entrada como inspeccionado para soportar FULL (segunda inspección)
+      const [dataEntrada, dataInsp] = await Promise.all([
+        apiCall<any[]>('/vehicle-records?status=entrada', { token }),
+        apiCall<any[]>('/vehicle-records?status=inspeccionado', { token })
+      ]);
+
+      const allActive = [...(Array.isArray(dataEntrada) ? dataEntrada : []), ...(Array.isArray(dataInsp) ? dataInsp : [])];
+
+      // Filtrar unidades que realmente necesitan inspección
+      const pending = allActive.filter(r => {
+        const isFull = r.entry?.tipo_unidad === 'full';
+        const inspectionCount = (r.inspection_ids || (r.inspection_id ? [r.inspection_id] : [])).length;
+
+        if (isFull) {
+          return inspectionCount < 2; // Necesita al menos 2 inspecciones si es Full
+        } else {
+          return inspectionCount === 0; // Sencillo solo necesita 1
+        }
+      });
+
+      setPendingInYard(pending);
+    } catch (e) {
+      console.error("Error fetching pending units:", e);
+    } finally { setLoadingPending(false); }
   };
 
-  React.useEffect(() => {
-    if (showTypeSelector && token) fetchPending();
-  }, [showTypeSelector, token]);
+  useFocusEffect(
+    React.useCallback(() => {
+      if (showTypeSelector && token) fetchPending();
+    }, [showTypeSelector, token])
+  );
 
   const inspectionType = (selectedType === '9_puntos_contenedor' ? '9_puntos_contenedor' : '19_puntos') as '19_puntos' | '9_puntos_contenedor';
   const pointsDef = getInspectionPoints(inspectionType);
@@ -259,13 +280,21 @@ export default function Nueva() {
                     setSelloAlta(r.entry.sello_entrada || '');
                     router.setParams({ record_id: r.id });
 
+                    const isFull = r.entry.tipo_unidad === 'full';
+                    const inspectionsDone = (r.inspection_ids?.length || (r.inspection_id ? 1 : 0));
+
                     if (Platform.OS === 'web') {
-                      const is9p = window.confirm(t('pregunta_tipo_inspeccion') + " (OK = 9 pts / Cancel = 19 pts)");
+                      const msg = isFull && inspectionsDone === 1
+                        ? `${t('iniciar_inspeccion')} ${t('caja_2_caps')}?`
+                        : `${t('iniciar_inspeccion')} ${r.entry.placas_unidad}?`;
+
+                      const is9p = window.confirm(msg + " \n\n(OK = 9 pts / Cancel = 19 pts)");
                       setSelectedType(is9p ? '9_puntos_contenedor' : '19_puntos');
                       setShowTypeSelector(false);
                     } else {
+                      const title = isFull && inspectionsDone === 1 ? `${t('iniciar_inspeccion')} (CAJA 2)` : t('iniciar_inspeccion');
                       Alert.alert(
-                        t('iniciar_inspeccion'),
+                        title,
                         `${t('pregunta_tipo_inspeccion')} ${r.entry.placas_unidad}?`,
                         [
                           { text: "19 PUNTOS", onPress: () => { setSelectedType('19_puntos'); setShowTypeSelector(false); } },
@@ -277,10 +306,18 @@ export default function Nueva() {
                   }}
                 >
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.pendingPlates}>{r.entry.placas_unidad}</Text>
+                    <Text style={styles.pendingPlates}>{r.entry.placas_unidad} {r.entry.tipo_unidad === 'full' ? '(FULL)' : ''}</Text>
                     <Text style={styles.pendingSub}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
                     <View style={{ marginTop: 4 }}>
-                      <ProcessTracker steps={{ entry: true, inspection: false, shipping: !!r.has_shipping_ticket, exit: false }} compact />
+                      <ProcessTracker
+                        steps={{
+                          entry: true,
+                          inspection: (r.inspection_ids?.length || (r.inspection_id ? 1 : 0)) > 0,
+                          shipping: !!r.has_shipping_ticket,
+                          exit: false
+                        }}
+                        compact
+                      />
                     </View>
                   </View>
                   <Ionicons name="arrow-forward" size={20} color={colors.brandPrimary} />
