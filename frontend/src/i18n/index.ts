@@ -245,6 +245,8 @@ const resources = {
       "licencia": "Licencia",
       "nombre_chofer": "Nombre Chofer",
       "compania_caja": "Compañía Caja",
+      "nombre_completo": "Nombre Completo",
+      "nombre_completo_placeholder": "Nombre completo",
       "usa_escolta": "¿Usa Escolta?",
       "si": "SÍ",
       "no": "NO",

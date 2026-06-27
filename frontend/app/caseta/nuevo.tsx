@@ -76,6 +76,7 @@ export default function CasetaNuevo() {
   // Step 2 — Carga y operación
   const [cortina, setCortina] = useState('');
   const [guardiaCaseta, setGuardiaCaseta] = useState('');
+  const [guardiaOpcion, setGuardiaOpcion] = useState<'MARIO AGUILAR' | 'ADELAIDO SAENZ' | 'OTRO' | ''>('');
   const [condicionCarga, setCondicionCarga] = useState<'vacia' | 'consolidada' | 'otra' | 'descarga' | ''>('');
   const [descripcionCarga, setDescripcionCarga] = useState('');
   const [numGuia, setNumGuia] = useState('');
@@ -142,21 +143,26 @@ export default function CasetaNuevo() {
 
       const body = {
         sucursal, direccion, licencia_conductor: licencia,
-        placas_unidad: placas.trim().toUpperCase(), chofer_nombre: chofer.trim(),
-        compania_transporte: compania, numero_tractor: tractor,
-        compania_caja: companiaCaja, numero_caja: numeroCaja,
-        sello_entrada: selloEntradaNA ? 'N/A' : selloEntrada,
-        escolta: { presente: escoltaPresente, compania: escoltaCompania, unidad: escoltaUnidad, placas: escoltaPlacas },
+        placas_unidad: placas.trim().toUpperCase(), chofer_nombre: chofer.trim().toUpperCase(),
+        compania_transporte: compania.trim().toUpperCase(), numero_tractor: tractor.trim().toUpperCase(),
+        compania_caja: companiaCaja.trim().toUpperCase(), numero_caja: numeroCaja.trim().toUpperCase(),
+        sello_entrada: selloEntradaNA ? 'N/A' : selloEntrada.trim().toUpperCase(),
+        escolta: {
+          presente: escoltaPresente,
+          compania: escoltaCompania.trim().toUpperCase(),
+          unidad: escoltaUnidad.trim().toUpperCase(),
+          placas: escoltaPlacas.trim().toUpperCase()
+        },
         foto_frente_unidad: fotoFrente,
         foto_atras_caja: fotoAtras,
         foto_id_chofer: fotoId,
-        cortina_asignada: cortina, guardia_caseta_nombre: guardiaCaseta,
-        condicion_carga: condicionCarga, descripcion_carga: descripcionCarga,
-        numero_guia: numGuiaNA ? 'N/A' : numGuia,
-        numero_requerimiento: numReqNA ? 'N/A' : numReq,
+        cortina_asignada: cortina.trim().toUpperCase(), guardia_caseta_nombre: guardiaCaseta.trim().toUpperCase(),
+        condicion_carga: condicionCarga, descripcion_carga: descripcionCarga.trim().toUpperCase(),
+        numero_guia: numGuiaNA ? 'N/A' : numGuia.trim().toUpperCase(),
+        numero_requerimiento: numReqNA ? 'N/A' : numReq.trim().toUpperCase(),
         orden_compra: ordenCompra,
-        numero_orden_compra: ordenCompra ? numOrdenCompra : '',
-        destino,
+        numero_orden_compra: ordenCompra ? numOrdenCompra.trim().toUpperCase() : '',
+        destino: destino.trim().toUpperCase(),
         firma_operador: firmaOperador, declaraciones_aceptadas: aceptaTerminos,
       };
 
@@ -241,9 +247,9 @@ export default function CasetaNuevo() {
               <ToggleRow label={t('usa_escolta').toUpperCase() || "¿ESCOLTA?"} value={escoltaPresente} onChange={setEscoltaPresente} testID="caseta-escolta-toggle" t={t} />
               {escoltaPresente && (
                 <>
-                  <Field label={t('compania_escolta')} value={escoltaCompania} onChange={setEscoltaCompania} testID="caseta-escolta-compania" />
-                  <Field label={t('unidad_escolta')} value={escoltaUnidad} onChange={setEscoltaUnidad} testID="caseta-escolta-unidad" />
-                  <Field label={t('placas_escolta')} value={escoltaPlacas} onChange={setEscoltaPlacas} testID="caseta-escolta-placas" />
+                  <Field label={t('compania_escolta').toUpperCase()} value={escoltaCompania} onChange={setEscoltaCompania} testID="caseta-escolta-compania" />
+                  <Field label={t('unidad_escolta').toUpperCase()} value={escoltaUnidad} onChange={setEscoltaUnidad} testID="caseta-escolta-unidad" />
+                  <Field label={t('placas_escolta').toUpperCase()} value={escoltaPlacas} onChange={setEscoltaPlacas} testID="caseta-escolta-placas" />
                 </>
               )}
             </View>
@@ -285,7 +291,33 @@ export default function CasetaNuevo() {
           {step === 2 && (
             <View>
               <Field label={t('cortina_asignada_caps')} value={cortina} onChange={setCortina} testID="caseta-cortina" />
-              <Field label={`${t('nombre_guardia_caseta')} *`} value={guardiaCaseta} onChange={setGuardiaCaseta} testID="caseta-guardia" />
+
+              <Text style={styles.fieldLabel}>{t('nombre_guardia_caseta')} *</Text>
+              <View style={[styles.optionsRow, { marginBottom: spacing.md }]}>
+                {(['MARIO AGUILAR', 'ADELAIDO SAENZ', 'OTRO'] as const).map((o) => (
+                  <Pressable
+                    key={o}
+                    onPress={() => {
+                      setGuardiaOpcion(o);
+                      if (o !== 'OTRO') setGuardiaCaseta(o);
+                      else setGuardiaCaseta('');
+                    }}
+                    style={[styles.optionChip, guardiaOpcion === o && styles.optionChipActive]}
+                  >
+                    <Text style={[styles.optionText, guardiaOpcion === o && styles.optionTextActive]}>{o}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {(guardiaOpcion === 'OTRO' || !guardiaOpcion) && (
+                <Field
+                  label={t('nombre_completo').toUpperCase()}
+                  value={guardiaCaseta}
+                  onChange={setGuardiaCaseta}
+                  testID="caseta-guardia"
+                  placeholder={t('nombre_completo_placeholder')}
+                />
+              )}
 
               <Text style={styles.fieldLabel}>{t('condicion_carga_caps')} *</Text>
               <View style={styles.optionsRow}>
@@ -411,7 +443,7 @@ export default function CasetaNuevo() {
   );
 }
 
-function Field({ label, value, onChange, testID, multiline, disabled }: any) {
+function Field({ label, value, onChange, testID, multiline, disabled, placeholder }: any) {
   return (
     <>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -426,6 +458,7 @@ function Field({ label, value, onChange, testID, multiline, disabled }: any) {
         value={disabled ? 'N/A' : value}
         onChangeText={(text) => onChange(text.toUpperCase())}
         multiline={!!multiline}
+        placeholder={placeholder}
         placeholderTextColor={colors.muted}
         editable={!disabled}
       />

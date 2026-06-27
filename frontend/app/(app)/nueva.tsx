@@ -416,9 +416,10 @@ export default function Nueva() {
                     <>
                       <TextInput
                         testID={`nueva-point-${p.number}-comentarios`}
+                        autoCapitalize="characters"
                         style={styles.commentInput}
                         value={p.comentarios}
-                        onChangeText={(t) => updatePoint(idx, { comentarios: t })}
+                        onChangeText={(t) => updatePoint(idx, { comentarios: t.toUpperCase() })}
                         placeholder={t('describir_falla_placeholder')}
                         placeholderTextColor={colors.muted}
                         multiline
@@ -464,9 +465,10 @@ export default function Nueva() {
               <Text style={styles.label}>{t('informe_actividad_sospechosa_caps')}</Text>
               <TextInput
                 testID="nueva-actividad-input"
+                autoCapitalize="characters"
                 style={[styles.input, { minHeight: 140, textAlignVertical: 'top' }]}
                 value={actSospechosa}
-                onChangeText={setActSospechosa}
+                onChangeText={(t) => setActSospechosa(t.toUpperCase())}
                 multiline
                 placeholder={t('detallar_actividad_placeholder')}
                 placeholderTextColor={colors.muted}
@@ -481,9 +483,10 @@ export default function Nueva() {
               <Text style={styles.label}>{t('nombre_inspector_caps')}</Text>
               <TextInput
                 testID="nueva-inspector-nombre"
+                autoCapitalize="characters"
                 style={styles.input}
                 value={inspectorNombre}
-                onChangeText={setInspectorNombre}
+                onChangeText={(t) => setInspectorNombre(t.toUpperCase())}
                 placeholder={t('nombre_completo_placeholder')}
                 placeholderTextColor={colors.muted}
               />

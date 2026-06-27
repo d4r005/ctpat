@@ -238,13 +238,13 @@ export default function CasetaDetail() {
           )}
         </Section>
 
-        <Section title={t('carga')}>
-          <Row label={t('condicion')} value={(e.condicion_carga || '').toUpperCase()} />
-          <Row label={t('observaciones') || "Descripción"} value={e.descripcion_carga || '-'} />
+        <Section title={t('carga').toUpperCase()}>
+          <Row label={t('condicion').toUpperCase()} value={(e.condicion_carga || '').toUpperCase()} />
+          <Row label={t('observaciones').toUpperCase()} value={(e.descripcion_carga || '-').toUpperCase()} />
           <Row label={t('guia_caps')} value={e.numero_guia || '-'} />
           <Row label={t('requerimiento_caps')} value={e.numero_requerimiento || '-'} />
-          <Row label={t('orden_compra')} value={e.orden_compra ? (e.numero_orden_compra || t('si')) : t('no')} />
-          <Row label={t('destino')} value={e.destino || '-'} />
+          <Row label={t('orden_compra').toUpperCase()} value={e.orden_compra ? (e.numero_orden_compra || t('si')) : t('no')} />
+          <Row label={t('destino').toUpperCase()} value={(e.destino || '-').toUpperCase()} />
         </Section>
 
         {e.escolta?.presente && (
@@ -497,7 +497,15 @@ function EditField({ label, v, on, tid, kb }: any) {
   return (
     <View style={{ marginBottom: spacing.sm }}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput testID={tid} style={styles.exitInput} value={v} onChangeText={on} keyboardType={kb || 'default'} placeholderTextColor={colors.muted} />
+      <TextInput
+        testID={tid}
+        autoCapitalize="characters"
+        style={styles.exitInput}
+        value={v}
+        onChangeText={(text) => on(text.toUpperCase())}
+        keyboardType={kb || 'default'}
+        placeholderTextColor={colors.muted}
+      />
     </View>
   );
 }
@@ -505,7 +513,15 @@ function ExitField({ label, v, on, tid, kb }: any) {
   return (
     <>
       <Text style={styles.label}>{label}</Text>
-      <TextInput testID={tid} style={styles.exitInput} value={v} onChangeText={on} keyboardType={kb || 'default'} placeholderTextColor={colors.muted} />
+      <TextInput
+        testID={tid}
+        autoCapitalize="characters"
+        style={styles.exitInput}
+        value={v}
+        onChangeText={(text) => on(text.toUpperCase())}
+        keyboardType={kb || 'default'}
+        placeholderTextColor={colors.muted}
+      />
     </>
   );
 }

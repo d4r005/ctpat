@@ -135,39 +135,39 @@ export default function EmbarqueNuevo() {
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <Section title={t('almacen')}>
+          <Section title={t('almacen').toUpperCase()}>
             <F label={`${t('almacenista_caps')} *`} v={form.almacenista} on={(t: string) => set('almacenista', t)} tid="emb-almacenista" />
-            <F label={t('area')} v={form.area} on={(t: string) => set('area', t)} tid="emb-area" />
+            <F label={t('area').toUpperCase()} v={form.area} on={(t: string) => set('area', t)} tid="emb-area" />
             <F label={t('sellos_caps')} v={form.sellos} on={(t: string) => set('sellos', t)} tid="emb-sellos" />
           </Section>
 
-          <Section title={t('material_a_carga')}>
+          <Section title={t('material_a_carga').toUpperCase()}>
             <F label={`${t('cliente_caps')} *`} v={form.cliente} on={(t: string) => set('cliente', t)} tid="emb-cliente" />
-            <F label={t('operador_nombre')} v={form.operador} on={(t: string) => set('operador', t)} tid="emb-operador" />
+            <F label={t('operador_nombre').toUpperCase()} v={form.operador} on={(t: string) => set('operador', t)} tid="emb-operador" />
             <F label={t('linea_transporte_caps')} v={form.linea_transporte} on={(t: string) => set('linea_transporte', t)} tid="emb-linea" />
-            <F label={t('numero_economico_unidad')} v={form.numero_economico} on={(t: string) => set('numero_economico', t)} tid="emb-economico" />
+            <F label={t('numero_economico_unidad').toUpperCase()} v={form.numero_economico} on={(t: string) => set('numero_economico', t)} tid="emb-economico" />
             <F label={t('placas_unidad_caps')} v={form.placas_unidad} on={(t: string) => set('placas_unidad', t)} tid="emb-placas-unidad" />
             <F label={t('numero_caja_caps')} v={form.numero_caja} on={(t: string) => set('numero_caja', t)} tid="emb-caja" />
             <F label={t('placas_caja_caps')} v={form.placas_caja} on={(t: string) => set('placas_caja', t)} tid="emb-placas-caja" />
           </Section>
 
-          <Section title={t('tiempos_y_carga')}>
-            <F label={t('hora_llegada_caseta')} v={form.hora_llegada} on={(t: string) => set('hora_llegada', t)} tid="emb-hora-llegada" placeholder="HH:MM" />
+          <Section title={t('tiempos_y_carga').toUpperCase()}>
+            <F label={t('hora_llegada_caseta').toUpperCase()} v={form.hora_llegada} on={(t: string) => set('hora_llegada', t)} tid="emb-hora-llegada" placeholder="HH:MM" />
             <F label={t('hora_apertura_cortina_caps')} v={form.hora_apertura_cortina} on={(t: string) => set('hora_apertura_cortina', t)} tid="emb-hora-apertura" placeholder="HH:MM" />
             <F label={t('hora_cierre_cortina_caps')} v={form.hora_cierre_cortina} on={(t: string) => set('hora_cierre_cortina', t)} tid="emb-hora-cierre" placeholder="HH:MM" />
-            <F label={t('hora_salida_desenrampe')} v={form.hora_salida} on={(t: string) => set('hora_salida', t)} tid="emb-hora-salida" placeholder="HH:MM" />
+            <F label={t('hora_salida_desenrampe').toUpperCase()} v={form.hora_salida} on={(t: string) => set('hora_salida', t)} tid="emb-hora-salida" placeholder="HH:MM" />
             <F label={t('numero_pallets_caps')} v={form.numero_pallets} on={(t: string) => set('numero_pallets', t)} tid="emb-pallets" kb="numeric" />
             <F label={t('numero_sello_caps')} v={form.numero_sello} on={(t: string) => set('numero_sello', t)} tid="emb-sello" />
           </Section>
 
-          <Section title={t('observaciones_y_danos')}>
+          <Section title={t('observaciones_y_danos').toUpperCase()}>
             <F label={t('observaciones').toUpperCase()} v={form.observaciones} on={(t: string) => set('observaciones', t)} tid="emb-obs" multiline />
-            <F label={t('danos_caja_desc')} v={form.daño_caja} on={(t: string) => set('daño_caja', t)} tid="emb-dano" multiline />
+            <F label={t('danos_caja_desc').toUpperCase()} v={form.daño_caja} on={(t: string) => set('daño_caja', t)} tid="emb-dano" multiline />
           </Section>
 
-          <Section title={t('evidencia_carga')}>
+          <Section title={t('evidencia_carga').toUpperCase()}>
             <PhotoField
-              label={t('foto_inicio_carga')}
+              label={t('foto_inicio_carga').toUpperCase()}
               value={form.foto_inicio_carga}
               onCamera={() => pickPhoto('foto_inicio_carga', true)}
               onGallery={() => pickPhoto('foto_inicio_carga', false)}
