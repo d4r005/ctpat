@@ -1536,15 +1536,8 @@ async def list_vehicle_records(
     if status:
         filt["status"] = status
 
-    # Excluir campos pesados en el listado general
-    projection = {
-        "_id": 0,
-        "entry.foto_frente_unidad": 0, "entry.foto_atras_caja": 0,
-        "entry.foto_id_chofer": 0, "entry.firma_operador": 0,
-        "exit.sello_vvtt_foto": 0, "exit.firma_guardia": 0
-    }
-
-    docs = await db.vehicle_records.find(filt, projection).sort("created_at", -1).to_list(200)
+    # projection removida para asegurar que detalles (firmas/fotos) se vean en la app
+    docs = await db.vehicle_records.find(filt, {"_id": 0}).sort("created_at", -1).to_list(200)
 
     if not docs:
         return []
@@ -2051,14 +2044,8 @@ async def list_tickets(current_user: Dict[str, Any] = Depends(get_current_user))
     if current_user.get("role") != "supervisor":
         filt["user_id"] = current_user["id"]
 
-    # Excluir campos pesados
-    projection = {
-        "_id": 0, "foto_inicio_carga": 0, "foto_media_carga": 0,
-        "foto_final_carga": 0, "firma_almacenista": 0,
-        "firma_guardia": 0, "plano_carga": 0
-    }
-
-    docs = await db.shipping_tickets.find(filt, projection).sort("created_at", -1).to_list(500)
+    # projection removida para asegurar que detalles (firmas/fotos) se vean en la app
+    docs = await db.shipping_tickets.find(filt, {"_id": 0}).sort("created_at", -1).to_list(500)
     return [ShippingTicket(**d) for d in docs]
 
 
