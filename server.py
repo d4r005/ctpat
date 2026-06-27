@@ -51,28 +51,33 @@ security = HTTPBearer()
 
 
 @app.on_event("startup")
-async def startup_db_client():
-    # Crear índices para acelerar consultas críticas (menos de 3 segundos)
-    await db.vehicle_records.create_index([("id", 1)], unique=True)
-    await db.vehicle_records.create_index([("created_at", -1)])
-    await db.vehicle_records.create_index([("entry.placas_unidad", 1)])
-    await db.vehicle_records.create_index([("inspection_id", 1)])
+async def startup_event():
+    """Configuración inicial al arrancar el servidor"""
+    try:
+        # 1. Crear índices para acelerar consultas críticas
+        await db.vehicle_records.create_index([("id", 1)], unique=True)
+        await db.vehicle_records.create_index([("created_at", -1)])
+        await db.vehicle_records.create_index([("entry.placas_unidad", 1)])
+        await db.vehicle_records.create_index([("inspection_id", 1)])
+        await db.vehicle_records.create_index([("status", 1)])
 
-    await db.inspections.create_index([("id", 1)], unique=True)
-    await db.inspections.create_index([("created_at", -1)])
-    await db.inspections.create_index([("placas_unidad", 1)])
+        await db.inspections.create_index([("id", 1)], unique=True)
+        await db.inspections.create_index([("created_at", -1)])
+        await db.inspections.create_index([("placas_unidad", 1)])
 
-    await db.shipping_tickets.create_index([("id", 1)], unique=True)
-    await db.shipping_tickets.create_index([("created_at", -1)])
-    await db.shipping_tickets.create_index([("placas_unidad", 1)])
+        await db.shipping_tickets.create_index([("id", 1)], unique=True)
+        await db.shipping_tickets.create_index([("created_at", -1)])
+        await db.shipping_tickets.create_index([("placas_unidad", 1)])
 
-    await db.users.create_index([("id", 1)], unique=True)
-    await db.users.create_index([("email", 1)], unique=True)
+        await db.users.create_index([("id", 1)], unique=True)
+        await db.users.create_index([("email", 1)], unique=True)
 
-    await db.chat_messages.create_index([("room", 1)])
-    await db.chat_messages.create_index([("created_at", -1)])
+        await db.chat_messages.create_index([("room", 1)])
+        await db.chat_messages.create_index([("created_at", -1)])
 
-    logging.info("Índices de base de datos creados/verificados correctamente.")
+        logging.info("Servidor SRIUC iniciado. Índices de base de datos verificados.")
+    except Exception as e:
+        logging.error(f"Error en el evento de inicio: {e}")
 
 # ========== Models ==========
 class UserRegister(BaseModel):
@@ -704,8 +709,6 @@ def ensure_clean_image(base64_str: str) -> str:
         logger.error(f"Error optimizando imagen: {e}")
         return base64_str
 
-        return processed_b64
-
 def _serialize_inspection(doc: Dict[str, Any]) -> Inspection:
     # Reparar solo si detectamos que no tiene el encabezado (compatibilidad)
     # pero evitamos procesar con Pillow en cada GET para mantener la velocidad
@@ -862,14 +865,19 @@ async def list_inspections(
             date_filt["$lte"] = date_to + "T23:59:59.999999"
         filt["created_at"] = date_filt
 
-    projection = {"_id": 0, "client_uuid": 0}
+    projection = {
+        "_id": 0,
+        "client_uuid": 0,
+        "inspector_firma": 0,
+        "verificador_firma": 0,
+        "approved_by_signature": 0,
+        "points.photo": 0
+    }
+
     if summary:
         projection["points"] = 0
-        projection["inspector_firma"] = 0
-        projection["verificador_firma"] = 0
-        projection["approved_by_signature"] = 0
 
-    docs = await db.inspections.find(filt, projection).sort("created_at", -1).to_list(1000 if summary else 500)
+    docs = await db.inspections.find(filt, projection).sort("created_at", -1).to_list(100 if summary else 50)
     return [_serialize_inspection(d) for d in docs]
 
 
@@ -1253,11 +1261,17 @@ async def get_recent_activities(
         insp_filt["user_id"] = current_user["id"]
     inspections = await db.inspections.find(insp_filt, {"_id": 0, "points": 0, "inspector_firma": 0, "verificador_firma": 0}).sort("created_at", -1).to_list(limit)
 
-    # 2. Vehicle Records
+    # 2. Vehicle Records (Excluding ALL photos)
     vec_filt = {}
     if current_user["role"] not in ["supervisor", "admin"]:
         vec_filt["user_id"] = current_user["id"]
-    records = await db.vehicle_records.find(vec_filt, {"_id": 0, "entry.foto_frente_unidad": 0, "entry.foto_atras_caja": 0, "entry.foto_id_chofer": 0, "exit.sello_vvtt_foto": 0, "entry.firma_operador": 0}).sort("created_at", -1).to_list(limit)
+
+    vec_proj = {
+        "_id": 0,
+        "entry.foto_frente_unidad": 0, "entry.foto_atras_caja": 0, "entry.foto_atras_caja_2": 0, "entry.foto_id_chofer": 0, "entry.firma_operador": 0,
+        "exit.sello_vvtt_foto": 0, "exit.sello_vvtt_foto_2": 0, "exit.firma_guardia": 0
+    }
+    records = await db.vehicle_records.find(vec_filt, vec_proj).sort("created_at", -1).to_list(limit)
 
     # 3. Shipping Tickets
     ship_filt = {}
@@ -1578,6 +1592,12 @@ async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
 
             if insp:
                 record["inspection_id"] = insp["id"]
+                # Asegurar que esté en la lista de IDs (para FULL)
+                if "inspection_ids" not in record:
+                    record["inspection_ids"] = []
+                if insp["id"] not in record["inspection_ids"]:
+                    record["inspection_ids"].append(insp["id"])
+
                 if record["status"] == "entrada":
                     record["status"] = "inspeccionado"
                 updated = True
@@ -1603,6 +1623,7 @@ async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
             {"id": rec_id},
             {"$set": {
                 "inspection_id": record.get("inspection_id"),
+                "inspection_ids": record.get("inspection_ids", []),
                 "shipping_ticket_id": record.get("shipping_ticket_id"),
                 "has_shipping_ticket": record.get("has_shipping_ticket", True if record.get("shipping_ticket_id") else False),
                 "status": record["status"]
@@ -1627,7 +1648,20 @@ async def list_vehicle_records(
     if status:
         filt["status"] = status
 
-    docs = await db.vehicle_records.find(filt, {"_id": 0}).sort("created_at", -1).to_list(50)
+    # OPTIMIZACIÓN CRÍTICA: Excluir campos de imagen pesados en el listado para evitar lentitud y errores de red
+    projection = {
+        "_id": 0,
+        "entry.foto_frente_unidad": 0,
+        "entry.foto_atras_caja": 0,
+        "entry.foto_atras_caja_2": 0,
+        "entry.foto_id_chofer": 0,
+        "entry.firma_operador": 0,
+        "exit.sello_vvtt_foto": 0,
+        "exit.sello_vvtt_foto_2": 0,
+        "exit.firma_guardia": 0
+    }
+
+    docs = await db.vehicle_records.find(filt, projection).sort("created_at", -1).to_list(50)
 
     if not docs:
         return []
@@ -1637,8 +1671,7 @@ async def list_vehicle_records(
 
     for d in docs:
         try:
-            # OPTIMIZACIÓN: Solo vincular si es estrictamente necesario y la unidad está activa
-            # Esto evita cientos de consultas innecesarias a la BD
+            # Solo vincular si es necesario y la unidad está activa
             if d.get("status") != "salida" and (not d.get("inspection_id") or not d.get("shipping_ticket_id")):
                 d = await _ensure_record_links(d)
 
@@ -2164,11 +2197,20 @@ async def create_ticket(body: ShippingTicketCreate, current_user: Dict[str, Any]
 @api_router.get("/shipping-tickets", response_model=List[ShippingTicket])
 async def list_tickets(current_user: Dict[str, Any] = Depends(get_current_user)):
     filt: Dict[str, Any] = {}
-    if current_user.get("role") != "supervisor":
+    if current_user.get("role") not in ["supervisor", "admin"] and not is_admin(current_user):
         filt["user_id"] = current_user["id"]
 
-    # projection removida para asegurar que detalles (firmas/fotos) se vean en la app
-    docs = await db.shipping_tickets.find(filt, {"_id": 0}).sort("created_at", -1).to_list(500)
+    projection = {
+        "_id": 0,
+        "plano_carga": 0,
+        "foto_inicio_carga": 0,
+        "foto_media_carga": 0,
+        "foto_final_carga": 0,
+        "firma_almacenista": 0,
+        "firma_guardia": 0
+    }
+
+    docs = await db.shipping_tickets.find(filt, projection).sort("created_at", -1).to_list(50)
     return [ShippingTicket(**d) for d in docs]
 
 
@@ -2296,26 +2338,6 @@ app.add_middleware(
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-
-@app.on_event("startup")
-async def ensure_indexes():
-    """Asegura que la base de datos tenga índices para búsquedas instantáneas"""
-    try:
-        # Índices para Inspecciones
-        await db.inspections.create_index([("created_at", -1)])
-        await db.inspections.create_index([("id", 1)], unique=True)
-        await db.inspections.create_index([("user_id", 1)])
-        await db.inspections.create_index([("placas_unidad", 1)])
-
-        # Índices para Caseta
-        await db.vehicle_records.create_index([("created_at", -1)])
-        await db.vehicle_records.create_index([("id", 1)], unique=True)
-        await db.vehicle_records.create_index([("status", 1)])
-
-        logger.info("Índices de base de datos verificados y activos.")
-    except Exception as e:
-        logger.error(f"Error al crear índices: {e}")
 
 
 @app.on_event("shutdown")
