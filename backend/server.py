@@ -1412,7 +1412,7 @@ async def mark_all_read(current_user: Dict[str, Any] = Depends(get_current_user)
 async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any] = Depends(get_current_user)):
     # EVITAR DUPLICADOS: Si ya hay una unidad con las mismas placas en patio (entrada o inspeccionado), no crear una nueva.
     existing = await db.vehicle_records.find_one({
-        "entry.placas_unidad": body.placas_unidad.trim().toUpperCase(),
+        "entry.placas_unidad": body.placas_unidad.strip().upper(),
         "status": {"$in": ["entrada", "inspeccionado"]}
     })
 
@@ -1698,14 +1698,16 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
     if record.get("shipping_ticket_id"):
         ticket = await db.shipping_tickets.find_one({"id": record["shipping_ticket_id"]})
 
-    placas = record["entry"].get("placas_unidad", "").strip()
+    e = record.get("entry") or {}
+    placas = e.get("placas_unidad", "").strip()
     logger.info(f"Reporte Consolidado - Placas: {placas} - Inspección: {'SI' if inspection else 'NO'}, Ticket: {'SI' if ticket else 'NO'}")
 
     # PRE-PROCESAR FIRMAS PARA EVITAR CUADROS NEGROS Y ASEGURAR VISIBILIDAD DE FIRMAS ANTIGUAS
-    f_operador = ensure_clean_image(record["entry"].get("firma_operador", ""))
+    f_operador = ensure_clean_image(e.get("firma_operador", ""))
     f_guardia_salida = ""
-    if record.get("exit"):
-        f_guardia_salida = ensure_clean_image(record["exit"].get("firma_guardia", ""))
+    x = record.get("exit") or {}
+    if x:
+        f_guardia_salida = ensure_clean_image(x.get("firma_guardia", ""))
 
     f_inspector = ""
     f_supervisor = ""
@@ -1742,10 +1744,11 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
 
     # Fotos de Caseta
     caseta_photos = []
-    if record["entry"].get("foto_frente_unidad"):
-        caseta_photos.append(get_photo_html(record["entry"]["foto_frente_unidad"], "FRONTAL"))
-    if record["entry"].get("foto_atras_caja"):
-        caseta_photos.append(get_photo_html(record["entry"]["foto_atras_caja"], "TRASERA"))
+    e = record.get("entry") or {}
+    if e.get("foto_frente_unidad"):
+        caseta_photos.append(get_photo_html(e["foto_frente_unidad"], "FRONTAL"))
+    if e.get("foto_atras_caja"):
+        caseta_photos.append(get_photo_html(e["foto_atras_caja"], "TRASERA"))
     caseta_photos_html = "".join(caseta_photos)
 
     # Fotos de Inspección: SOLO INCLUIR LAS QUE TIENEN FALLA PARA EVITAR PESO EXCESIVO
@@ -1806,11 +1809,11 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
             <div style="padding: 20px;">
                 <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px;">1. Movimiento de Caseta / 门卫室记录</h2>
                 <table style="width: 100%; border-collapse: collapse;">
-                    <tr><td style="padding: 8px; font-weight: bold; width: 40%;">Placas Unidad / 车牌号:</td><td style="padding: 8px;">{record['entry']['placas_unidad']}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Conductor / 司机姓名:</td><td style="padding: 8px;">{record['entry']['chofer_nombre']}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Compañía / 运输公司:</td><td style="padding: 8px;">{record['entry'].get('compania_transporte', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Fecha Entrada / 进场时间:</td><td style="padding: 8px;">{record['entry'].get('fecha_entrada', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold; color: #16A34A;">Fecha Salida / 出场时间:</td><td style="padding: 8px; color: #16A34A; font-weight: bold;">{record['exit'].get('fecha_salida', 'N/A') if record.get('exit') else 'No registrada (En Patio) / 未登记（在场）'}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold; width: 40%;">Placas Unidad / 车牌号:</td><td style="padding: 8px;">{e.get('placas_unidad', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Conductor / 司机姓名:</td><td style="padding: 8px;">{e.get('chofer_nombre', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Compañía / 运输公司:</td><td style="padding: 8px;">{e.get('compania_transporte', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Fecha Entrada / 进场时间:</td><td style="padding: 8px;">{e.get('fecha_entrada', 'N/A')}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold; color: #16A34A;">Fecha Salida / 出场时间:</td><td style="padding: 8px; color: #16A34A; font-weight: bold;">{x.get('fecha_salida', 'N/A') if x else 'No registrada (En Patio) / 未登记（在场）'}</td></tr>
                 </table>
 
                 <div style="background: #f1f5f9; padding: 10px; border: 1px solid #ddd; margin-top: 10px; font-size: 9px;">
