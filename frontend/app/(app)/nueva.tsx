@@ -44,22 +44,25 @@ export default function Nueva() {
     setLoadingPending(true);
     try {
       // Traemos tanto entrada como inspeccionado para soportar FULL (segunda inspección)
-      const [dataEntrada, dataInsp] = await Promise.all([
-        apiCall<any[]>('/vehicle-records?status=entrada', { token }),
-        apiCall<any[]>('/vehicle-records?status=inspeccionado', { token })
-      ]);
+      const dataEntrada = await apiCall<any[]>('/vehicle-records?status=entrada', { token }).catch(() => []);
+      const dataInsp = await apiCall<any[]>('/vehicle-records?status=inspeccionado', { token }).catch(() => []);
 
-      const allActive = [...(Array.isArray(dataEntrada) ? dataEntrada : []), ...(Array.isArray(dataInsp) ? dataInsp : [])];
+      const allActive = [
+        ...(Array.isArray(dataEntrada) ? dataEntrada : []),
+        ...(Array.isArray(dataInsp) ? dataInsp : [])
+      ];
 
       // Filtrar unidades que realmente necesitan inspección
       const pending = allActive.filter(r => {
-        const isFull = r.entry?.tipo_unidad === 'full';
-        const inspectionCount = (r.inspection_ids || (r.inspection_id ? [r.inspection_id] : [])).length;
+        if (!r || !r.entry) return false;
+        const isFull = r.entry.tipo_unidad === 'full';
+        const doneIds = Array.isArray(r.inspection_ids) ? r.inspection_ids : (r.inspection_id ? [r.inspection_id] : []);
+        const inspectionCount = doneIds.length;
 
         if (isFull) {
-          return inspectionCount < 2; // Necesita al menos 2 inspecciones si es Full
+          return inspectionCount < 2;
         } else {
-          return inspectionCount === 0; // Sencillo solo necesita 1
+          return inspectionCount === 0;
         }
       });
 
@@ -69,14 +72,15 @@ export default function Nueva() {
     } finally { setLoadingPending(false); }
   };
 
-  useFocusEffect(
-    React.useCallback(() => {
-      if (showTypeSelector && token) fetchPending();
-    }, [showTypeSelector, token])
-  );
+  // Reemplazo useFocusEffect por useEffect simple para máxima compatibilidad web/nativo
+  React.useEffect(() => {
+    if (showTypeSelector && token) {
+      fetchPending();
+    }
+  }, [showTypeSelector, token]);
 
   const inspectionType = (selectedType === '9_puntos_contenedor' ? '9_puntos_contenedor' : '19_puntos') as '19_puntos' | '9_puntos_contenedor';
-  const pointsDef = getInspectionPoints(inspectionType);
+  const pointsDef = getInspectionPoints(inspectionType) || [];
   const totalPoints = pointsDef.length;
 
   const [step, setStep] = useState(0);
@@ -164,10 +168,11 @@ export default function Nueva() {
   const canNext = () => {
     if (step === 0) return compania.trim() && placas.trim() && trailer.trim() && (precintoNA || precinto.trim());
     if (step === 1) {
+      if (!points || points.length === 0) return false;
       // Todos los puntos deben tener estado
       // Si el estado es "malo", la foto es OBLIGATORIA
       return points.every((p) => {
-        if (p.estado === '') return false;
+        if (!p || p.estado === '') return false;
         if (p.estado === 'malo' && !p.photo) return false;
         return true;
       });
@@ -368,7 +373,12 @@ export default function Nueva() {
           <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
         </View>
         <Text style={styles.progressText}>
-          {t('paso')} {step + 1} {t('de')} {TOTAL_STEPS} · {typeLabel} · {[t('datos_generales'), `${totalPoints} ${t('puntos')}`, t('observaciones'), t('firmas')][step]}
+          {t('paso')} {step + 1} {t('de')} {TOTAL_STEPS} · {typeLabel} · {
+            step === 0 ? t('datos_generales') :
+            step === 1 ? `${totalPoints} ${t('puntos')}` :
+            step === 2 ? t('observaciones') :
+            t('firmas')
+          }
         </Text>
       </View>
 
