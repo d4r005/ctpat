@@ -446,7 +446,7 @@ async def sync_to_google_sheets(process_type: str, data: Dict[str, Any], report_
                     "foto_sello_vvtt": x.get("sello_vvtt_foto")
                 })
 
-            requests.post(webhook_url, json=payload, timeout=10)
+            requests.post(webhook_url, json=payload, timeout=60)
         except Exception as e:
             logger.error(f"Error en sincronización Excel/Drive Avanzada: {e}")
 
