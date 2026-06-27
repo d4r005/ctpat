@@ -323,10 +323,10 @@ async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dic
 
 import asyncio
 
-async def sync_to_google_sheets(process_type: str, data: Dict[str, Any]):
+async def sync_to_google_sheets(process_type: str, data: Dict[str, Any], report_html: str = ""):
     """
-    Envía los datos a Google Sheets para seguimiento en tiempo real.
-    process_type: 'entrada' | 'inspeccion' | 'embarque' | 'salida'
+    Envía los datos a Google Sheets para seguimiento en tiempo real con detalle completo por proceso.
+    Y organiza archivos en Google Drive por Mes -> Placas + Fecha.
     """
     webhook_url = os.environ.get("GOOGLE_SHEET_WEBHOOK_URL")
     if not webhook_url:
@@ -334,64 +334,119 @@ async def sync_to_google_sheets(process_type: str, data: Dict[str, Any]):
 
     def send_request():
         try:
-            # Preparar payload unificado para seguimiento
+            now = datetime.now(timezone.utc)
+            # Nombres de meses en español
+            meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+            nombre_mes = meses[now.month - 1]
+
+            # Extraer placas y fecha para organización de carpetas
+            placas = data.get("placas_unidad") or data.get("entry", {}).get("placas_unidad", "SIN_PLACAS")
+            fecha = now.strftime("%d.%m.%Y")
+
+            # Payload base con información de auditoría y metadatos de organización
             payload = {
                 "proceso": process_type.upper(),
-                "fecha_servidor": datetime.now(timezone.utc).isoformat(),
-                "placas": "",
-                "chofer": "",
-                "compania": "",
-                "trailer": "",
-                "estado_inspeccion": "",
-                "aprobacion": "",
-                "cliente": "",
-                "pallets": "",
-                "inspector": "",
-                "supervisor": "",
-                "id_vinculo": data.get("id", "")
+                "sheet_target": process_type,
+                "timestamp": now.isoformat(),
+                "id_vinculo": data.get("id", ""),
+                "usuario_accion": data.get("user_id", "sistema"),
+                "mes_carpeta": nombre_mes,
+                "placas_carpeta": placas,
+                "fecha_carpeta": fecha,
+                "carpeta_final": f"{placas} {fecha}",
+                "reporte_html": report_html # HTML para convertir a PDF en Drive
             }
 
-            # Extraer datos específicos según el proceso
+            # 1. REGISTRO DE ENTRADA (CASETA)
             if process_type == 'entrada':
-                entry = data.get("entry", {})
+                e = data.get("entry", {})
                 payload.update({
-                    "placas": entry.get("placas_unidad"),
-                    "chofer": entry.get("chofer_nombre"),
-                    "compania": entry.get("compania_transporte"),
-                    "trailer": entry.get("numero_caja"),
-                    "inspector": data.get("user_id") # Guardia que recibe
-                })
-            elif process_type == 'inspeccion':
-                payload.update({
-                    "placas": data.get("placas_unidad"),
-                    "compania": data.get("compania_transportista"),
-                    "trailer": data.get("numero_trailer"),
-                    "estado_inspeccion": data.get("status_general"),
-                    "aprobacion": data.get("approval_status"),
-                    "inspector": data.get("inspector_nombre"),
-                    "supervisor": data.get("approved_by_name")
-                })
-            elif process_type == 'embarque':
-                payload.update({
-                    "placas": data.get("placas_unidad"),
-                    "cliente": data.get("cliente"),
-                    "pallets": data.get("numero_pallets"),
-                    "chofer": data.get("operador"),
-                    "inspector": data.get("almacenista")
-                })
-            elif process_type == 'salida':
-                entry = data.get("entry", {})
-                exit = data.get("exit", {})
-                payload.update({
-                    "placas": entry.get("placas_unidad"),
-                    "chofer": entry.get("chofer_nombre"),
-                    "trailer": exit.get("numero_caja_salida") or entry.get("numero_caja"),
-                    "inspector": exit.get("guardia_salida_nombre")
+                    "fecha_hora": e.get("fecha_entrada"),
+                    "placas_unidad": e.get("placas_unidad"),
+                    "chofer": e.get("chofer_nombre"),
+                    "licencia": e.get("licencia_conductor"),
+                    "compania_transporte": e.get("compania_transporte"),
+                    "numero_tractor": e.get("numero_tractor"),
+                    "compania_caja": e.get("compania_caja"),
+                    "numero_caja": e.get("numero_caja"),
+                    "sello_entrada": e.get("sello_entrada"),
+                    "cortina_asignada": e.get("cortina_asignada"),
+                    "condicion_carga": e.get("condicion_carga"),
+                    "guia": e.get("numero_guia"),
+                    "requerimiento": e.get("numero_requerimiento"),
+                    "orden_compra": e.get("numero_orden_compra"),
+                    "destino": e.get("destino"),
+                    "guardia_entrada": e.get("guardia_caseta_nombre"),
+                    "foto_frente": e.get("foto_frente_unidad"),
+                    "foto_atras": e.get("foto_atras_caja"),
+                    "foto_id": e.get("foto_id_chofer")
                 })
 
-            requests.post(webhook_url, json=payload, timeout=5)
+            # 2. INSPECCIÓN C-TPAT
+            elif process_type == 'inspeccion':
+                payload.update({
+                    "fecha_hora": data.get("created_at"),
+                    "tipo_inspeccion": data.get("inspection_type"),
+                    "placas_unidad": data.get("placas_unidad"),
+                    "numero_trailer": data.get("numero_trailer"),
+                    "numero_precinto": data.get("numero_precinto"),
+                    "sello_alta_seguridad": data.get("sello_alta_seguridad"),
+                    "inspector": data.get("inspector_nombre"),
+                    "estado_general": data.get("status_general"),
+                    "puntos_malos": len([p for p in data.get("points", []) if p.get("estado") == 'malo']),
+                    "estatus_aprobacion": data.get("approval_status"),
+                    "supervisor": data.get("approved_by_name"),
+                    "fecha_aprobacion": data.get("approved_at"),
+                    "nota_aprobacion": data.get("approval_note")
+                })
+                # Fotos de fallas
+                for p in data.get("points", []):
+                    if p.get("estado") == 'malo' and p.get("photo"):
+                        payload[f"foto_falla_punto_{p['number']}"] = p["photo"]
+
+            # 3. TICKET DE EMBARQUE
+            elif process_type == 'embarque':
+                payload.update({
+                    "fecha_hora": data.get("created_at"),
+                    "cliente": data.get("cliente"),
+                    "almacenista": data.get("almacenista"),
+                    "chofer_operador": data.get("operador"),
+                    "placas_unidad": data.get("placas_unidad"),
+                    "numero_caja": data.get("numero_caja"),
+                    "pallets": data.get("numero_pallets"),
+                    "sello_final": data.get("numero_sello"),
+                    "area_embarque": data.get("area"),
+                    "hora_llegada": data.get("hora_llegada"),
+                    "hora_apertura": data.get("hora_apertura_cortina"),
+                    "hora_cierre": data.get("hora_cierre_cortina"),
+                    "hora_salida": data.get("hora_salida"),
+                    "guardia_seguridad": data.get("nombre_guardia"),
+                    "foto_inicio": data.get("foto_inicio_carga"),
+                    "foto_media": data.get("foto_media_carga"),
+                    "foto_final": data.get("foto_final_carga")
+                })
+
+            # 4. REGISTRO DE SALIDA (CASETA FINAL)
+            elif process_type == 'salida':
+                e = data.get("entry", {})
+                x = data.get("exit", {})
+                payload.update({
+                    "fecha_entrada": e.get("fecha_entrada"),
+                    "fecha_salida": x.get("fecha_salida"),
+                    "placas_unidad": e.get("placas_unidad"),
+                    "chofer": e.get("chofer_nombre"),
+                    "destino_final": x.get("destino"),
+                    "condicion_salida": x.get("condicion_salida"),
+                    "pallets_salida": x.get("pallets"),
+                    "sello_salida": x.get("sello_salida"),
+                    "guardia_salida": x.get("guardia_salida_nombre"),
+                    "sello_vvtt": x.get("sello_vvtt_estado"),
+                    "foto_sello_vvtt": x.get("sello_vvtt_foto")
+                })
+
+            requests.post(webhook_url, json=payload, timeout=10)
         except Exception as e:
-            logger.error(f"Error en sincronización Excel (Sync): {e}")
+            logger.error(f"Error en sincronización Excel/Drive Avanzada: {e}")
 
     # Ejecutar en un hilo separado para no bloquear la respuesta principal del servidor
     asyncio.create_task(asyncio.to_thread(send_request))
