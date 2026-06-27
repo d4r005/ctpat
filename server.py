@@ -374,17 +374,21 @@ async def sync_to_google_sheets(process_type: str, data: Dict[str, Any], report_
             placas = data.get("placas_unidad") or data.get("entry", {}).get("placas_unidad", "SIN_PLACAS")
             fecha = now.strftime("%d.%m.%Y")
 
+            # Usar ID de vínculo para evitar duplicados en la misma carpeta si el script lo soporta
+            vinculo_id = data.get("id", "unique")
+
             # Payload base con información de auditoría y metadatos de organización
             payload = {
                 "proceso": process_type.upper(),
                 "sheet_target": process_type,
                 "timestamp": now.isoformat(),
-                "id_vinculo": data.get("id", ""),
+                "id_vinculo": vinculo_id,
                 "usuario_accion": data.get("user_id", "sistema"),
                 "mes_carpeta": nombre_mes,
                 "placas_carpeta": placas,
                 "fecha_carpeta": fecha,
                 "carpeta_final": f"{placas} {fecha}",
+                "id_unico_proceso": f"{process_type}_{vinculo_id}", # Para evitar duplicar archivos
                 "reporte_html": report_html # HTML para convertir a PDF en Drive
             }
 
@@ -1830,14 +1834,19 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
         logger.error(f"Reporte cancelado: No existe el registro {rec_id}")
         return False
 
-    # ASEGURAR VÍNCULOS (REPARACIÓN DE TRAZABILIDAD)
-    # Esto busca inspecciones y tickets por placas si no están vinculados explícitamente
+    # ASEGURAR VÍNCULOS
     record = await _ensure_record_links(record)
 
-    # Cargar los objetos vinculados
-    inspection = None
-    if record.get("inspection_id"):
-        inspection = await db.inspections.find_one({"id": record["inspection_id"]})
+    # Cargar los objetos vinculados (Soporte para múltiples inspecciones en FULL)
+    inspections = []
+    inspection_ids = record.get("inspection_ids", [])
+    if record.get("inspection_id") and record.get("inspection_id") not in inspection_ids:
+        inspection_ids.append(record["inspection_id"])
+
+    for insp_id in inspection_ids:
+        insp = await db.inspections.find_one({"id": insp_id})
+        if insp:
+            inspections.append(insp)
 
     ticket = None
     if record.get("shipping_ticket_id"):
@@ -1845,205 +1854,108 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
 
     e = record.get("entry") or {}
     placas = e.get("placas_unidad", "").strip()
-    logger.info(f"Reporte Consolidado - Placas: {placas} - Inspección: {'SI' if inspection else 'NO'}, Ticket: {'SI' if ticket else 'NO'}")
 
-    # PRE-PROCESAR FIRMAS PARA EVITAR CUADROS NEGROS Y ASEGURAR VISIBILIDAD DE FIRMAS ANTIGUAS
+    # Pre-procesar firmas
     f_operador = ensure_clean_image(e.get("firma_operador", ""))
     f_guardia_salida = ""
     x = record.get("exit") or {}
     if x:
         f_guardia_salida = ensure_clean_image(x.get("firma_guardia", ""))
 
-    f_inspector = ""
-    f_supervisor = ""
-    if inspection:
-        f_inspector = ensure_clean_image(inspection.get("inspector_firma", ""))
-        f_supervisor = ensure_clean_image(inspection.get("approved_by_signature", ""))
-
-    f_almacenista = ""
-    f_guardia_embarque = ""
-    if ticket:
-        f_almacenista = ensure_clean_image(ticket.get("firma_almacenista", ""))
-        f_guardia_embarque = ensure_clean_image(ticket.get("firma_guardia", ""))
-
     subject = f"REPORTE CONSOLIDADO SRIUC - UNIDAD: {placas}"
     recipient = recipient_override or os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com")
 
-    # Si el estado general de la inspección es malo, marcarlo fuerte en el correo
-    color_header = "#0A2540"
-    if inspection and inspection.get("status_general") == "malo":
-        color_header = "#dc2626" # Rojo si hay falla
+    # Determinar si hay alguna falla en alguna de las inspecciones
+    any_malo = any(i.get("status_general") == "malo" for i in inspections)
+    color_header = "#dc2626" if any_malo else "#0A2540"
 
-    # Helper para generar HTML de fotos con redimensionamiento agresivo
     def get_photo_html(b64, label):
         if not b64 or not isinstance(b64, str) or "data:image" not in b64:
             return ""
-        # add_watermark ya redimensiona a 600px y baja calidad al 50%
-        watermarked_b64 = add_watermark(b64)
         return f'''
-        <div style="display: inline-block; width: 45%; margin: 1%; vertical-align: top; border: 1px solid #eee; padding: 5px; background: #f9fafb; text-align: center;">
-            <p style="margin: 0 0 5px 0; font-size: 9px; font-weight: bold; color: #666; text-transform: uppercase;">{label}</p>
-            <img src="{watermarked_b64}" style="width: 100%; border: 1px solid #ddd;" />
+        <div style="display: inline-block; width: 30%; margin: 1%; vertical-align: top; border: 1px solid #eee; padding: 5px; background: #f9fafb; text-align: center;">
+            <p style="margin: 0 0 5px 0; font-size: 8px; font-weight: bold; color: #666; text-transform: uppercase;">{label}</p>
+            <img src="{b64}" style="width: 100%; height: 100px; object-fit: cover; border: 1px solid #ddd;" />
         </div>
         '''
 
-    # Fotos de Caseta
-    caseta_photos = []
-    e = record.get("entry") or {}
-    if e.get("foto_frente_unidad"):
-        caseta_photos.append(get_photo_html(e["foto_frente_unidad"], "FRONTAL"))
-    if e.get("foto_atras_caja"):
-        caseta_photos.append(get_photo_html(e["foto_atras_caja"], "TRASERA"))
-    caseta_photos_html = "".join(caseta_photos)
-
-    # Fotos de Inspección: SOLO INCLUIR LAS QUE TIENEN FALLA PARA EVITAR PESO EXCESIVO
-    inspection_rows = ""
-    inspection_photos = []
-    if inspection and inspection.get("points"):
-        for p in inspection["points"]:
-            status_text = "BUENO" if p["estado"] == "bueno" else "FALLA"
+    # Inspections content
+    inspections_html = ""
+    for idx, insp in enumerate(inspections):
+        rows = ""
+        photos = ""
+        for p in insp.get("points", []):
             status_color = "#16a34a" if p["estado"] == "bueno" else "#dc2626"
-            inspection_rows += f'''
+            rows += f'''
             <tr>
-                <td style="padding: 5px; border: 1px solid #ddd; width: 30px;">{p['number']}</td>
-                <td style="padding: 5px; border: 1px solid #ddd;">{p['name']}</td>
-                <td style="padding: 5px; border: 1px solid #ddd; font-weight: bold; color: {status_color};">{status_text}</td>
-                <td style="padding: 5px; border: 1px solid #ddd;">{p.get('comentarios', '-')}</td>
+                <td style="padding: 4px; border: 1px solid #ddd; width: 25px;">{p['number']}</td>
+                <td style="padding: 4px; border: 1px solid #ddd;">{p['name']}</td>
+                <td style="padding: 4px; border: 1px solid #ddd; font-weight: bold; color: {status_color};">{p['estado'].upper()}</td>
+                <td style="padding: 4px; border: 1px solid #ddd;">{p.get('comentarios', '-')}</td>
             </tr>
             '''
-            # Solo adjuntamos foto si es MALA (falla) para ahorrar espacio
-            if p.get("photo") and p.get("estado") == "malo":
-                inspection_photos.append(get_photo_html(p["photo"], f"FALLA EN PUNTO {p['number']}"))
-    inspection_photos_html = "".join(inspection_photos)
+            if p.get("photo"):
+                photos += get_photo_html(p["photo"], f"PUNTO {p['number']}")
 
-    # Fotos de Embarque: Solo la final para ahorrar espacio
-    ticket_photos_html = ""
-    if ticket and ticket.get("foto_final_carga"):
-        ticket_photos_html = get_photo_html(ticket["foto_final_carga"], "CARGA FINALIZADA")
+        inspections_html += f'''
+        <div style="margin-top: 20px; border: 1px solid #0A2540; padding: 10px;">
+            <h3 style="margin-top: 0; background: #eee; padding: 5px;">INSPECCIÓN #{idx+1} - {insp.get('numero_trailer')}</h3>
+            <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
+                <tr style="background: #f1f5f9;">
+                    <td style="padding: 5px; border: 1px solid #ddd;"><b>Inspector:</b> {insp.get('inspector_nombre')}</td>
+                    <td style="padding: 5px; border: 1px solid #ddd;"><b>Estado:</b> {insp.get('status_general').upper()}</td>
+                </tr>
+            </table>
+            <table style="width: 100%; border-collapse: collapse; font-size: 9px; margin-top: 10px;">
+                <tr style="background: #fafafa; font-weight: bold;">
+                    <td>#</td><td>Punto</td><td>Estado</td><td>Comentarios</td>
+                </tr>
+                {rows}
+            </table>
+            <div style="margin-top: 10px;">{photos}</div>
+        </div>
+        '''
 
-    # Reglamento y Declaraciones Bilingüe
-    reglas_data = [
-        ('1. No romper el sello hasta que la cortina asignada esté abierta y el almacenista responsable esté presente.', '1. 在指定的卸货门打开且负责的仓库人员到场之前，请勿破坏封条。'),
-        ('2. No pasar materiales/equipos ajenos a NAF por la cortina.', '2. 请勿通过卸货门运送不属于 NAF 的材料/设备。'),
-        ('3. Prohibido brincar rampas y entrar al almacén sin autorización.', '3. 禁止未经授权跳过坡道或进入仓库。'),
-        ('4. Prohibidos drogas, armas, agentes biológicos, aerosoles, cámaras de video/foto, pornografía y bebidas alcohólicas.', '4. 禁止携带毒品、武器、生物制剂、气雾剂、摄相机、色情制品和酒精饮料。'),
-        ('5. Prohibido dar propinas, premios o incentivos al personal de seguridad/almacén NAF.', '5. 禁止向 NAF 安保或仓库人员提供小费、奖品或奖励。'),
-        ('6. No menores de edad ni personal ajeno a NAF en el patio de maniobras.', '6. 禁止未成年人或非 NAF 人员进入操作场区。'),
-        ('7. Prohibido tirar basura en el patio de maniobras.', '7. 禁止在操作场区乱扔垃圾。'),
-        ('8. Velocidad máxima 10 km/h.', '8. 最高时速 10 公里/小时。')
-    ]
-    declaraciones_data = [
-        ('1. Declaro NO transportar drogas, agentes biológicos, bioterrorismo, municiones, armas, contrabando ni personas indocumentadas.', '1. 我声明不运输毒品、生物制剂、生物恐怖主义物品、弹药、武器、走私品或无证人员。'),
-        ('2. Declaro estar en condición física adecuada y buen estado de salud.', '2. 我声明身体状况良好，健康状态佳。'),
-        ('3. Declaro NO haber consumido alcohol o drogas recientemente y NO estar bajo su influencia.', '3. 我声明最近没有饮酒或吸毒，且不受其影响。'),
-        ('4. Declaro que al estar en instalaciones NAF he leído, entendido y aceptado plenamente estas instrucciones.', '4. 我声明在 NAF 设施内已阅读、理解并完全接受这些指令。')
-    ]
-
-    reglas_html = "".join([f"<div style='margin-bottom:4px;'>{es}<br/><span style='color:#666; font-size:8px;'>{zh}</span></div>" for es, zh in reglas_data])
-    declaraciones_html = "".join([f"<div style='margin-bottom:4px;'>{es}<br/><span style='color:#666; font-size:8px;'>{zh}</span></div>" for es, zh in declaraciones_data])
-
+    # Layout final
     html = f"""
     <html>
         <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; line-height: 1.4; max-width: 800px; margin: auto; border: 1px solid #eee; padding: 20px; font-size: 11px;">
             <div style="background-color: {color_header}; padding: 20px; text-align: center; color: white;">
-                <h1 style="margin: 0;">Reporte Consolidado de Unidad / 综合报告</h1>
-                <p style="margin: 5px 0 0 0; opacity: 0.8;">Sistema de Registro e Inspección (SRIUC) / 注册、检查和运输系统</p>
-                {f'<p style="background: white; color: {color_header}; display: inline-block; padding: 2px 10px; font-weight: bold; margin-top: 10px;">¡ALERTA: FALLA DETECTADA! / 警报：检测到故障！</p>' if inspection and inspection.get("status_general") == "malo" else ''}
+                <h1 style="margin: 0;">Reporte Consolidado Final</h1>
+                <p style="margin: 5px 0 0 0; opacity: 0.8;">Sistema de Registro e Inspección NAF</p>
             </div>
 
             <div style="padding: 20px;">
-                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px;">1. Movimiento de Caseta / 门卫室记录</h2>
+                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px;">1. Datos de Caseta</h2>
                 <table style="width: 100%; border-collapse: collapse;">
-                    <tr><td style="padding: 8px; font-weight: bold; width: 40%;">Placas Unidad / 车牌号:</td><td style="padding: 8px;">{e.get('placas_unidad', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Conductor / 司机姓名:</td><td style="padding: 8px;">{e.get('chofer_nombre', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Compañía / 运输公司:</td><td style="padding: 8px;">{e.get('compania_transporte', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Fecha Entrada / 进场时间:</td><td style="padding: 8px;">{e.get('fecha_entrada', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold; color: #16A34A;">Fecha Salida / 出场时间:</td><td style="padding: 8px; color: #16A34A; font-weight: bold;">{x.get('fecha_salida', 'N/A') if x else 'No registrada (En Patio) / 未登记（在场）'}</td></tr>
+                    <tr><td style="font-weight: bold; width: 40%;">Placas:</td><td>{e.get('placas_unidad')}</td></tr>
+                    <tr><td style="font-weight: bold;">Chofer:</td><td>{e.get('chofer_nombre')}</td></tr>
+                    <tr><td style="font-weight: bold;">Entrada:</td><td>{e.get('fecha_entrada')}</td></tr>
+                    <tr><td style="font-weight: bold; color: #16A34A;">Salida:</td><td style="color: #16A34A; font-weight: bold;">{x.get('fecha_salida') if x else 'PENDIENTE'}</td></tr>
                 </table>
 
-                <div style="background: #f1f5f9; padding: 10px; border: 1px solid #ddd; margin-top: 10px; font-size: 9px;">
-                    <p style="margin: 0 0 5px 0; font-weight: bold; color: #0A2540;">REGLAMENTO Y SEGURIDAD / 安全条例:</p>
-                    {reglas_html}
-                    <p style="margin: 10px 0 5px 0; font-weight: bold; color: #0A2540;">DECLARACIONES / 司机声明:</p>
-                    {declaraciones_html}
-                    <p style="margin-top: 5px; font-weight: bold; color: #16a34a;">ACEPTADO / 已接受 ✓</p>
-                </div>
+                {inspections_html}
 
-                <div style="margin-top: 15px; display: flex; gap: 20px;">
-                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA CONDUCTOR (ENTRADA) / 司机签字:</p><img src="{f_operador}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if f_operador else ''}
-                    {f'<div style="flex: 1;"><p style="font-size:8px; margin:0; color:#666;">FIRMA GUARDIA (SALIDA) / 警卫签字:</p><img src="{f_guardia_salida}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if f_guardia_salida else ''}
-                </div>
-                <div style="margin-top: 10px;">{caseta_photos_html}</div>
-
-                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">2. Inspección C-TPAT / C-TPAT 检查 ({inspection.get('inspection_type', 'N/A').replace('_', ' ').upper()})</h2>
                 {f'''
-                <div style="background-color: {"#f0fdf4" if inspection.get("status_general") == "bueno" else "#fef2f2"}; padding: 15px; border-radius: 5px; border-left: 5px solid {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"}; margin-bottom: 10px;">
-                    <p style="margin: 0;">Estado General / 总体状态: <b style="color: {"#16a34a" if inspection.get("status_general") == "bueno" else "#dc2626"};">{inspection.get('status_general', 'N/A').upper()} / {"良好" if inspection.get("status_general") == "bueno" else "故障"}</b></p>
-                    <p style="margin: 5px 0 0 0;">Estado Aprobación / 批准状态: <b>{inspection.get('approval_status', 'pendiente').upper()} / {"已批准" if inspection.get('approval_status') == "aprobada" else "已拒绝" if inspection.get('approval_status') == "rechazada" else "待定"}</b></p>
-                    <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                        <tr>
-                            <td style="width: 50%; vertical-align: top;">
-                                <p style="margin: 0; font-weight: bold;">Inspector / 检查员:</p>
-                                <p style="margin: 2px 0;">{inspection.get('inspector_nombre', 'N/A')}</p>
-                                {f'<img src="{f_inspector}" style="height:45px; border-bottom:1px solid #0A2540;" />' if f_inspector else ''}
-                            </td>
-                            <td style="width: 50%; vertical-align: top;">
-                                <p style="margin: 0; font-weight: bold;">Supervisor / 主管:</p>
-                                <p style="margin: 2px 0;">{inspection.get('approved_by_name', 'N/A')}</p>
-                                {f'<img src="{f_supervisor}" style="height:45px; border-bottom:1px solid #0A2540;" />' if f_supervisor else ''}
-                            </td>
-                        </tr>
-                    </table>
-                </div>
-                <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
-                    <tr style="background: #f1f5f9; font-weight: bold;">
-                        <td style="padding: 5px; border: 1px solid #ddd; width: 30px;">#</td>
-                        <td style="padding: 5px; border: 1px solid #ddd;">Punto / 检查点</td>
-                        <td style="padding: 5px; border: 1px solid #ddd; width: 100px;">Estado / 状态</td>
-                        <td style="padding: 5px; border: 1px solid #ddd;">Comentarios / 备注</td>
-                    </tr>
-                    {inspection_rows}
-                </table>
-                <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
-                    <p style="font-size: 10px; color: #666;">(Solo se incluyen fotos de puntos con falla detectada / 仅包含检测到故障点的照片)</p>
-                    {inspection_photos_html}
-                </div>
-                ''' if inspection else "<p style='color: #666; font-style: italic;'>No se realizó inspección digital para esta unidad / 该单位未进行数字检查。</p>"}
-
-                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">3. Ticket de Embarque / 运输单</h2>
-                {f'''
+                <h2 style="border-bottom: 2px solid #0A2540; color: #0A2540; padding-bottom: 5px; margin-top: 30px;">3. Embarque</h2>
                 <table style="width: 100%; border-collapse: collapse;">
-                    <tr><td style="padding: 8px; font-weight: bold; width: 40%;">Cliente / 客户:</td><td style="padding: 8px;">{ticket.get('cliente', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Pallets / 托盘数量:</td><td style="padding: 8px;">{ticket.get('numero_pallets', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Sellos / 封条:</td><td style="padding: 8px;">{ticket.get('sellos', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Almacenista / 仓管员:</td><td style="padding: 8px;">{ticket.get('almacenista', 'N/A')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Guardia / 警卫:</td><td style="padding: 8px;">{ticket.get('nombre_guardia', 'N/A')}</td></tr>
+                    <tr><td style="font-weight: bold; width: 40%;">Cliente:</td><td>{ticket.get('cliente')}</td></tr>
+                    <tr><td style="font-weight: bold;">Almacenista:</td><td>{ticket.get('almacenista')}</td></tr>
                 </table>
-                <div style="margin-top: 15px; display: flex; gap: 20px;">
-                    {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA ALMACENISTA / 仓管员签字:</p><img src="{f_almacenista}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if f_almacenista else ''}
-                    {f'<div><p style="font-size:8px; margin:0; color:#666;">FIRMA GUARDIA / 警卫签字:</p><img src="{f_guardia_embarque}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>' if f_guardia_embarque else ''}
-                </div>
-                <div style="margin-top: 10px;">{ticket_photos_html}</div>
-                ''' if ticket else "<p style='color: #666; font-style: italic;'>No se generó ticket de embarque para este movimiento / 本次操作未生成运输单。</p>"}
+                ''' if ticket else ''}
             </div>
-
-            <div style="margin-top: 40px; padding: 20px; background-color: #f9fafb; text-align: center; font-size: 12px; color: #666;">
-                <p>Este es un reporte automático generado por el Sistema SRIUC / 这是由 SRIUC 系统生成的自动报告。</p>
-                <p>&copy; {datetime.now().year} Branco Industries - Todos los derechos reservados / 版权所有。</p>
+            <div style="text-align: center; color: #999; font-size: 10px; margin-top: 40px;">
+                &copy; {datetime.now().year} Branco Industries
             </div>
         </body>
     </html>
     """
 
     try:
-        # Sincronizar también con Google Drive (PDF)
-        # Usamos el tipo "inspeccion" o "entrada" como base para la carpeta
-        await sync_to_google_sheets("entrada", record, report_html=html)
-
-        success = await send_automatic_report(subject, recipient, html)
-        return success
+        await sync_to_google_sheets("consolidado", record, report_html=html)
+        return await send_automatic_report(subject, recipient, html)
     except Exception as e:
-        logger.error(f"Fallo al enviar reporte automático o sincronizar Drive: {e}")
+        logger.error(f"Error en reporte consolidado: {e}")
         return False
 
 
