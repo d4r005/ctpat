@@ -175,6 +175,7 @@ class EscoltaInfo(BaseModel):
     placas: str = ""
 
 class VehicleEntry(BaseModel):
+    tipo_unidad: str = "sencillo" # sencillo | full
     sucursal: str = ""
     direccion: str = ""
     licencia_conductor: str = ""
@@ -185,6 +186,10 @@ class VehicleEntry(BaseModel):
     compania_caja: str = ""
     numero_caja: str = ""  # trailer #
     sello_entrada: str = ""
+    # Support for FULL (2nd trailer)
+    compania_caja_2: str = ""
+    numero_caja_2: str = ""
+    sello_entrada_2: str = ""
     escolta: EscoltaInfo = EscoltaInfo()
     cortina_asignada: str = ""
     guardia_caseta_nombre: str
@@ -197,6 +202,7 @@ class VehicleEntry(BaseModel):
     destino: str = ""
     foto_frente_unidad: str = ""
     foto_atras_caja: str = ""
+    foto_atras_caja_2: str = ""
     foto_id_chofer: str = ""
     firma_operador: str = ""  # base64 png
     declaraciones_aceptadas: bool = False
@@ -207,16 +213,20 @@ class VehicleExit(BaseModel):
     hora_cierre_cortina: str = ""
     cortina_salida: str = ""
     sello_salida: str = ""
+    sello_salida_2: str = ""
     condicion_salida: str = ""  # vacio | carga_cliente | consolidado
     destino: str = ""
     numero_tractor_salida: str = ""
     numero_caja_salida: str = ""
+    numero_caja_salida_2: str = ""
     escolta: EscoltaInfo = EscoltaInfo()
     pallets: str = ""
     cajas: str = ""
     bultos: str = ""
     sello_vvtt_estado: str = ""  # bueno | malo
+    sello_vvtt_estado_2: str = "" # bueno | malo
     sello_vvtt_foto: str = ""   # base64
+    sello_vvtt_foto_2: str = "" # base64
     guardia_salida_nombre: str = ""
     firma_guardia: str = ""
     fecha_salida: Optional[str] = None
@@ -228,6 +238,7 @@ class VehicleRecord(BaseModel):
     entry: VehicleEntry
     exit: Optional[VehicleExit] = None
     inspection_id: Optional[str] = None
+    inspection_ids: List[str] = []
     shipping_ticket_id: Optional[str] = None
     has_shipping_ticket: bool = False
     created_at: str
@@ -1968,10 +1979,17 @@ async def link_inspection(rec_id: str, inspection_id: str, current_user: Dict[st
     doc = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
+
+    # Update status logic
     new_status = "inspeccionado" if doc.get("status") == "entrada" else doc.get("status")
+
+    # Maintain both legacy field and new list field
     await db.vehicle_records.update_one(
         {"id": rec_id},
-        {"$set": {"inspection_id": inspection_id, "status": new_status}},
+        {
+            "$set": {"inspection_id": inspection_id, "status": new_status},
+            "$addToSet": {"inspection_ids": inspection_id}
+        },
     )
     return {"ok": True}
 
