@@ -384,9 +384,10 @@ async def sync_to_google_sheets(process_type: str, data: Dict[str, Any], report_
 
             # 2. INSPECCIÓN C-TPAT
             elif process_type == 'inspeccion':
+                tipo = data.get("inspection_type", "19_puntos")
                 payload.update({
                     "fecha_hora": data.get("created_at"),
-                    "tipo_inspeccion": data.get("inspection_type"),
+                    "tipo_inspeccion": tipo,
                     "placas_unidad": data.get("placas_unidad"),
                     "numero_trailer": data.get("numero_trailer"),
                     "numero_precinto": data.get("numero_precinto"),
@@ -399,8 +400,9 @@ async def sync_to_google_sheets(process_type: str, data: Dict[str, Any], report_
                     "fecha_aprobacion": data.get("approved_at"),
                     "nota_aprobacion": data.get("approval_note")
                 })
-                # Fotos de fallas
+                # Enviar estados de los puntos individualmente para el Excel (p_1, p_2, etc.)
                 for p in data.get("points", []):
+                    payload[f"p_{p['number']}"] = p.get("estado", "")
                     if p.get("estado") == 'malo' and p.get("photo"):
                         payload[f"foto_falla_punto_{p['number']}"] = p["photo"]
 
