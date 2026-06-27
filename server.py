@@ -1513,6 +1513,11 @@ async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
             }}
         )
 
+        # SI SE ACTUALIZÓ ALGUNA VINCULACIÓN, SINCRONIZAR A GOOGLE SHEETS EL ESTADO ACTUALIZADO
+        try:
+            await sync_to_google_sheets("entrada", record)
+        except: pass
+
     return record
 
 
@@ -1548,6 +1553,11 @@ async def list_vehicle_records(
     res = []
     for d in docs:
         linked_d = await _ensure_record_links(d)
+
+        # SI TIENE TODO EL PROCESO PERO SIGUE EN STATUS ENTRADA, FORZAR ACTUALIZACIÓN VISUAL
+        if linked_d.get("inspection_id") and linked_d["status"] == "entrada":
+            linked_d["status"] = "inspeccionado"
+
         res.append(VehicleRecord(**linked_d))
 
     return res
