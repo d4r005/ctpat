@@ -69,6 +69,9 @@ async def startup_db_client():
     await db.users.create_index([("id", 1)], unique=True)
     await db.users.create_index([("email", 1)], unique=True)
 
+    await db.chat_messages.create_index([("room", 1)])
+    await db.chat_messages.create_index([("created_at", -1)])
+
     logging.info("Índices de base de datos creados/verificados correctamente.")
 
 # ========== Models ==========
@@ -88,6 +91,18 @@ class UserPublic(BaseModel):
     name: str
     role: str = "inspector"
     active: bool = True
+
+class ChatMessage(BaseModel):
+    id: str
+    user_id: str
+    user_name: str
+    room: str # 'general' or 'plates_XXXX'
+    text: str
+    created_at: str
+
+class ChatMessageCreate(BaseModel):
+    room: str
+    text: str
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -452,6 +467,35 @@ async def sync_to_google_sheets(process_type: str, data: Dict[str, Any], report_
 
     # Ejecutar en un hilo separado para no bloquear la respuesta principal del servidor
     asyncio.create_task(asyncio.to_thread(send_request))
+
+
+# ========== Chat Internal ==========
+@api_router.post("/chat/send", response_model=ChatMessage)
+async def send_chat_message(body: ChatMessageCreate, current_user: Dict[str, Any] = Depends(get_current_user)):
+    msg_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+
+    doc = {
+        "id": msg_id,
+        "user_id": current_user["id"],
+        "user_name": current_user["name"],
+        "room": body.room.upper().strip(),
+        "text": body.text.strip(),
+        "created_at": now
+    }
+
+    await db.chat_messages.insert_one(doc)
+    return ChatMessage(**{k: v for k, v in doc.items() if k != "_id"})
+
+@api_router.get("/chat/{room}", response_model=List[ChatMessage])
+async def list_chat_messages(room: str, limit: int = 50, current_user: Dict[str, Any] = Depends(get_current_user)):
+    docs = await db.chat_messages.find({"room": room.upper().strip()})\
+        .sort("created_at", -1)\
+        .to_list(limit)
+
+    # Devolver en orden cronológico (el más viejo primero para el chat)
+    docs.reverse()
+    return [ChatMessage(**{k: v for k, v in d.items() if k != "_id"}) for d in docs]
 
 
 # ========== Auth Routes ==========
