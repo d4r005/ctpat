@@ -68,7 +68,8 @@ export default function Embarque() {
     return vehicleRecords.filter(r => {
       if (r.status === 'salida') return false;
       const hasInspection = !!r.inspection_id || r.status === 'inspeccionado';
-      const plates = r.entry.placas_unidad?.trim().toUpperCase();
+      const plates = r.entry?.placas_unidad?.trim().toUpperCase();
+      if (!plates) return false;
       const hasTicket = tickets.some(t => {
         const samePlates = t.placas_unidad?.trim().toUpperCase() === plates;
         const isRecent = new Date(t.created_at).getTime() >= new Date(r.created_at).getTime();
@@ -81,7 +82,8 @@ export default function Embarque() {
   const pendingExits = useMemo(() => {
     return vehicleRecords.filter(r => {
       if (r.status === 'salida') return false;
-      const plates = r.entry.placas_unidad?.trim().toUpperCase();
+      const plates = r.entry?.placas_unidad?.trim().toUpperCase();
+      if (!plates) return false;
       const hasTicket = tickets.some(t => {
         const samePlates = t.placas_unidad?.trim().toUpperCase() === plates;
         const isRecent = new Date(t.created_at).getTime() >= new Date(r.created_at).getTime();
@@ -92,99 +94,102 @@ export default function Embarque() {
   }, [vehicleRecords, tickets]);
 
   const renderItem = ({ item }: { item: any }) => {
-    if (item === 'header') {
-      return (
-        <Pressable
-          testID="embarque-new-btn"
-          style={styles.actionCard}
-          onPress={() => router.push('/embarque/nuevo')}
-        >
-          <View style={[styles.iconCircle, { backgroundColor: colors.brandSecondary }]}>
-            <Ionicons name="add" size={28} color="#FFF" />
-          </View>
-          <View style={{ flex: 1, marginLeft: spacing.md }}>
-            <Text style={styles.cardTitleText}>{t('nuevo_ticket_embarque')}</Text>
-            <Text style={styles.cardSubText}>{t('registrar_carga')}</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={24} color={colors.muted} />
-        </Pressable>
-      );
-    }
+    if (typeof item === 'string') {
+      if (item === 'header') {
+        return (
+          <Pressable
+            testID="embarque-new-btn"
+            style={styles.actionCard}
+            onPress={() => router.push('/embarque/nuevo')}
+          >
+            <View style={[styles.iconCircle, { backgroundColor: colors.brandSecondary }]}>
+              <Ionicons name="add" size={28} color="#FFF" />
+            </View>
+            <View style={{ flex: 1, marginLeft: spacing.md }}>
+              <Text style={styles.cardTitleText}>{t('nuevo_ticket_embarque')}</Text>
+              <Text style={styles.cardSubText}>{t('registrar_carga')}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={24} color={colors.muted} />
+          </Pressable>
+        );
+      }
 
-    if (item === 'pending-tickets') {
-      if (pendingTicketsFromRecords.length === 0) return null;
-      return (
-        <View style={styles.pendingSection}>
-          <Text style={styles.sectionTitle}>{t('pendientes_ticket', 'INSPECCIONES PENDIENTES DE TICKET')}</Text>
-          {pendingTicketsFromRecords.map((r) => (
-            <Pressable
-              key={r.id}
-              style={[styles.activityCard, { borderLeftWidth: 4, borderLeftColor: colors.warning }]}
-              onPress={() => {
-                const params = new URLSearchParams({
-                  record_id: r.id,
-                  inspection_id: r.inspection_id || '',
-                  compania: r.entry.compania_transporte,
-                  placas: r.entry.placas_unidad,
-                  trailer: r.entry.numero_caja,
-                  sello: r.entry.sello_entrada !== 'N/A' ? r.entry.sello_entrada : '',
-                  operador: r.entry.chofer_nombre,
-                  destino: r.entry.destino || '',
-                  economico: r.entry.numero_tractor || '',
-                  hora_llegada: r.entry.fecha_entrada ? new Date(r.entry.fecha_entrada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
-                });
-                router.push(`/embarque/nuevo?${params.toString()}`);
-              }}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitleText}>{r.entry.placas_unidad}</Text>
-                <Text style={styles.cardSubText}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
-                <View style={{ marginTop: 4 }}>
-                  <ProcessTracker steps={{ entry: true, inspection: true, shipping: true, exit: false }} compact />
+      if (item === 'pending-tickets') {
+        if (pendingTicketsFromRecords.length === 0) return null;
+        return (
+          <View style={styles.pendingSection}>
+            <Text style={styles.sectionTitle}>{t('pendientes_ticket', 'INSPECCIONES PENDIENTES DE TICKET')}</Text>
+            {pendingTicketsFromRecords.map((r) => (
+              <Pressable
+                key={r.id}
+                style={[styles.activityCard, { borderLeftWidth: 4, borderLeftColor: colors.warning }]}
+                onPress={() => {
+                  const params = new URLSearchParams({
+                    record_id: r.id,
+                    inspection_id: r.inspection_id || '',
+                    compania: r.entry.compania_transporte,
+                    placas: r.entry.placas_unidad,
+                    trailer: r.entry.numero_caja,
+                    sello: r.entry.sello_entrada !== 'N/A' ? r.entry.sello_entrada : '',
+                    operador: r.entry.chofer_nombre,
+                    destino: r.entry.destino || '',
+                    economico: r.entry.numero_tractor || '',
+                    hora_llegada: r.entry.fecha_entrada ? new Date(r.entry.fecha_entrada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+                  });
+                  router.push(`/embarque/nuevo?${params.toString()}`);
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitleText}>{r.entry.placas_unidad}</Text>
+                  <Text style={styles.cardSubText}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
+                  <View style={{ marginTop: 4 }}>
+                    <ProcessTracker steps={{ entry: true, inspection: true, shipping: false, exit: false }} compact />
+                  </View>
                 </View>
-              </View>
-              <View style={[styles.miniStatusBadge, { backgroundColor: colors.warning }]}>
-                <Text style={styles.miniStatusText}>{t('generar').toUpperCase()}</Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      );
-    }
-
-    if (item === 'tickets-title') {
-      return <Text style={styles.sectionTitle}>{t('tickets_recientes')}</Text>;
-    }
-
-    if (item === 'pending-exits') {
-      if (pendingExits.length === 0) return null;
-      return (
-        <View style={[styles.pendingSection, { marginTop: spacing.xl }]}>
-          <Text style={styles.sectionTitle}>{t('unidades_listas_salida')}</Text>
-          {pendingExits.map((r) => (
-            <Pressable
-              key={r.id}
-              style={[styles.activityCard, { borderLeftWidth: 4, borderLeftColor: colors.success }]}
-              onPress={() => router.push(`/caseta/${r.id}`)}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitleText}>{r.entry.placas_unidad}</Text>
-                <Text style={styles.cardSubText}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
-                <View style={{ marginTop: 4 }}>
-                  <ProcessTracker steps={{ entry: true, inspection: true, shipping: true, exit: false }} compact />
+                <View style={[styles.miniStatusBadge, { backgroundColor: colors.warning }]}>
+                  <Text style={styles.miniStatusText}>{t('generar').toUpperCase()}</Text>
                 </View>
-              </View>
-              <View style={[styles.miniStatusBadge, { backgroundColor: colors.success }]}>
-                <Text style={styles.miniStatusText}>{t('dar_salida').toUpperCase()}</Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      );
+              </Pressable>
+            ))}
+          </View>
+        );
+      }
+
+      if (item === 'tickets-title') {
+        return <Text style={styles.sectionTitle}>{t('tickets_recientes')}</Text>;
+      }
+
+      if (item === 'pending-exits') {
+        if (pendingExits.length === 0) return null;
+        return (
+          <View style={[styles.pendingSection, { marginTop: spacing.xl }]}>
+            <Text style={styles.sectionTitle}>{t('unidades_listas_salida')}</Text>
+            {pendingExits.map((r) => (
+              <Pressable
+                key={r.id}
+                style={[styles.activityCard, { borderLeftWidth: 4, borderLeftColor: colors.success }]}
+                onPress={() => router.push(`/caseta/${r.id}`)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitleText}>{r.entry.placas_unidad}</Text>
+                  <Text style={styles.cardSubText}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
+                  <View style={{ marginTop: 4 }}>
+                    <ProcessTracker steps={{ entry: true, inspection: true, shipping: true, exit: false }} compact />
+                  </View>
+                </View>
+                <View style={[styles.miniStatusBadge, { backgroundColor: colors.success }]}>
+                  <Text style={styles.miniStatusText}>{t('dar_salida').toUpperCase()}</Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        );
+      }
+      return null;
     }
 
     const relatedRecord = vehicleRecords.find(r =>
-      r.entry.placas_unidad?.trim().toUpperCase() === item.placas_unidad?.trim().toUpperCase() &&
+      r.entry?.placas_unidad?.trim().toUpperCase() === item.placas_unidad?.trim().toUpperCase() &&
       new Date(r.created_at).getTime() <= new Date(item.created_at).getTime()
     );
 

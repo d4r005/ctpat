@@ -4,7 +4,7 @@ import {
   Platform, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Signature from '@/src/components/SignaturePad';
@@ -274,19 +274,19 @@ export default function Nueva() {
                   key={r.id}
                   style={styles.pendingCard}
                   onPress={() => {
-                    setCompania(r.entry.compania_transporte || '');
-                    setPlacas(r.entry.placas_unidad || '');
-                    setTrailer(r.entry.numero_caja || '');
-                    setSelloAlta(r.entry.sello_entrada || '');
+                    setCompania(r.entry?.compania_transporte || '');
+                    setPlacas(r.entry?.placas_unidad || '');
+                    setTrailer(r.entry?.numero_caja || '');
+                    setSelloAlta(r.entry?.sello_entrada || '');
                     router.setParams({ record_id: r.id });
 
-                    const isFull = r.entry.tipo_unidad === 'full';
+                    const isFull = r.entry?.tipo_unidad === 'full';
                     const inspectionsDone = (r.inspection_ids?.length || (r.inspection_id ? 1 : 0));
 
                     if (Platform.OS === 'web') {
                       const msg = isFull && inspectionsDone === 1
                         ? `${t('iniciar_inspeccion')} ${t('caja_2_caps')}?`
-                        : `${t('iniciar_inspeccion')} ${r.entry.placas_unidad}?`;
+                        : `${t('iniciar_inspeccion')} ${r.entry?.placas_unidad || ''}?`;
 
                       const is9p = window.confirm(msg + " \n\n(OK = 9 pts / Cancel = 19 pts)");
                       setSelectedType(is9p ? '9_puntos_contenedor' : '19_puntos');
@@ -295,7 +295,7 @@ export default function Nueva() {
                       const title = isFull && inspectionsDone === 1 ? `${t('iniciar_inspeccion')} (CAJA 2)` : t('iniciar_inspeccion');
                       Alert.alert(
                         title,
-                        `${t('pregunta_tipo_inspeccion')} ${r.entry.placas_unidad}?`,
+                        `${t('pregunta_tipo_inspeccion')} ${r.entry?.placas_unidad || ''}?`,
                         [
                           { text: "19 PUNTOS", onPress: () => { setSelectedType('19_puntos'); setShowTypeSelector(false); } },
                           { text: "9 PUNTOS", onPress: () => { setSelectedType('9_puntos_contenedor'); setShowTypeSelector(false); } },
@@ -306,8 +306,8 @@ export default function Nueva() {
                   }}
                 >
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.pendingPlates}>{r.entry.placas_unidad} {r.entry.tipo_unidad === 'full' ? '(FULL)' : ''}</Text>
-                    <Text style={styles.pendingSub}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
+                    <Text style={styles.pendingPlates}>{r.entry?.placas_unidad || ''} {r.entry?.tipo_unidad === 'full' ? '(FULL)' : ''}</Text>
+                    <Text style={styles.pendingSub}>{r.entry?.chofer_nombre || ''} · {r.entry?.compania_transporte || ''}</Text>
                     <View style={{ marginTop: 4 }}>
                       <ProcessTracker
                         steps={{
