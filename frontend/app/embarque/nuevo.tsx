@@ -54,7 +54,7 @@ export default function EmbarqueNuevo() {
         if (!perm.granted) { alert(t('acceso_restringido')); return; }
         const r = await ImagePicker.launchCameraAsync({
           mediaTypes: 'images',
-          quality: 0.3, // Optimizado (antes 0.5)
+          quality: 0.2, // Mayor compresión
           base64: true,
           allowsEditing: false,
         });
@@ -66,7 +66,7 @@ export default function EmbarqueNuevo() {
         if (!perm.granted) { alert(t('acceso_restringido')); return; }
         const r = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: 'images',
-          quality: 0.3, // Optimizado (antes 0.5)
+          quality: 0.2, // Mayor compresión
           base64: true,
           allowsEditing: false,
         });

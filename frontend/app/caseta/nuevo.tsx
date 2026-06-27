@@ -130,9 +130,9 @@ export default function CasetaNuevo() {
         if (!perm.granted) { alert(t('acceso_restringido')); return; }
         const r = await ImagePicker.launchCameraAsync({
           mediaTypes: 'images',
-          quality: 0.3, // Reducido para evitar errores de red (antes 0.5)
+          quality: 0.2, // Mayor compresión para evitar errores de conexión
           base64: true,
-          allowsEditing: false, // Menos pesado sin edición
+          allowsEditing: false,
         });
         if (!r.canceled && r.assets[0]?.base64) {
           setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
@@ -142,7 +142,7 @@ export default function CasetaNuevo() {
         if (!perm.granted) { alert(t('acceso_restringido')); return; }
         const r = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: 'images',
-          quality: 0.3, // Reducido (antes 0.5)
+          quality: 0.2, // Mayor compresión
           base64: true,
           allowsEditing: false,
         });

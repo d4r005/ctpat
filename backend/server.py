@@ -660,26 +660,32 @@ async def create_inspector(body: UserRegister, current_user: Dict[str, Any] = De
 
 # ========== Inspections ==========
 def ensure_clean_image(base64_str: str) -> str:
-    """Solución definitiva para cuadros negros: Fuerza fondo blanco y formato JPEG.
-    Ahora también maneja firmas antiguas que podrían no tener el encabezado data:image."""
-    if not base64_str or not isinstance(base64_str, str) or len(base64_str) < 10:
+    """Solución definitiva para cuadros negros y optimización de tamaño.
+    Fuerza fondo blanco, formato JPEG y limita la resolución a 1280px."""
+    if not base64_str or not isinstance(base64_str, str) or len(base64_str) < 100:
         return base64_str
 
-    # Si no tiene el encabezado, intentamos agregarlo para procesarla
+    # Si no tiene el encabezado, intentamos agregarlo
     processed_b64 = base64_str
     if not base64_str.startswith('data:image'):
         processed_b64 = f"data:image/png;base64,{base64_str}"
 
     try:
         # 1. Extraer el contenido base64 puro
-        pure_base64 = processed_b64.split(",")[-1]
-        img_data = base64.b64decode(pure_base64)
+        header, encoded = processed_b64.split(",", 1) if "," in processed_b64 else ("data:image/jpeg;base64", processed_b64)
+        img_data = base64.b64decode(encoded)
         img = Image.open(io.BytesIO(img_data))
 
-        # 2. Crear una imagen nueva BLANCA (esto mata cualquier transparencia que se vea negra)
+        # 2. REDIMENSIONAR si es muy grande (Optimización de velocidad y almacenamiento)
+        MAX_SIZE = 1280
+        if max(img.size) > MAX_SIZE:
+            ratio = MAX_SIZE / float(max(img.size))
+            new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+            img = img.resize(new_size, Image.LANCZOS)
+
+        # 3. Crear fondo BLANCO
         clean_img = Image.new("RGB", img.size, (255, 255, 255))
 
-        # 3. Pegar la firma/foto encima.
         if img.mode == 'RGBA':
             clean_img.paste(img, mask=img.split()[3])
         elif img.mode in ('P', 'L'):
@@ -688,16 +694,16 @@ def ensure_clean_image(base64_str: str) -> str:
         else:
             clean_img.paste(img)
 
-        # 4. Guardar como JPEG ligero
+        # 4. Guardar como JPEG optimizado
         buf = io.BytesIO()
-        clean_img.save(buf, format="JPEG", quality=85) # Un poco más de calidad para firmas
+        clean_img.save(buf, format="JPEG", quality=70, optimize=True)
         new_encoded = base64.b64encode(buf.getvalue()).decode()
 
         return f"data:image/jpeg;base64,{new_encoded}"
     except Exception as e:
-        logger.error(f"Error reparando imagen/firma: {e}")
-        # Si falló y no tenía encabezado, al menos devolvemos el intento con encabezado
-        # para que el <img> lo intente renderizar
+        logger.error(f"Error optimizando imagen: {e}")
+        return base64_str
+
         return processed_b64
 
 def _serialize_inspection(doc: Dict[str, Any]) -> Inspection:
@@ -765,9 +771,9 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
         "points": [p.dict() for p in body.points],
         "actividad_sospechosa": body.actividad_sospechosa,
         "inspector_nombre": body.inspector_nombre,
-        "inspector_firma": ensure_clean_image(body.inspector_firma), # Clean on save!
+        "inspector_firma": body.inspector_firma,
         "verificador_nombre": body.verificador_nombre,
-        "verificador_firma": ensure_clean_image(body.verificador_firma), # Clean on save!
+        "verificador_firma": body.verificador_firma,
         "fecha_hora": fecha_hora,
         "created_at": now,
         "status_general": status_general,
@@ -778,10 +784,16 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
         "client_uuid": body.client_uuid,
     }
 
-    # Process point photos to avoid black boxes and reduce size
-    for p in doc["points"]:
-        if p.get("photo"):
-            p["photo"] = ensure_clean_image(p["photo"])
+    # Process point photos and signatures in separate thread to avoid black boxes and reduce size
+    def process_inspection_assets():
+        doc["inspector_firma"] = ensure_clean_image(doc["inspector_firma"])
+        doc["verificador_firma"] = ensure_clean_image(doc["verificador_firma"])
+        for p in doc["points"]:
+            if p.get("photo"):
+                p["photo"] = ensure_clean_image(p["photo"])
+
+    import asyncio
+    await asyncio.to_thread(process_inspection_assets)
 
     await db.inspections.insert_one(doc)
 
@@ -1493,11 +1505,16 @@ async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any]
     entry_data = body.dict()
     entry_data["fecha_entrada"] = entry_data.get("fecha_entrada") or now
 
-    # Clean images on entry
+    # Clean images on entry in a separate thread to avoid blocking and timeouts
     image_fields = ["foto_frente_unidad", "foto_atras_caja", "foto_atras_caja_2", "foto_id_chofer", "firma_operador"]
-    for field in image_fields:
-        if entry_data.get(field):
-            entry_data[field] = ensure_clean_image(entry_data[field])
+
+    def process_entry_images():
+        for field in image_fields:
+            if entry_data.get(field):
+                entry_data[field] = ensure_clean_image(entry_data[field])
+
+    import asyncio
+    await asyncio.to_thread(process_entry_images)
 
     doc = {
         "id": rec_id,
@@ -1699,11 +1716,16 @@ async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[
     exit_data = body.dict()
     exit_data["fecha_salida"] = exit_data.get("fecha_salida") or datetime.now(timezone.utc).isoformat()
 
-    # Clean exit images
+    # Clean exit images in separate thread
     image_fields = ["sello_vvtt_foto", "sello_vvtt_foto_2", "firma_guardia"]
-    for field in image_fields:
-        if exit_data.get(field):
-            exit_data[field] = ensure_clean_image(exit_data[field])
+
+    def process_exit_images():
+        for field in image_fields:
+            if exit_data.get(field):
+                exit_data[field] = ensure_clean_image(exit_data[field])
+
+    import asyncio
+    await asyncio.to_thread(process_exit_images)
 
     await db.vehicle_records.update_one(
         {"id": rec_id},
