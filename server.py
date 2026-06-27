@@ -1594,8 +1594,6 @@ async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
 
     return record
 
-    return record
-
 
 @api_router.get("/vehicle-records", response_model=List[VehicleRecord])
 async def list_vehicle_records(
@@ -1612,38 +1610,29 @@ async def list_vehicle_records(
     if status:
         filt["status"] = status
 
-    docs = await db.vehicle_records.find(filt, {"_id": 0}).sort("created_at", -1).to_list(100)
+    docs = await db.vehicle_records.find(filt, {"_id": 0}).sort("created_at", -1).to_list(50)
 
     if not docs:
         return []
 
     res = []
-    # Solo intentamos auto-vincular para las unidades que están activas en patio
-    # Esto acelera drásticamente la carga del listado histórico
+    allowed_keys = VehicleRecord.__fields__.keys()
+
     for d in docs:
         try:
-            if d.get("status") != "salida":
-                linked_d = await _ensure_record_links(d)
-            else:
-                linked_d = d
+            # OPTIMIZACIÓN: Solo vincular si es estrictamente necesario y la unidad está activa
+            # Esto evita cientos de consultas innecesarias a la BD
+            if d.get("status") != "salida" and (not d.get("inspection_id") or not d.get("shipping_ticket_id")):
+                d = await _ensure_record_links(d)
 
-            # Limpiar campos extras que podrían venir de la base de datos y no estar en el modelo
-            allowed_keys = VehicleRecord.__fields__.keys()
-            clean_doc = {k: v for k, v in linked_d.items() if k in allowed_keys}
-
+            clean_doc = {k: v for k, v in d.items() if k in allowed_keys}
             res.append(VehicleRecord(**clean_doc))
         except Exception as e:
-            logger.error(f"Error serializing record {d.get('id')}: {e}")
-            # Intento de rescate si falló
+            logger.error(f"Error serializing record {d.get('id', 'unknown')}: {e}")
             try:
-                allowed_keys = VehicleRecord.__fields__.keys()
                 clean_doc = {k: v for k, v in d.items() if k in allowed_keys}
                 res.append(VehicleRecord(**clean_doc))
-            except: pass
-
-    return res
-            logger.error(f"Error serializing record {d.get('id')}: {e}")
-            continue
+            except: continue
 
     return res
 
