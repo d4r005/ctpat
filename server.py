@@ -788,10 +788,13 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
     # Autolink to vehicle record if record_id provided
     if body.record_id:
         try:
-            status = "inspeccionado" if status_general == "bueno" else "inspeccionado" # we usually mark as inspected regardless of good/bad
+            # Maintain both legacy field and new list field for backward compatibility
             await db.vehicle_records.update_one(
                 {"id": body.record_id},
-                {"$set": {"inspection_id": insp_id, "status": status}}
+                {
+                    "$set": {"inspection_id": insp_id, "status": "inspeccionado"},
+                    "$addToSet": {"inspection_ids": insp_id}
+                }
             )
             logger.info(f"Auto-linked inspection {insp_id} to record {body.record_id}")
         except Exception as e:
