@@ -1506,7 +1506,7 @@ async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any]
 async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
     """
     Busca y vincula inspecciones y tickets de embarque si no están vinculados directamente.
-    Esto repara la trazabilidad del proceso en tiempo real.
+    Esto repara la trazabilidad del proceso en tiempo real basándose en las placas.
     """
     rec_id = record["id"]
     placas = record["entry"].get("placas_unidad", "").strip()
@@ -1517,31 +1517,41 @@ async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
 
     # 1. Vincular Inspección
     if not record.get("inspection_id"):
-        # Buscar inspección reciente para estas placas (mismo día)
-        start_dt = datetime.fromisoformat(record["created_at"].replace('Z', '+00:00')) - timedelta(hours=24)
-        insp = await db.inspections.find_one({
-            "placas_unidad": placas,
-            "created_at": {"$gte": start_dt.isoformat()}
-        }, sort=[("created_at", -1)])
+        # Buscar la inspección más reciente para estas placas que se haya hecho DESPUÉS o el mismo día de la entrada
+        # Convertimos la fecha de creación a objeto datetime para la búsqueda
+        try:
+            entry_dt = datetime.fromisoformat(record["created_at"].replace('Z', '+00:00'))
+            # Buscamos en un margen de 24h antes y 48h después para cubrir errores de dedo en horarios
+            start_search = entry_dt - timedelta(hours=12)
 
-        if insp:
-            record["inspection_id"] = insp["id"]
-            if record["status"] == "entrada":
-                record["status"] = "inspeccionado"
-            updated = True
+            insp = await db.inspections.find_one({
+                "placas_unidad": placas,
+                "created_at": {"$gte": start_search.isoformat()}
+            }, sort=[("created_at", -1)])
+
+            if insp:
+                record["inspection_id"] = insp["id"]
+                if record["status"] == "entrada":
+                    record["status"] = "inspeccionado"
+                updated = True
+        except: pass
 
     # 2. Vincular Ticket de Embarque
     if not record.get("shipping_ticket_id"):
-        start_dt = datetime.fromisoformat(record["created_at"].replace('Z', '+00:00')) - timedelta(hours=12)
-        ticket = await db.shipping_tickets.find_one({
-            "placas_unidad": placas,
-            "created_at": {"$gte": start_dt.isoformat()}
-        }, sort=[("created_at", -1)])
+        try:
+            entry_dt = datetime.fromisoformat(record["created_at"].replace('Z', '+00:00'))
+            start_search = entry_dt - timedelta(hours=12)
 
-        if ticket:
-            record["shipping_ticket_id"] = ticket["id"]
-            record["has_shipping_ticket"] = True
-            updated = True
+            ticket = await db.shipping_tickets.find_one({
+                "placas_unidad": placas,
+                "created_at": {"$gte": start_search.isoformat()}
+            }, sort=[("created_at", -1)])
+
+            if ticket:
+                record["shipping_ticket_id"] = ticket["id"]
+                record["has_shipping_ticket"] = True
+                updated = True
+        except: pass
     elif not record.get("has_shipping_ticket"):
         record["has_shipping_ticket"] = True
         updated = True
@@ -1557,7 +1567,7 @@ async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
             }}
         )
 
-        # SI SE ACTUALIZÓ ALGUNA VINCULACIÓN, SINCRONIZAR A GOOGLE SHEETS EL ESTADO ACTUALIZADO
+        # Sync update to Google Sheets
         try:
             await sync_to_google_sheets("entrada", record)
         except: pass
@@ -1586,16 +1596,20 @@ async def list_vehicle_records(
     if not docs:
         return []
 
-    # Aplicar vinculación inteligente a cada registro para asegurar que los puntos del proceso se vean bien
     res = []
     for d in docs:
-        linked_d = await _ensure_record_links(d)
+        try:
+            # Asegurar consistencia de datos antes de serializar
+            linked_d = await _ensure_record_links(d)
 
-        # SI TIENE TODO EL PROCESO PERO SIGUE EN STATUS ENTRADA, FORZAR ACTUALIZACIÓN VISUAL
-        if linked_d.get("inspection_id") and linked_d["status"] == "entrada":
-            linked_d["status"] = "inspeccionado"
+            # Limpiar campos extras que podrían venir de la base de datos y no estar en el modelo
+            allowed_keys = VehicleRecord.__fields__.keys()
+            clean_doc = {k: v for k, v in linked_d.items() if k in allowed_keys}
 
-        res.append(VehicleRecord(**linked_d))
+            res.append(VehicleRecord(**clean_doc))
+        except Exception as e:
+            logger.error(f"Error serializing record {d.get('id')}: {e}")
+            continue
 
     return res
 
