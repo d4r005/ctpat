@@ -37,9 +37,12 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack }) =>
           </Text>
         </View>
       </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+        <Pressable onPress={() => router.push('/(app)/chat')} style={styles.headerBtn}>
+          <Ionicons name="chatbubbles-outline" size={24} color="#FFF" />
+        </Pressable>
         <Pressable onPress={() => setShowNotifs(true)} style={styles.notifBtn}>
-          <Ionicons name="notifications" size={24} color="#FFF" />
+          <Ionicons name="notifications-outline" size={24} color="#FFF" />
           <View style={styles.notifBadge} />
         </Pressable>
         <Pressable onPress={() => setShowProfile(true)} style={styles.userContainer}>
@@ -67,6 +70,9 @@ const styles = StyleSheet.create({
   notifBtn: {
     padding: 8,
     position: 'relative',
+  },
+  headerBtn: {
+    padding: 8,
   },
   notifBadge: {
     position: 'absolute',

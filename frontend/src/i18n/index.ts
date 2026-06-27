@@ -343,7 +343,12 @@ const resources = {
       "cambiar_firma_supervisor": "CAMBIAR FIRMA SUPERVISOR",
       "firma_autorizacion_caps": "FIRMA AUTORIZACIÓN",
       "exportar_compartir_pdf": "EXPORTAR Y COMPARTIR PDF",
-      "editar": "EDITAR"
+      "editar": "EDITAR",
+      "chat": "CHAT",
+      "chat_general": "CHAT GENERAL",
+      "escribir_mensaje": "Escribe un mensaje...",
+      "chat_unidad": "CHAT DE UNIDAD",
+      "enviar": "Enviar"
     }
   },
   en: {

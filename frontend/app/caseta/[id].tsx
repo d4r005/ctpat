@@ -194,6 +194,14 @@ export default function CasetaDetail() {
           <Ionicons name="arrow-back" size={28} color={colors.onBrandPrimary} />
         </Pressable>
         <Text style={styles.topTitle}>{t('registro')} {e.placas_unidad}</Text>
+
+        <Pressable
+          onPress={() => router.push({ pathname: '/(app)/chat', params: { room: `PLATES_${e.placas_unidad}`, title: `${t('chat_unidad')} ${e.placas_unidad}` } })}
+          style={{ marginRight: 10 }}
+        >
+          <Ionicons name="chatbubbles-outline" size={26} color="#FFF" />
+        </Pressable>
+
         <View style={[styles.statusChip, { backgroundColor: STATUS_COLOR[rec.status] }]}>
           <Text style={styles.statusChipText}>{t(rec.status).toUpperCase()}</Text>
         </View>
