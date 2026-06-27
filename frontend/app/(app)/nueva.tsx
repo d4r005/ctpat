@@ -16,6 +16,7 @@ import { colors, spacing, typography } from '@/src/constants/theme';
 import BarcodeScanner from '@/src/components/BarcodeScanner';
 import { apiCall } from '@/src/api/client';
 import MainHeader from '@/src/components/MainHeader';
+import ProcessTracker from '@/src/components/ProcessTracker';
 
 const TOTAL_STEPS = 4;
 
