@@ -51,11 +51,13 @@ export default function Embarque() {
     try {
       const [ticketsData, recordsData] = await Promise.all([
         apiCall<Ticket[]>('/shipping-tickets', { token }),
-        // Solo traer unidades inspeccionadas o en patio para mayor velocidad
-        apiCall<any[]>('/vehicle-records?status=inspeccionado', { token })
+        // Traer unidades que NO han salido para ver su proceso de ticket
+        apiCall<any[]>('/vehicle-records', { token })
       ]);
+
+      const activeRecords = (Array.isArray(recordsData) ? recordsData : []).filter(r => r.status !== 'salida');
       setTickets(Array.isArray(ticketsData) ? ticketsData : []);
-      setVehicleRecords(Array.isArray(recordsData) ? recordsData : []);
+      setVehicleRecords(activeRecords);
       await refreshInspections();
     } catch (e) {
       console.error(e);
