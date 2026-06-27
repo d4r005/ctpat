@@ -1886,10 +1886,14 @@ async def _trigger_automatic_report(rec_id: str, recipient_override: Optional[st
     """
 
     try:
+        # Sincronizar también con Google Drive (PDF)
+        # Usamos el tipo "inspeccion" o "entrada" como base para la carpeta
+        await sync_to_google_sheets("entrada", record, report_html=html)
+
         success = await send_automatic_report(subject, recipient, html)
         return success
     except Exception as e:
-        logger.error(f"Fallo al enviar reporte automático: {e}")
+        logger.error(f"Fallo al enviar reporte automático o sincronizar Drive: {e}")
         return False
 
 
