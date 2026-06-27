@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Signature from '@/src/components/SignaturePad';
 import { useTranslation } from 'react-i18next';
-import { apiCall } from '@/src/api/client';
+import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
@@ -14,6 +14,7 @@ export default function EmbarqueNuevo() {
   const router = useRouter();
   const { t } = useTranslation();
   const { token, user } = useAuth();
+  const { saveShippingTicket } = useInspections();
   const params = useLocalSearchParams<{
     inspection_id?: string;
     record_id?: string;
@@ -88,7 +89,7 @@ export default function EmbarqueNuevo() {
         ...form,
         record_id: params.record_id || '' // Enviar record_id para vínculo atómico
       };
-      const created = await apiCall<any>('/shipping-tickets', { method: 'POST', body: payload, token });
+      const created = await saveShippingTicket(payload);
 
       const nextStep = () => {
         if (params.record_id) {

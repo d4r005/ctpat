@@ -11,9 +11,10 @@ interface ProcessTrackerProps {
     exit: boolean;
   };
   compact?: boolean;
+  showShipping?: boolean;
 }
 
-export default function ProcessTracker({ steps, compact = false }: ProcessTrackerProps) {
+export default function ProcessTracker({ steps, compact = false, showShipping = true }: ProcessTrackerProps) {
   const Step = ({ icon, label, completed, last = false }: any) => (
     <View style={styles.stepContainer}>
       <View style={[styles.node, completed && styles.nodeCompleted]}>
@@ -32,7 +33,9 @@ export default function ProcessTracker({ steps, compact = false }: ProcessTracke
     <View style={[styles.container, compact && styles.containerCompact]}>
       <Step icon="business" label="ENTRADA" completed={steps.entry} />
       <Step icon="clipboard" label="INSP." completed={steps.inspection} />
-      <Step icon="cube" label="EMBARQUE" completed={steps.shipping} />
+      {showShipping && (
+        <Step icon="cube" label="EMBARQUE" completed={steps.shipping} />
+      )}
       <Step icon="exit" label="SALIDA" completed={steps.exit} last />
     </View>
   );

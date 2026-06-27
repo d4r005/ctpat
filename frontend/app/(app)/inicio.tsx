@@ -126,7 +126,7 @@ export default function Inicio() {
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
           <Text style={styles.statValue}>{todayInspections.length}</Text>
-          <Text style={styles.statLabel}>{t('hoy').toUpperCase()}</Text>
+          <Text style={styles.statLabel}>{t('inspecciones_hoy').toUpperCase()}</Text>
         </View>
         <View style={[styles.statCard, { borderLeftWidth: 1, borderLeftColor: colors.border }]}>
           <Text style={[styles.statValue, { color: colors.success }]}>{totalBuenas}</Text>
@@ -152,9 +152,13 @@ export default function Inicio() {
   );
 
   const renderActiveUnit = ({ item: r }: { item: any }) => {
+    const isFull = r.entry?.tipo_unidad === 'full';
+    const isDescarga = r.entry?.condicion_carga === 'descarga';
+    const showShipping = !isFull && !isDescarga;
+
     const steps = {
       entry: true,
-      inspection: !!r.inspection_id,
+      inspection: (r.inspection_ids?.length || (r.inspection_id ? 1 : 0)) > 0,
       shipping: !!r.has_shipping_ticket,
       exit: r.status === 'salida'
     };
@@ -181,12 +185,12 @@ export default function Inicio() {
           <View style={[styles.statusIndicator, { backgroundColor: statusColor }]} />
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={styles.trackingTitle}>{r.entry.placas_unidad}</Text>
+              <Text style={styles.trackingTitle}>{r.entry.placas_unidad} {isFull ? '(FULL)' : ''}</Text>
               <Text style={[styles.miniStatusText, { color: statusColor, fontWeight: '900' }]}>{statusLabel}</Text>
             </View>
             <Text style={styles.trackingSub}>{r.entry.chofer_nombre} • {r.entry.compania_transporte}</Text>
             <View style={{ marginTop: spacing.sm }}>
-               <ProcessTracker steps={steps} compact />
+               <ProcessTracker steps={steps} compact showShipping={showShipping} />
             </View>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.border} />

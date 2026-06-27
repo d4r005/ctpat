@@ -16,6 +16,7 @@ export default function CasetaDetail() {
   const router = useRouter();
   const { t } = useTranslation();
   const { token, user } = useAuth();
+  const { patchVehicleExit, updateVehicleRecord } = useInspections();
   const [rec, setRec] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -172,7 +173,7 @@ export default function CasetaDetail() {
     }
     setSaving(true);
     try {
-      await apiCall(`/vehicle-records/${id}/exit`, { method: 'PATCH', body: exitData, token });
+      await patchVehicleExit(id as string, exitData);
       setShowExit(false);
       await load();
     } catch (e: any) { alert(e.message); }
@@ -198,6 +199,10 @@ export default function CasetaDetail() {
       </SafeAreaView>
     );
   }
+
+  const isFull = e?.tipo_unidad === 'full';
+  const isDescarga = e?.condicion_carga === 'descarga';
+  const needsShipping = !isFull && !isDescarga;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']} testID="caseta-detail">

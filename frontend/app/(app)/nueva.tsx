@@ -188,6 +188,11 @@ export default function Nueva() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      const isFull = params.type === 'full' || params.trailer?.includes('2'); // Simple check
+      const isDescarga = params.chofer === 'descarga'; // Or check related record if available
+      // It's better to pass a flag 'skipShipping' in params if we know it from previous step
+      const skipShipping = isFull || isDescarga;
+
       const created = await saveInspection({
         compania_transportista: compania.trim(),
         placas_unidad: placas.trim().toUpperCase(),
@@ -204,6 +209,16 @@ export default function Nueva() {
         inspection_type: inspectionType,
         record_id: params.record_id || '', // Enviar record_id para vínculo atómico
       } as any);
+
+      if (skipShipping) {
+          if (Platform.OS === 'web') {
+              alert(t('inspeccion_guardada'));
+              router.replace('/(app)/historico');
+          } else {
+              Alert.alert(t('inspeccion_guardada'), '', [{ text: 'OK', onPress: () => router.replace('/(app)/historico') }]);
+          }
+          return;
+      }
 
       if (Platform.OS === 'web') {
         const proceed = window.confirm(`${t('inspeccion_guardada')}. ${t('desea_generar_ticket')}`);
@@ -290,7 +305,7 @@ export default function Nueva() {
 
                     if (Platform.OS === 'web') {
                       const msg = isFull && inspectionsDone === 1
-                        ? `${t('iniciar_inspeccion')} ${t('caja_2_caps')}?`
+                        ? `${t('iniciar_inspeccion')} CAJA 2?`
                         : `${t('iniciar_inspeccion')} ${r.entry?.placas_unidad || ''}?`;
 
                       const is9p = window.confirm(msg + " \n\n(OK = 9 pts / Cancel = 19 pts)");
@@ -304,7 +319,7 @@ export default function Nueva() {
                         [
                           { text: "19 PUNTOS", onPress: () => { setSelectedType('19_puntos'); setShowTypeSelector(false); } },
                           { text: "9 PUNTOS", onPress: () => { setSelectedType('9_puntos_contenedor'); setShowTypeSelector(false); } },
-                          { text: t('cancelar'), style: 'cancel' }
+                          { text: t('cancelar').toUpperCase(), style: 'cancel' }
                         ]
                       );
                     }
@@ -322,6 +337,7 @@ export default function Nueva() {
                           exit: false
                         }}
                         compact
+                        showShipping={r.entry?.tipo_unidad !== 'full' && r.entry?.condicion_carga !== 'descarga'}
                       />
                     </View>
                   </View>

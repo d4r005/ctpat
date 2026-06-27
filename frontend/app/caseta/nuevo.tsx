@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Signature from '@/src/components/SignaturePad';
-import { apiCall } from '@/src/api/client';
+import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
@@ -46,6 +46,7 @@ const DECLARACIONES = [
 export default function CasetaNuevo() {
   const router = useRouter();
   const { token } = useAuth();
+  const { saveVehicleRecord } = useInspections();
   const { t } = useTranslation();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -194,8 +195,8 @@ export default function CasetaNuevo() {
       };
 
       console.log('Enviando registro de caseta...');
-      const created = await apiCall<any>('/vehicle-records', { method: 'POST', body, token });
-      console.log('Registro exitoso:', created.id);
+      const created = await saveVehicleRecord(body);
+      console.log('Registro procesado:', created.id);
 
       const nextParams = new URLSearchParams({
         record_id: created.id,

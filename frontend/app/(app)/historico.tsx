@@ -58,8 +58,16 @@ export default function Historico() {
   }, [inspections, query, filter]);
 
   const renderItem = ({ item }: { item: any }) => {
-    const relatedRecord = records.find(r => r.inspection_id === item.id || r.entry.placas_unidad === item.placas_unidad);
+    const relatedRecord = records.find(r =>
+      (r.inspection_id === item.id) ||
+      (r.inspection_ids && r.inspection_ids.includes(item.id)) ||
+      (r.entry.placas_unidad === item.placas_unidad)
+    );
     const hasTicket = tickets.some(t => t.placas_unidad === item.placas_unidad);
+
+    const isFull = relatedRecord?.entry?.tipo_unidad === 'full';
+    const isDescarga = relatedRecord?.entry?.condicion_carga === 'descarga';
+    const showShipping = !isFull && !isDescarga;
 
     const steps = {
       entry: !!relatedRecord,
@@ -76,10 +84,10 @@ export default function Historico() {
         onPress={() => router.push(`/inspection/${item.id}`)}
       >
         <View style={{ flex: 1 }}>
-          <Text style={styles.cardTitleText}>{item.placas_unidad || t('sin_placas')}</Text>
+          <Text style={styles.cardTitleText}>{item.placas_unidad || t('sin_placas')} {isFull ? '(FULL)' : ''}</Text>
           <Text style={styles.cardSubText}>{item.compania_transportista}</Text>
           <View style={{ marginVertical: 6 }}>
-            <ProcessTracker steps={steps} compact />
+            <ProcessTracker steps={steps} compact showShipping={showShipping} />
           </View>
           <Text style={styles.cardMetaText}>{new Date(item.created_at).toLocaleString()}</Text>
         </View>
@@ -90,7 +98,7 @@ export default function Historico() {
             </View>
           )}
           <View style={[styles.statusBadge, { backgroundColor: item.status_general === 'bueno' ? colors.success : colors.error }]}>
-            <Text style={styles.statusBadgeText}>{item.status_general === 'bueno' ? t('bueno') : t('falla')}</Text>
+            <Text style={styles.statusBadgeText}>{item.status_general === 'bueno' ? t('bueno').toUpperCase() : t('falla').toUpperCase()}</Text>
           </View>
         </View>
       </Pressable>

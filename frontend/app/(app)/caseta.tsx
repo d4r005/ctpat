@@ -113,9 +113,13 @@ export default function Caseta() {
     }
 
     const st = STATUS_LABEL[item.status] || STATUS_LABEL.entrada;
+    const isFull = item.entry?.tipo_unidad === 'full';
+    const isDescarga = item.entry?.condicion_carga === 'descarga';
+    const showShipping = !isFull && !isDescarga;
+
     const steps = {
       entry: true,
-      inspection: !!item.inspection_id,
+      inspection: (item.inspection_ids?.length || (item.inspection_id ? 1 : 0)) > 0,
       shipping: !!item.has_shipping_ticket,
       exit: item.status === 'salida'
     };
@@ -127,15 +131,15 @@ export default function Caseta() {
         onPress={() => router.push(`/caseta/${item.id}`)}
       >
         <View style={{ flex: 1 }}>
-          <Text style={styles.cardTitleText}>{item.entry.placas_unidad}</Text>
+          <Text style={styles.cardTitleText}>{item.entry.placas_unidad} {isFull ? '(FULL)' : ''}</Text>
           <Text style={styles.cardSubText}>{item.entry.chofer_nombre} · {item.entry.compania_transporte || '-'}</Text>
           <View style={{ marginVertical: 6 }}>
-            <ProcessTracker steps={steps} compact />
+            <ProcessTracker steps={steps} compact showShipping={showShipping} />
           </View>
           <Text style={styles.cardMetaText}>{new Date(item.entry.fecha_entrada || item.created_at).toLocaleString()}</Text>
         </View>
         <View style={[styles.statusChip, { backgroundColor: st.color }]}>
-          <Text style={styles.statusChipText}>{st.label}</Text>
+          <Text style={styles.statusChipText}>{st.label.toUpperCase()}</Text>
         </View>
       </Pressable>
     );

@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
 import { apiCall, API_BASE } from '../api/client';
 import { useAuth } from './AuthContext';
 
-const QUEUE_KEY = 'naf_inspection_queue';
+const QUEUE_KEY = 'naf_universal_sync_queue';
 const CACHE_KEY = 'naf_inspections_cache';
 
 export interface InspectionPoint {
@@ -47,6 +47,14 @@ export interface Inspection extends InspectionPayload {
   _pending?: boolean;
 }
 
+interface SyncItem {
+  id: string;
+  type: 'inspection' | 'vehicle_record' | 'shipping_ticket' | 'vehicle_exit';
+  method: 'POST' | 'PATCH' | 'PUT';
+  endpoint: string;
+  payload: any;
+}
+
 interface InspectionContextValue {
   inspections: Inspection[];
   allInspections: Inspection[];
@@ -55,7 +63,10 @@ interface InspectionContextValue {
   loading: boolean;
   refresh: () => Promise<void>;
   refreshAll: () => Promise<void>;
-  saveInspection: (payload: InspectionPayload) => Promise<Inspection>;
+  saveInspection: (payload: InspectionPayload) => Promise<any>;
+  saveVehicleRecord: (payload: any) => Promise<any>;
+  saveShippingTicket: (payload: any) => Promise<any>;
+  patchVehicleExit: (id: string, payload: any) => Promise<any>;
   getById: (id: string) => Inspection | undefined;
   syncQueue: () => Promise<void>;
   approveInspection: (id: string, note: string, name: string, signature: string) => Promise<void>;
@@ -86,13 +97,13 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  const getQueue = useCallback(async (): Promise<InspectionPayload[]> => {
+  const getQueue = useCallback(async (): Promise<SyncItem[]> => {
     const raw = await AsyncStorage.getItem(QUEUE_KEY);
     if (!raw) return [];
     try { return JSON.parse(raw); } catch { return []; }
   }, []);
 
-  const setQueue = useCallback(async (q: InspectionPayload[]) => {
+  const setQueue = useCallback(async (q: SyncItem[]) => {
     await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(q));
     setPendingCount(q.length);
   }, []);
@@ -101,8 +112,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     if (!token) return;
     setLoading(true);
     try {
-      // Si es admin o supervisor, cargar todo por defecto para que el histórico no se vea vacío
-      const isAdmin = user?.role === 'admin' || user?.email === 'd.trujillo@brancoindustries.com';
+      const isAdmin = user?.role === 'admin' || user?.email === 'd.trujillo@brancoindustries.com' || user?.email === 'd4r005@gmail.com';
       const scope = (isAdmin || user?.role === 'supervisor') ? 'all' : 'mine';
 
       const data = await apiCall<Inspection[]>(`/inspections?summary=true&scope=${scope}`, { token });
@@ -118,7 +128,6 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   const refreshAll = useCallback(async () => {
     if (!token || (user?.role !== 'supervisor' && user?.role !== 'admin')) return;
     try {
-      // For the supervisor view, we also use summary=true for better performance
       const data = await apiCall<Inspection[]>('/inspections?scope=all&summary=true', { token });
       setAllInspections(data);
     } catch {}
@@ -128,12 +137,23 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     if (!token) return;
     const queue = await getQueue();
     if (queue.length === 0) return;
-    const remaining: InspectionPayload[] = [];
+
+    console.log(`Syncing queue with ${queue.length} items...`);
+    const remaining: SyncItem[] = [];
+
     for (const item of queue) {
       try {
-        await apiCall('/inspections', { method: 'POST', body: item, token });
-      } catch { remaining.push(item); }
+        await apiCall(item.endpoint, {
+          method: item.method,
+          body: item.payload,
+          token
+        });
+      } catch (err) {
+        console.error(`Failed to sync item ${item.id}`, err);
+        remaining.push(item);
+      }
     }
+
     await setQueue(remaining);
     await refresh();
   }, [token, refresh, getQueue, setQueue]);
@@ -169,48 +189,82 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     if (isOnline && token && pendingCount > 0) syncQueue();
   }, [isOnline, token, pendingCount, syncQueue]);
 
-  // Periodic Refresh for better device-to-device communication
+  // Real-time refresh
   useEffect(() => {
     if (!token) return;
     const interval = setInterval(() => {
       refresh();
       if (user?.role === 'supervisor' || user?.role === 'admin') refreshAll();
-    }, 15000); // Every 15 seconds for real-time feel
+    }, 15000);
     return () => clearInterval(interval);
   }, [token, user?.role, refresh, refreshAll]);
 
-  const saveInspection = useCallback(async (payload: InspectionPayload): Promise<Inspection> => {
-    const full: InspectionPayload = {
-      ...payload,
-      client_uuid: payload.client_uuid || uuid(),
-      fecha_hora: payload.fecha_hora || new Date().toISOString(),
-    };
-    if (!token || !user) throw new Error('No autenticado');
+  const addToQueue = useCallback(async (item: SyncItem) => {
+    const queue = await getQueue();
+    queue.push(item);
+    await setQueue(queue);
+  }, [getQueue, setQueue]);
+
+  const saveInspection = useCallback(async (payload: InspectionPayload): Promise<any> => {
+    const client_uuid = payload.client_uuid || uuid();
+    const full = { ...payload, client_uuid, fecha_hora: payload.fecha_hora || new Date().toISOString() };
 
     if (isOnline) {
       try {
-        const created = await apiCall<Inspection>('/inspections', { method: 'POST', body: full, token });
+        const res = await apiCall('/inspections', { method: 'POST', body: full, token });
         await refresh();
-        return created;
-      } catch {}
+        return res;
+      } catch (err) {}
     }
-    const queue = await getQueue();
-    queue.push(full);
-    await setQueue(queue);
+
+    await addToQueue({ id: client_uuid, type: 'inspection', method: 'POST', endpoint: '/inspections', payload: full });
+
+    // Add to local cache for visibility
     const pending: Inspection = {
-      ...full, id: full.client_uuid, user_id: user.id,
+      ...full, id: client_uuid, user_id: user?.id || 'offline',
       created_at: new Date().toISOString(),
       status_general: full.points.some((p) => p.estado === 'malo') ? 'malo' : 'bueno',
       approval_status: 'pendiente',
       _pending: true,
     };
-    setInspections((prev) => {
-      const updated = [pending, ...prev];
-      AsyncStorage.setItem(CACHE_KEY, JSON.stringify(updated));
-      return updated;
-    });
+    setInspections((prev) => [pending, ...prev]);
     return pending;
-  }, [token, user, isOnline, refresh]);
+  }, [token, user, isOnline, refresh, addToQueue]);
+
+  const saveVehicleRecord = useCallback(async (payload: any): Promise<any> => {
+    const tempId = uuid();
+    if (isOnline) {
+      try {
+        const res = await apiCall('/vehicle-records', { method: 'POST', body: payload, token });
+        return res;
+      } catch (err) {}
+    }
+    await addToQueue({ id: tempId, type: 'vehicle_record', method: 'POST', endpoint: '/vehicle-records', payload });
+    return { id: tempId, _offline: true, entry: payload };
+  }, [token, isOnline, addToQueue]);
+
+  const saveShippingTicket = useCallback(async (payload: any): Promise<any> => {
+    const tempId = uuid();
+    if (isOnline) {
+      try {
+        const res = await apiCall('/shipping-tickets', { method: 'POST', body: payload, token });
+        return res;
+      } catch (err) {}
+    }
+    await addToQueue({ id: tempId, type: 'shipping_ticket', method: 'POST', endpoint: '/shipping-tickets', payload });
+    return { id: tempId, _offline: true, ...payload };
+  }, [token, isOnline, addToQueue]);
+
+  const patchVehicleExit = useCallback(async (id: string, payload: any): Promise<any> => {
+    if (isOnline) {
+      try {
+        const res = await apiCall(`/vehicle-records/${id}/exit`, { method: 'PATCH', body: payload, token });
+        return res;
+      } catch (err) {}
+    }
+    await addToQueue({ id, type: 'vehicle_exit', method: 'PATCH', endpoint: `/vehicle-records/${id}/exit`, payload });
+    return { id, _offline: true, exit: payload };
+  }, [token, isOnline, addToQueue]);
 
   const getById = useCallback(
     (id: string) => {
@@ -262,7 +316,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     <InspectionContext.Provider
       value={{
         inspections, allInspections, pendingCount, isOnline, loading,
-        refresh, refreshAll, saveInspection, getById, syncQueue,
+        refresh, refreshAll, saveInspection, saveVehicleRecord, saveShippingTicket, patchVehicleExit, getById, syncQueue,
         approveInspection, rejectInspection, updateInspection, updateVehicleRecord, updateShippingTicket, sendManualReport, exportCsvUrl,
         token
       }}
