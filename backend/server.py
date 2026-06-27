@@ -701,10 +701,12 @@ def ensure_clean_image(base64_str: str) -> str:
         return processed_b64
 
 def _serialize_inspection(doc: Dict[str, Any]) -> Inspection:
-    # Reparar solo las firmas para no alentar el listado general
+    # Reparar solo si detectamos que no tiene el encabezado (compatibilidad)
+    # pero evitamos procesar con Pillow en cada GET para mantener la velocidad
     for f in ["inspector_firma", "verificador_firma", "approved_by_signature"]:
-        if doc.get(f):
-            doc[f] = ensure_clean_image(doc[f])
+        val = doc.get(f)
+        if val and isinstance(val, str) and not val.startswith('data:image') and len(val) > 50:
+            doc[f] = f"data:image/png;base64,{val}"
 
     return Inspection(
         id=doc["id"],
@@ -763,9 +765,9 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
         "points": [p.dict() for p in body.points],
         "actividad_sospechosa": body.actividad_sospechosa,
         "inspector_nombre": body.inspector_nombre,
-        "inspector_firma": body.inspector_firma,
+        "inspector_firma": ensure_clean_image(body.inspector_firma), # Clean on save!
         "verificador_nombre": body.verificador_nombre,
-        "verificador_firma": body.verificador_firma,
+        "verificador_firma": ensure_clean_image(body.verificador_firma), # Clean on save!
         "fecha_hora": fecha_hora,
         "created_at": now,
         "status_general": status_general,
@@ -775,6 +777,12 @@ async def create_inspection(body: InspectionCreate, current_user: Dict[str, Any]
         "approved_at": "",
         "client_uuid": body.client_uuid,
     }
+
+    # Process point photos to avoid black boxes and reduce size
+    for p in doc["points"]:
+        if p.get("photo"):
+            p["photo"] = ensure_clean_image(p["photo"])
+
     await db.inspections.insert_one(doc)
 
     # Autolink to vehicle record if record_id provided
@@ -1046,7 +1054,7 @@ async def approve_inspection(
         "approval_status": "aprobada",
         "approval_note": body.note,
         "approved_by_name": body.name or current_user["name"],
-        "approved_by_signature": body.signature,
+        "approved_by_signature": ensure_clean_image(body.signature), # Clean signature!
         "approved_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.inspections.update_one({"id": inspection_id}, {"$set": update})
@@ -1087,7 +1095,7 @@ async def reject_inspection(
         "approval_status": "rechazada",
         "approval_note": body.note,
         "approved_by_name": body.name or current_user["name"],
-        "approved_by_signature": body.signature,
+        "approved_by_signature": ensure_clean_image(body.signature), # Clean signature!
         "approved_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.inspections.update_one({"id": inspection_id}, {"$set": update})
@@ -1481,6 +1489,13 @@ async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any]
     now = datetime.now(timezone.utc).isoformat()
     entry_data = body.dict()
     entry_data["fecha_entrada"] = entry_data.get("fecha_entrada") or now
+
+    # Clean images on entry
+    image_fields = ["foto_frente_unidad", "foto_atras_caja", "foto_atras_caja_2", "foto_id_chofer", "firma_operador"]
+    for field in image_fields:
+        if entry_data.get(field):
+            entry_data[field] = ensure_clean_image(entry_data[field])
+
     doc = {
         "id": rec_id,
         "user_id": current_user["id"],
@@ -1517,24 +1532,25 @@ async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any]
 async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
     """
     Busca y vincula inspecciones y tickets de embarque si no están vinculados directamente.
-    Esto repara la trazabilidad del proceso en tiempo real basándose en las placas.
+    Optimizada para evitar consultas innecesarias.
     """
     rec_id = record["id"]
     placas = record["entry"].get("placas_unidad", "").strip()
     if not placas:
         return record
 
+    # Si ya tiene todo vinculado, no hacemos nada para no alentar la respuesta
+    if record.get("inspection_id") and record.get("shipping_ticket_id"):
+        return record
+
     updated = False
+    now = datetime.now(timezone.utc)
 
-    # 1. Vincular Inspección
+    # 1. Vincular Inspección (si falta)
     if not record.get("inspection_id"):
-        # Buscar la inspección más reciente para estas placas que se haya hecho DESPUÉS o el mismo día de la entrada
-        # Convertimos la fecha de creación a objeto datetime para la búsqueda
         try:
-            entry_dt = datetime.fromisoformat(record["created_at"].replace('Z', '+00:00'))
-            # Buscamos en un margen de 24h antes y 48h después para cubrir errores de dedo en horarios
-            start_search = entry_dt - timedelta(hours=12)
-
+            # Buscamos inspecciones creadas en las últimas 48 horas relacionadas a estas placas
+            start_search = now - timedelta(hours=48)
             insp = await db.inspections.find_one({
                 "placas_unidad": placas,
                 "created_at": {"$gte": start_search.isoformat()}
@@ -1547,12 +1563,10 @@ async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
                 updated = True
         except: pass
 
-    # 2. Vincular Ticket de Embarque
+    # 2. Vincular Ticket de Embarque (si falta)
     if not record.get("shipping_ticket_id"):
         try:
-            entry_dt = datetime.fromisoformat(record["created_at"].replace('Z', '+00:00'))
-            start_search = entry_dt - timedelta(hours=12)
-
+            start_search = now - timedelta(hours=48)
             ticket = await db.shipping_tickets.find_one({
                 "placas_unidad": placas,
                 "created_at": {"$gte": start_search.isoformat()}
@@ -1563,9 +1577,6 @@ async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
                 record["has_shipping_ticket"] = True
                 updated = True
         except: pass
-    elif not record.get("has_shipping_ticket"):
-        record["has_shipping_ticket"] = True
-        updated = True
 
     if updated:
         await db.vehicle_records.update_one(
@@ -1573,15 +1584,12 @@ async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
             {"$set": {
                 "inspection_id": record.get("inspection_id"),
                 "shipping_ticket_id": record.get("shipping_ticket_id"),
-                "has_shipping_ticket": record.get("has_shipping_ticket", False),
+                "has_shipping_ticket": record.get("has_shipping_ticket", True if record.get("shipping_ticket_id") else False),
                 "status": record["status"]
             }}
         )
 
-        # Sync update to Google Sheets
-        try:
-            await sync_to_google_sheets("entrada", record)
-        except: pass
+    return record
 
     return record
 
@@ -1601,17 +1609,20 @@ async def list_vehicle_records(
     if status:
         filt["status"] = status
 
-    # projection removida para asegurar que detalles (firmas/fotos) se vean en la app
-    docs = await db.vehicle_records.find(filt, {"_id": 0}).sort("created_at", -1).to_list(200)
+    docs = await db.vehicle_records.find(filt, {"_id": 0}).sort("created_at", -1).to_list(100)
 
     if not docs:
         return []
 
     res = []
+    # Solo intentamos auto-vincular para las unidades que están activas en patio
+    # Esto acelera drásticamente la carga del listado histórico
     for d in docs:
         try:
-            # Asegurar consistencia de datos antes de serializar
-            linked_d = await _ensure_record_links(d)
+            if d.get("status") != "salida":
+                linked_d = await _ensure_record_links(d)
+            else:
+                linked_d = d
 
             # Limpiar campos extras que podrían venir de la base de datos y no estar en el modelo
             allowed_keys = VehicleRecord.__fields__.keys()
@@ -1619,6 +1630,15 @@ async def list_vehicle_records(
 
             res.append(VehicleRecord(**clean_doc))
         except Exception as e:
+            logger.error(f"Error serializing record {d.get('id')}: {e}")
+            # Intento de rescate si falló
+            try:
+                allowed_keys = VehicleRecord.__fields__.keys()
+                clean_doc = {k: v for k, v in d.items() if k in allowed_keys}
+                res.append(VehicleRecord(**clean_doc))
+            except: pass
+
+    return res
             logger.error(f"Error serializing record {d.get('id')}: {e}")
             continue
 
@@ -1686,6 +1706,12 @@ async def add_exit_to_record(rec_id: str, body: VehicleExit, current_user: Dict[
 
     exit_data = body.dict()
     exit_data["fecha_salida"] = exit_data.get("fecha_salida") or datetime.now(timezone.utc).isoformat()
+
+    # Clean exit images
+    image_fields = ["sello_vvtt_foto", "sello_vvtt_foto_2", "firma_guardia"]
+    for field in image_fields:
+        if exit_data.get(field):
+            exit_data[field] = ensure_clean_image(exit_data[field])
 
     await db.vehicle_records.update_one(
         {"id": rec_id},
@@ -2079,6 +2105,13 @@ async def create_ticket(body: ShippingTicketCreate, current_user: Dict[str, Any]
     doc["user_id"] = current_user["id"]
     doc["fecha"] = doc.get("fecha") or now
     doc["created_at"] = now
+
+    # Clean ticket images
+    image_fields = ["plano_carga", "foto_inicio_carga", "foto_media_carga", "foto_final_carga", "firma_almacenista", "firma_guardia"]
+    for field in image_fields:
+        if doc.get(field):
+            doc[field] = ensure_clean_image(doc[field])
+
     await db.shipping_tickets.insert_one(doc)
 
     # Autolink to vehicle record if record_id provided

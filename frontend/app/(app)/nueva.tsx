@@ -43,9 +43,10 @@ export default function Nueva() {
     if (!token) return;
     setLoadingPending(true);
     try {
-      const data = await apiCall<any[]>('/vehicle-records', { token });
-      // Registros que no tienen inspección vinculada y están en patio
-      setPendingInYard(data.filter(r => !r.inspection_id && r.status === 'entrada'));
+      // Filtrar por status=entrada en el backend para mayor velocidad
+      const data = await apiCall<any[]>('/vehicle-records?status=entrada', { token });
+      // Registros que no tienen inspección vinculada
+      setPendingInYard(data.filter(r => !r.inspection_id));
     } catch {} finally { setLoadingPending(false); }
   };
 
@@ -278,6 +279,9 @@ export default function Nueva() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.pendingPlates}>{r.entry.placas_unidad}</Text>
                     <Text style={styles.pendingSub}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
+                    <View style={{ marginTop: 4 }}>
+                      <ProcessTracker steps={{ entry: true, inspection: false, shipping: !!r.has_shipping_ticket, exit: false }} compact />
+                    </View>
                   </View>
                   <Ionicons name="arrow-forward" size={20} color={colors.brandPrimary} />
                 </Pressable>

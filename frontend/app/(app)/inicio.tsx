@@ -33,17 +33,21 @@ export default function Inicio() {
     if (!token) return;
     if (isInitial) setLoadingActivities(true);
     try {
-      const [actData, recData] = await Promise.all([
+      const [actData, recordsEntrada, recordsInsp] = await Promise.all([
         apiCall<any[]>('/activities', { token }),
-        // Buscamos todas las unidades que NO han salido (están en patio)
-        apiCall<any[]>('/vehicle-records', { token })
+        // Solo traer unidades que están en patio para mayor velocidad
+        apiCall<any[]>('/vehicle-records?status=entrada', { token }),
+        apiCall<any[]>('/vehicle-records?status=inspeccionado', { token })
       ]);
 
       const newActivities = Array.isArray(actData) ? actData : [];
       setActivities(newActivities);
 
-      // Filtrar para dejar solo las que están en patio (entrada o inspeccionado)
-      const active = (Array.isArray(recData) ? recData : []).filter(r => r.status !== 'salida');
+      // Combinar unidades activas en patio
+      const active = [
+        ...(Array.isArray(recordsEntrada) ? recordsEntrada : []),
+        ...(Array.isArray(recordsInsp) ? recordsInsp : [])
+      ];
       setInProcessUnits(active);
 
       if (!isInitial && newActivities.length > 0) {

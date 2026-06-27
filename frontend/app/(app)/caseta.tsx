@@ -95,6 +95,9 @@ export default function Caseta() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitleText}>{r.entry.placas_unidad}</Text>
                 <Text style={styles.cardSubText}>{r.entry.chofer_nombre}</Text>
+                <View style={{ marginTop: 4 }}>
+                  <ProcessTracker steps={{ entry: true, inspection: false, shipping: !!r.has_shipping_ticket, exit: false }} compact />
+                </View>
               </View>
               <View style={[styles.miniStatusBadge, { backgroundColor: colors.warning }]}>
                 <Text style={styles.miniStatusText}>{t('inspeccionar').toUpperCase()}</Text>

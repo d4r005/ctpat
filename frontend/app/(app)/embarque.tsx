@@ -51,7 +51,8 @@ export default function Embarque() {
     try {
       const [ticketsData, recordsData] = await Promise.all([
         apiCall<Ticket[]>('/shipping-tickets', { token }),
-        apiCall<any[]>('/vehicle-records', { token })
+        // Solo traer unidades inspeccionadas o en patio para mayor velocidad
+        apiCall<any[]>('/vehicle-records?status=inspeccionado', { token })
       ]);
       setTickets(Array.isArray(ticketsData) ? ticketsData : []);
       setVehicleRecords(Array.isArray(recordsData) ? recordsData : []);
@@ -138,6 +139,9 @@ export default function Embarque() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitleText}>{r.entry.placas_unidad}</Text>
                 <Text style={styles.cardSubText}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
+                <View style={{ marginTop: 4 }}>
+                  <ProcessTracker steps={{ entry: true, inspection: true, shipping: true, exit: false }} compact />
+                </View>
               </View>
               <View style={[styles.miniStatusBadge, { backgroundColor: colors.warning }]}>
                 <Text style={styles.miniStatusText}>{t('generar').toUpperCase()}</Text>
@@ -166,6 +170,9 @@ export default function Embarque() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitleText}>{r.entry.placas_unidad}</Text>
                 <Text style={styles.cardSubText}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
+                <View style={{ marginTop: 4 }}>
+                  <ProcessTracker steps={{ entry: true, inspection: true, shipping: true, exit: false }} compact />
+                </View>
               </View>
               <View style={[styles.miniStatusBadge, { backgroundColor: colors.success }]}>
                 <Text style={styles.miniStatusText}>{t('dar_salida').toUpperCase()}</Text>
