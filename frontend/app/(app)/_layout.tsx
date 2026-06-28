@@ -44,42 +44,42 @@ export default function AppLayout() {
           paddingTop: 6,
           paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
         },
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '700' },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
       }}
     >
       <Tabs.Screen
         name="inicio"
         options={{
           title: t('inicio'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="home-sharp" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="historico"
         options={{
           title: t('historico'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="list" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="time-sharp" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="caseta"
         options={{
           title: t('caseta'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="business" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="embarque"
-        options={{
-          title: t('embarque'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="cube" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="business-sharp" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="nueva"
         options={{
           title: t('inspeccion'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="add-circle" size={size + 4} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="clipboard-sharp" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="embarque"
+        options={{
+          title: t('embarque'),
+          tabBarIcon: ({ color, size }) => <Ionicons name="cube-sharp" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -87,16 +87,19 @@ export default function AppLayout() {
         options={{
           title: isAdminOrSup ? 'MAESTRO' : t('supervisor'),
           href: isAdminOrSup ? '/(app)/supervisor' : null,
-          tabBarIcon: ({ color, size }) => <Ionicons name="shield-checkmark" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="shield-checkmark-sharp" size={size} color={color} />,
         }}
       />
 
+      {/* Rutas ocultas de la barra de navegación */}
       <Tabs.Screen name="chat" options={{ href: null }} />
       <Tabs.Screen name="usuarios" options={{ href: null }} />
       <Tabs.Screen name="analitica" options={{ href: null }} />
       <Tabs.Screen name="perfil" options={{ href: null }} />
       <Tabs.Screen name="caseta/[id]" options={{ href: null }} />
       <Tabs.Screen name="embarque/[id]" options={{ href: null }} />
+      <Tabs.Screen name="caseta/index" options={{ href: null }} />
+      <Tabs.Screen name="embarque/index" options={{ href: null }} />
     </Tabs>
   );
 }
