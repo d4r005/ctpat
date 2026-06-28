@@ -89,11 +89,62 @@ class UserPublic(BaseModel):
     active: bool = True
     push_tokens: List[str] = []
 
-class UserUpdate(BaseModel):
-    name: Optional[str] = None
-    role: Optional[str] = None
-    active: Optional[bool] = None
-    push_token: Optional[str] = None
+class PushTokenUpdate(BaseModel):
+    token: str
+
+# ========== Sistema de Notificaciones Push ==========
+async def send_push_notification(user_id: str, title: str, body: str, data: Dict[str, Any] = None):
+    """Envía una notificación push real a los dispositivos del usuario vía Expo API"""
+    user = await db.users.find_one({"id": user_id})
+    if not user or not user.get("push_tokens"):
+        return
+
+    tokens = user["push_tokens"]
+    payload = []
+    for token in tokens:
+        if token.startswith("ExponentPushToken"):
+            payload.append({
+                "to": token,
+                "title": title,
+                "body": body,
+                "data": data or {},
+                "sound": "default",
+                "priority": "high"
+            })
+
+    if payload:
+        try:
+            requests.post("https://exp.host/--/api/v2/push/send", json=payload, timeout=10)
+        except Exception as e:
+            logger.error(f"Error enviando Push: {e}")
+
+async def notify_supervisors_push(title: str, body: str, data: Dict[str, Any] = None):
+    """Envía push a todos los supervisores y admins"""
+    sups = await db.users.find({"role": {"$in": ["supervisor", "admin"]}}).to_list(100)
+    for s in sups:
+        await send_push_notification(s["id"], title, body, data)
+
+# ========== Auth Routes Modificadas ==========
+@api_router.post("/auth/register", response_model=TokenResponse)
+async def register(body: UserRegister):
+    existing = await db.users.find_one({"email": body.email.lower()})
+    if existing: raise HTTPException(status_code=400, detail="Usuario ya existe")
+    total = await db.users.count_documents({})
+    role = "admin" if (total == 0 or body.email.lower() in ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"]) else body.role
+    user_id = str(uuid.uuid4())
+    doc = {
+        "id": user_id, "email": body.email.lower(), "name": body.name.upper(),
+        "role": role, "active": True, "password_hash": hash_password(body.password),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "push_tokens": []
+    }
+    await db.users.insert_one(doc)
+    return TokenResponse(access_token=create_token(user_id), user=UserPublic(**doc))
+
+@api_router.post("/users/push-token")
+async def register_push_token(body: PushTokenUpdate, u: Dict[str, Any] = Depends(get_current_user)):
+    await db.users.update_one({"id": u["id"]}, {"$addToSet": {"push_tokens": body.token}})
+    return {"ok": True}
 
 class ChatMessage(BaseModel):
     id: str
@@ -457,6 +508,14 @@ async def create_record(body: VehicleEntry, current_user: Dict[str, Any] = Depen
 
     await db.vehicle_records.insert_one(doc)
     await _log_activity("caseta", rid, f"Entrada: {p}", f"Conductor: {body.chofer_nombre}", current_user["name"], "entrada")
+
+    # Notificar Push a Supervisores
+    asyncio.create_task(notify_supervisors_push(
+        "NUEVA ENTRADA 🚚",
+        f"Unidad {p} ingresó a planta. Chofer: {body.chofer_nombre.upper()}",
+        {"id": rid, "type": "caseta"}
+    ))
+
     await sync_to_google_sheets("entrada", doc)
     return VehicleRecord(**{k: v for k, v in doc.items() if k != "_id"})
 
@@ -474,6 +533,13 @@ async def exit_record(rec_id: str, body: VehicleExit, current_user: Dict[str, An
 
     await db.vehicle_records.update_one({"id": rec_id}, {"$set": {"exit": x, "status": "salida"}})
     up = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
+
+    # Notificar Push: SALIDA DE UNIDAD
+    asyncio.create_task(notify_supervisors_push(
+        "SALIDA REGISTRADA 👋",
+        f"La unidad {up['entry']['placas_unidad']} ha salido de la planta con destino a {x.get('destino')}.",
+        {"id": rec_id, "type": "salida"}
+    ))
 
     await _log_activity("caseta", rec_id, f"Salida: {up['entry']['placas_unidad']}", f"Destino: {x.get('destino')}", current_user["name"], "salida")
 
@@ -508,6 +574,13 @@ async def create_inspection(body: InspectionCreate, u: Dict[str, Any] = Depends(
     await db.inspections.insert_one(doc)
     if body.record_id:
         await db.vehicle_records.update_one({"id": body.record_id}, {"$set": {"inspection_id": iid, "status": "inspeccionado"}, "$addToSet": {"inspection_ids": iid}})
+
+    # Notificar Push a Supervisores: INSPECCIÓN REALIZADA
+    asyncio.create_task(notify_supervisors_push(
+        "INSPECCIÓN TERMINADA ✅",
+        f"La unidad {body.placas_unidad.upper()} ha sido inspeccionada por {u['name'].upper()}. Pendiente de aprobación.",
+        {"id": iid, "type": "inspection"}
+    ))
 
     await _log_activity("inspection", iid, f"Inspección: {doc['placas_unidad']}", f"Por {body.inspector_nombre}", u["name"], doc["status_general"])
     await sync_to_google_sheets("inspeccion", doc)
@@ -547,6 +620,13 @@ async def create_ticket(body: ShippingTicketCreate, u: Dict[str, Any] = Depends(
     await db.shipping_tickets.insert_one(doc)
     if body.record_id:
         await db.vehicle_records.update_one({"id": body.record_id}, {"$set": {"shipping_ticket_id": tid, "has_shipping_ticket": True}})
+
+    # Notificar Push: TICKET GENERADO
+    asyncio.create_task(notify_supervisors_push(
+        "TICKET DE EMBARQUE 📦",
+        f"Se generó ticket para la unidad {body.placas_unidad.upper()}. Cliente: {doc['cliente']}.",
+        {"id": tid, "type": "embarque"}
+    ))
 
     await _log_activity("embarque", tid, f"Ticket: {doc['placas_unidad']}", f"Cliente: {doc['cliente']}", u["name"], "embarque")
     await sync_to_google_sheets("embarque", doc)
@@ -597,6 +677,52 @@ async def _trigger_automatic_report(rec_id: str):
 @api_router.get("/activities")
 async def acts(u: Dict[str, Any] = Depends(get_current_user)):
     docs = await db.activities.find().sort("created_at", -1).to_list(50); return docs
+
+@api_router.post("/inspections/{inspection_id}/approve", response_model=Inspection)
+async def approve_inspection(inspection_id: str, body: ApprovalBody, u: Dict[str, Any] = Depends(get_current_user)):
+    doc = await db.inspections.find_one({"id": inspection_id})
+    if not doc: raise HTTPException(status_code=404)
+    update = {
+        "approval_status": "aprobada",
+        "approval_note": body.note,
+        "approved_by_name": body.name or u["name"],
+        "approved_by_signature": ensure_clean_image(body.signature),
+        "approved_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.inspections.update_one({"id": inspection_id}, {"$set": update})
+
+    # Notificar al Inspector: SU INSPECCIÓN FUE APROBADA
+    asyncio.create_task(send_push_notification(
+        doc["user_id"],
+        "INSPECCIÓN APROBADA ✅",
+        f"Tu inspección de la unidad {doc['placas_unidad']} ha sido aprobada por {u['name']}.",
+        {"id": inspection_id}
+    ))
+
+    return _serialize_inspection({**doc, **update})
+
+@api_router.post("/inspections/{inspection_id}/reject", response_model=Inspection)
+async def reject_inspection(inspection_id: str, body: ApprovalBody, u: Dict[str, Any] = Depends(get_current_user)):
+    doc = await db.inspections.find_one({"id": inspection_id})
+    if not doc: raise HTTPException(status_code=404)
+    update = {
+        "approval_status": "rechazada",
+        "approval_note": body.note,
+        "approved_by_name": body.name or u["name"],
+        "approved_by_signature": ensure_clean_image(body.signature),
+        "approved_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.inspections.update_one({"id": inspection_id}, {"$set": update})
+
+    # Notificar al Inspector: SU INSPECCIÓN FUE RECHAZADA
+    asyncio.create_task(send_push_notification(
+        doc["user_id"],
+        "INSPECCIÓN RECHAZADA 🚨",
+        f"ATENCIÓN: Tu inspección de la unidad {doc['placas_unidad']} fue rechazada por {u['name']}. Motivo: {body.note}",
+        {"id": inspection_id}
+    ))
+
+    return _serialize_inspection({**doc, **update})
 
 @api_router.get("/analytics")
 async def anly(u: Dict[str, Any] = Depends(get_current_user)):
