@@ -643,19 +643,31 @@ async def list_tickets(u: Dict[str, Any] = Depends(get_current_user)):
 
 @api_router.get("/shipping-tickets/{ticket_id}")
 async def get_ticket(ticket_id: str, u: Dict[str, Any] = Depends(get_current_user)):
+    # Intentar por ID exacto
     doc = await db.shipping_tickets.find_one({"id": ticket_id}, {"_id": 0})
+    if not doc:
+        # Si no lo halla por ID, intentar buscarlo como fallback por si es un ID de vinculación antiguo
+        doc = await db.shipping_tickets.find_one({"record_id": ticket_id}, {"_id": 0})
+
     if not doc: raise HTTPException(status_code=404, detail="Ticket no encontrado")
     return doc
 
 @api_router.put("/shipping-tickets/{ticket_id}")
 async def update_ticket(ticket_id: str, body: Dict[str, Any], u: Dict[str, Any] = Depends(get_current_user)):
-    if "_id" in body: del body["_id"]
+    # Limpiar campos de sistema antes de actualizar
+    for k in ["_id", "id", "user_id", "created_at"]:
+        if k in body: del body[k]
+
     # Limpiar imágenes si vienen en el body
     for f in ["foto_inicio_carga", "foto_media_carga", "foto_final_carga", "firma_almacenista", "firma_guardia"]:
         if body.get(f) and body[f].startswith("data:image"):
             body[f] = ensure_clean_image(body[f])
 
-    await db.shipping_tickets.update_one({"id": ticket_id}, {"$set": body})
+    res = await db.shipping_tickets.update_one({"id": ticket_id}, {"$set": body})
+    if res.matched_count == 0:
+        # Reintento por record_id
+        await db.shipping_tickets.update_one({"record_id": ticket_id}, {"$set": body})
+
     return {"ok": True}
 
 @api_router.delete("/shipping-tickets/{ticket_id}/admin-delete")
