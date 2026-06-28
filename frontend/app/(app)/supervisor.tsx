@@ -158,20 +158,18 @@ export default function Supervisor() {
       }, 'es');
 
       if (Platform.OS === 'web') {
-        // SOLUCIÓN DEFINITIVA PARA WEB: Inyectar en un iframe oculto para imprimir solo el reporte
-        const iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        document.body.appendChild(iframe);
-        iframe.contentDocument?.open();
-        iframe.contentDocument?.write(html);
-        iframe.contentDocument?.close();
+        // COMPORTAMIENTO ORIGINAL: Abrir en ventana nueva y lanzar impresión
+        const reportWindow = window.open('', '_blank');
+        if (reportWindow) {
+          reportWindow.document.write(html);
+          reportWindow.document.close();
 
-        // Dar un pequeño tiempo para que carguen las firmas/fotos base64
-        setTimeout(() => {
-          iframe.contentWindow?.focus();
-          iframe.contentWindow?.print();
-          document.body.removeChild(iframe);
-        }, 500);
+          // Esperar a que carguen las imágenes/firmas antes de imprimir
+          setTimeout(() => {
+            reportWindow.focus();
+            reportWindow.print();
+          }, 1000);
+        }
       } else {
         const { uri } = await Print.printToFileAsync({ html, base64: false });
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Reporte Consolidado' });
