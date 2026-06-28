@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Pressable, TextInput, RefreshControl, Platform,
-  ActivityIndicator, Alert, ScrollView
+  ActivityIndicator, Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -9,10 +9,10 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import { useTranslation } from 'react-i18next';
-import { useInspections, Inspection } from '@/src/context/InspectionContext';
+import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { apiCall } from '@/src/api/client';
-import { colors, spacing, typography } from '@/src/constants/theme';
+import { colors, spacing } from '@/src/constants/theme';
 import { generateConsolidatedReportHtml } from '@/src/utils/reportGenerator';
 import ProcessTracker from '@/src/components/ProcessTracker';
 import MainHeader from '@/src/components/MainHeader';
@@ -40,15 +40,23 @@ export default function Supervisor() {
     if (!token) return;
     setLoading(true);
     try {
-      // Intentamos obtener todo. Si algo falla, el resto sigue funcionando.
-      const recordsData = await apiCall<any[]>('/vehicle-records', { token }).catch(() => []);
-      const ticketsData = await apiCall<any[]>('/shipping-tickets', { token }).catch(() => []);
+      // Cargamos por separado para asegurar que si uno falla, no bloquee al resto
+      const recordsPromise = apiCall<any[]>('/vehicle-records', { token }).catch(e => {
+        console.warn("Records load failed:", e);
+        return [];
+      });
+      const ticketsPromise = apiCall<any[]>('/shipping-tickets', { token }).catch(e => {
+        console.warn("Tickets load failed:", e);
+        return [];
+      });
+
+      const [records, tickets] = await Promise.all([recordsPromise, ticketsPromise]);
       await refreshInspections();
 
-      setAllRecords(Array.isArray(recordsData) ? recordsData : []);
-      setAllTickets(Array.isArray(ticketsData) ? ticketsData : []);
+      setAllRecords(Array.isArray(records) ? records : []);
+      setAllTickets(Array.isArray(tickets) ? tickets : []);
     } catch (e: any) {
-      console.error("Master Panel load error", e);
+      console.error("Master Panel general error", e);
     } finally {
       setLoading(false);
     }
@@ -70,7 +78,6 @@ export default function Supervisor() {
       const driver = (item.chofer_nombre || item.entry?.chofer_nombre || '').toLowerCase();
       const client = (item.cliente || '').toLowerCase();
       const company = (item.compania_transporte || item.entry?.compania_transporte || '').toLowerCase();
-
       return plates.includes(q) || driver.includes(q) || client.includes(q) || company.includes(q);
     });
   }, [activeTab, query, allRecords, allInspections, allTickets]);
@@ -83,8 +90,6 @@ export default function Supervisor() {
       const normPlates = norm(plates);
 
       const matchTicket = (allTickets || []).find(tk => norm(tk.placas_unidad) === normPlates);
-
-      // Trazabilidad FULL: Buscamos todas las inspecciones ligadas a este registro o placas
       const matchInsps = (allInspections || []).filter(i =>
         i.record_id === recordId ||
         (Array.isArray(fullRecord.inspection_ids) && fullRecord.inspection_ids.includes(i.id)) ||
@@ -100,8 +105,7 @@ export default function Supervisor() {
 
       if (Platform.OS === 'web') {
         const win = window.open('', '_blank');
-        win?.document.write(html);
-        win?.document.close();
+        win?.document.write(html); win?.document.close();
         setTimeout(() => win?.print(), 500);
       } else {
         const { uri } = await Print.printToFileAsync({ html });
@@ -146,7 +150,7 @@ export default function Supervisor() {
       <FlatList
         data={filteredData}
         keyExtractor={i => i.id || Math.random().toString()}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchEverything} />}
+        refreshControl={<RefreshControl refreshing={loading || inspLoading} onRefresh={fetchEverything} tintColor={colors.brandPrimary} />}
         contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}
         renderItem={({ item }) => (
           <MasterRow
@@ -161,7 +165,7 @@ export default function Supervisor() {
             inspections={allInspections}
           />
         )}
-        ListEmptyComponent={loading ? <ActivityIndicator color={colors.brandPrimary} style={{ marginTop: 20 }} /> : <Text style={styles.empty}>{t('no_hay_registros')}</Text>}
+        ListEmptyComponent={loading ? <ActivityIndicator color={colors.brandPrimary} style={{marginTop: 50}} /> : <Text style={styles.empty}>{t('no_hay_registros')}</Text>}
       />
     </SafeAreaView>
   );
@@ -173,19 +177,14 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router, records, tickets,
   const normPlates = normalize(plates);
   const subtitle = item.inspector_nombre || item.entry?.chofer_nombre || item.cliente || '-';
 
-  // Buscar registro de caseta relacionado
   const relatedRecord = type === 'caseta' ? item : records.find((r: any) => normalize(r.entry?.placas_unidad) === normPlates);
   const isFull = relatedRecord?.entry?.tipo_unidad === 'full';
 
-  // Trazabilidad de Inspecciones
   const relatedInsps = inspections.filter((i: any) =>
     i.record_id === relatedRecord?.id || normalize(i.placas_unidad) === normPlates
   );
 
-  // Trazabilidad de Embarque
   const hasTicket = type === 'embarque' || tickets.some((tk: any) => normalize(tk.placas_unidad) === normPlates);
-
-  // Una unidad FULL requiere 2 inspecciones
   const inspectionComplete = isFull ? relatedInsps.length >= 2 : relatedInsps.length >= 1;
 
   const steps = {
@@ -196,13 +195,10 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router, records, tickets,
   };
 
   const navigateToDetail = () => {
-    if (type === 'caseta' || relatedRecord) {
-      router.push(`/caseta/${relatedRecord?.id || item.id}`);
-    } else if (type === 'embarque') {
-      router.push(`/embarque/${item.id}`);
-    } else {
-      router.push(`/inspection/${item.id}`);
-    }
+    const targetId = relatedRecord?.id || item.id;
+    if (type === 'caseta' || relatedRecord) router.push(`/caseta/${targetId}`);
+    else if (type === 'embarque') router.push(`/embarque/${item.id}`);
+    else router.push(`/inspection/${item.id}`);
   };
 
   return (
