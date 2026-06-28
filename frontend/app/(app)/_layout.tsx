@@ -114,6 +114,18 @@ export default function AppLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="caseta/[id]"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="embarque/[id]"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }
