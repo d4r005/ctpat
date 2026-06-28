@@ -13,8 +13,8 @@ export default function AppLayout() {
   const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const isAdmin = user?.role === 'admin' || user?.email === 'd.trujillo@brancoindustries.com' || user?.email === 'd4r005@gmail.com';
-  const isSupervisor = user?.role === 'supervisor' || isAdmin;
+  const isAdminOrSup = user?.role === 'admin' || user?.role === 'supervisor' ||
+                        ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
 
   useEffect(() => {
     if (!loading && !token) router.replace('/login');
@@ -44,7 +44,7 @@ export default function AppLayout() {
           paddingTop: 6,
           paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '700' },
       }}
     >
       <Tabs.Screen
@@ -62,14 +62,14 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
-        name="caseta/index"
+        name="caseta"
         options={{
           title: t('caseta'),
           tabBarIcon: ({ color, size }) => <Ionicons name="business" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="embarque/index"
+        name="embarque"
         options={{
           title: t('embarque'),
           tabBarIcon: ({ color, size }) => <Ionicons name="cube" size={size} color={color} />,
@@ -85,13 +85,13 @@ export default function AppLayout() {
       <Tabs.Screen
         name="supervisor"
         options={{
-          title: isAdmin ? (t('panel_maestro_tabs') || t('panel')) : t('supervisor'),
-          href: isSupervisor ? '/(app)/supervisor' : null,
-          tabBarIcon: ({ color, size }) => <Ionicons name={isAdmin ? "shield-half" : "shield-checkmark"} size={size} color={color} />,
+          title: isAdminOrSup ? 'MAESTRO' : t('supervisor'),
+          href: isAdminOrSup ? '/(app)/supervisor' : null,
+          tabBarIcon: ({ color, size }) => <Ionicons name="shield-checkmark" size={size} color={color} />,
         }}
       />
 
-      {/* RUTAS OCULTAS - SE USAN PERO NO APARECEN EN EL MENÚ */}
+      {/* RUTAS TÉCNICAS OCULTAS */}
       <Tabs.Screen name="chat" options={{ href: null }} />
       <Tabs.Screen name="usuarios" options={{ href: null }} />
       <Tabs.Screen name="analitica" options={{ href: null }} />

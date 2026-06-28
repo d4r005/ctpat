@@ -22,7 +22,9 @@ type TabType = 'caseta' | 'inspeccion' | 'embarque';
 export default function Supervisor() {
   const { user, token } = useAuth();
   const userEmail = user?.email?.toLowerCase().trim() || '';
-  const isAdmin = user?.role === 'admin' || userEmail.includes('d.trujillo') || userEmail.includes('d4r005');
+  // Definición de admin coincidente con InspectionContext
+  const isAdmin = user?.role === 'admin' || user?.role === 'supervisor' ||
+                  userEmail.includes('d.trujillo') || userEmail.includes('d4r005');
 
   const router = useRouter();
   const { allInspections, refreshAll: refreshInspections, loading: inspLoading } = useInspections();
@@ -44,8 +46,8 @@ export default function Supervisor() {
         apiCall<any[]>('/shipping-tickets', { token }),
         refreshInspections()
       ]);
-      setAllRecords(records);
-      setAllTickets(tickets);
+      setAllRecords(Array.isArray(records) ? records : []);
+      setAllTickets(Array.isArray(tickets) ? tickets : []);
     } catch (e) {
       console.error("Master Panel load error", e);
     } finally {
@@ -60,7 +62,7 @@ export default function Supervisor() {
     let data = activeTab === 'caseta' ? allRecords :
                activeTab === 'inspeccion' ? allInspections : allTickets;
 
-    return data.filter((item: any) => {
+    return (data || []).filter((item: any) => {
       const plates = item.placas_unidad || item.entry?.placas_unidad || '';
       const name = item.chofer_nombre || item.inspector_nombre || item.cliente || '';
       return plates.toLowerCase().includes(q) || name.toLowerCase().includes(q);
@@ -72,23 +74,41 @@ export default function Supervisor() {
     try {
       const fullRecord = await apiCall<any>(`/vehicle-records/${recordId}`, { token });
       const tickets = await apiCall<any[]>('/shipping-tickets', { token });
-      const norm = (s: string) => s.replace(/[^A-Z0-9]/g, '').toUpperCase();
-      const matchTicket = tickets.find(tk => norm(tk.placas_unidad) === norm(plates));
+      const norm = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
+      const matchTicket = (tickets || []).find(tk => norm(tk.placas_unidad) === norm(plates));
+
+      const matchInsp = (allInspections || []).find(i => norm(i.placas_unidad) === norm(plates));
 
       const html = generateConsolidatedReportHtml({
-        inspection: allInspections.find(i => norm(i.placas_unidad) === norm(plates)) || { points: [] } as any,
+        inspection: matchInsp || { points: [] } as any,
         caseta: fullRecord,
         embarque: matchTicket
       });
 
-      const { uri } = await Print.printToFileAsync({ html });
-      await Sharing.shareAsync(uri);
+      if (Platform.OS === 'web') {
+        const win = window.open('', '_blank');
+        win?.document.write(html);
+        win?.document.close();
+        setTimeout(() => win?.print(), 500);
+      } else {
+        const { uri } = await Print.printToFileAsync({ html });
+        await Sharing.shareAsync(uri);
+      }
     } catch (e: any) {
       alert(e.message);
     } finally {
       setReportLoading(null);
     }
   };
+
+  if (!isAdmin) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <MainHeader title="NAF" subtitle="ACCESO RESTRINGIDO" />
+        <View style={styles.center}><Text style={styles.empty}>{t('acceso_restringido')}</Text></View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -112,9 +132,9 @@ export default function Supervisor() {
 
       <FlatList
         data={filteredData}
-        keyExtractor={i => i.id}
+        keyExtractor={i => i.id || Math.random().toString()}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchEverything} />}
-        contentContainerStyle={{ padding: spacing.md }}
+        contentContainerStyle={{ padding: spacing.md, paddingBottom: 100 }}
         renderItem={({ item }) => (
           <MasterRow
             item={item}
@@ -142,6 +162,13 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router }: any) {
     exit: item.status === 'salida'
   };
 
+  const navigateToDetail = () => {
+    const route = type === 'caseta' ? `/caseta/${item.id}` :
+                  type === 'embarque' ? `/embarque/${item.id}` :
+                  `/inspection/${item.id}`;
+    router.push(route);
+  };
+
   return (
     <View style={styles.row}>
       <View style={{ flex: 1 }}>
@@ -151,7 +178,7 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router }: any) {
           <ProcessTracker steps={steps} compact />
         </View>
         <View style={styles.actions}>
-          <Pressable style={styles.iconBtn} onPress={() => router.push(`/${type === 'caseta' ? 'caseta' : type}/${item.id}`)}>
+          <Pressable style={styles.iconBtn} onPress={navigateToDetail}>
             <Ionicons name="create-outline" size={20} color={colors.brandPrimary} />
           </Pressable>
           <Pressable style={[styles.iconBtn, { backgroundColor: colors.brandPrimary }]} onPress={onPdf} disabled={loadingPdf}>
@@ -163,6 +190,7 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router }: any) {
         <View style={[styles.chip, { backgroundColor: item.status === 'salida' ? colors.success : colors.warning }]}>
           <Text style={styles.chipText}>{(item.status || 'PROCESO').toUpperCase()}</Text>
         </View>
+        <Text style={{ fontSize: 9, color: colors.muted, marginTop: 10 }}>{new Date(item.created_at || item.entry?.fecha_entrada).toLocaleDateString()}</Text>
       </View>
     </View>
   );
@@ -170,6 +198,7 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router }: any) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   headerCont: { padding: spacing.md, gap: spacing.md },
   tabRow: { flexDirection: 'row', gap: 10 },
   tab: { flex: 1, padding: 12, alignItems: 'center', backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
@@ -182,8 +211,8 @@ const styles = StyleSheet.create({
   rowSub: { color: colors.muted, fontSize: 12 },
   actions: { flexDirection: 'row', gap: 15, marginTop: 5 },
   iconBtn: { padding: 8, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: 4 },
-  statusSide: { alignItems: 'flex-end' },
+  statusSide: { alignItems: 'flex-end', justifyContent: 'space-between' },
   chip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 2 },
   chipText: { color: '#FFF', fontWeight: '900', fontSize: 9 },
-  empty: { textAlign: 'center', marginTop: 50, color: colors.muted }
+  empty: { textAlign: 'center', marginTop: 50, color: colors.muted, fontWeight: '700' }
 });

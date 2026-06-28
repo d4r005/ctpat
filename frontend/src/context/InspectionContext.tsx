@@ -112,9 +112,10 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     if (!token) return;
     setLoading(true);
     try {
-      const userEmail = user?.email?.toLowerCase().trim() || '';
-      const isAdmin = user?.role === 'admin' || userEmail.includes('d.trujillo') || userEmail.includes('d4r005');
-      const scope = (isAdmin || user?.role === 'supervisor') ? 'all' : 'mine';
+      // Simplificar lógica de permisos: Si es admin o supervisor, scope all.
+      const isAdmin = user?.role === 'admin' || user?.role === 'supervisor' ||
+                      ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+      const scope = isAdmin ? 'all' : 'mine';
 
       const data = await apiCall<Inspection[]>(`/inspections?summary=true&scope=${scope}`, { token });
       setInspections((prev) => {
@@ -123,14 +124,16 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
         AsyncStorage.setItem(CACHE_KEY, JSON.stringify(merged));
         return merged;
       });
-    } catch {} finally { setLoading(false); }
+    } catch (e) {
+      console.error("Refresh error:", e);
+    } finally { setLoading(false); }
   }, [token, user]);
 
   const refreshAll = useCallback(async () => {
     if (!token) return;
-    const userEmail = user?.email?.toLowerCase().trim() || '';
-    const isAdmin = user?.role === 'admin' || userEmail.includes('d.trujillo') || userEmail.includes('d4r005');
-    if (!isAdmin && user?.role !== 'supervisor') return;
+    const isAdmin = user?.role === 'admin' || user?.role === 'supervisor' ||
+                    ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+    if (!isAdmin) return;
 
     try {
       const data = await apiCall<Inspection[]>('/inspections?scope=all&summary=true', { token });
@@ -143,31 +146,21 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     const queue = await getQueue();
     if (queue.length === 0) return;
 
-    console.log(`Syncing queue with ${queue.length} items...`);
     const remaining: SyncItem[] = [];
-
     for (const item of queue) {
       try {
-        await apiCall(item.endpoint, {
-          method: item.method,
-          body: item.payload,
-          token
-        });
+        await apiCall(item.endpoint, { method: item.method, body: item.payload, token });
       } catch (err) {
-        console.error(`Failed to sync item ${item.id}`, err);
         remaining.push(item);
       }
     }
-
     await setQueue(remaining);
     await refresh();
   }, [token, refresh, getQueue, setQueue]);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
-    const unsub = NetInfo.addEventListener((state) => {
-      setIsOnline(!!state.isConnected);
-    });
+    const unsub = NetInfo.addEventListener((state) => { setIsOnline(!!state.isConnected); });
     return () => unsub();
   }, []);
 
@@ -180,29 +173,17 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     }
     (async () => {
       const cached = await AsyncStorage.getItem(CACHE_KEY);
-      if (cached) {
-        try { setInspections(JSON.parse(cached)); } catch {}
-      }
+      if (cached) { try { setInspections(JSON.parse(cached)); } catch {} }
       const queue = await getQueue();
       setPendingCount(queue.length);
       await refresh();
-      if (user?.role === 'supervisor' || user?.role === 'admin') await refreshAll();
+      await refreshAll();
     })();
   }, [token, user?.role, refresh, refreshAll, getQueue]);
 
   useEffect(() => {
     if (isOnline && token && pendingCount > 0) syncQueue();
   }, [isOnline, token, pendingCount, syncQueue]);
-
-  // Real-time refresh
-  useEffect(() => {
-    if (!token) return;
-    const interval = setInterval(() => {
-      refresh();
-      if (user?.role === 'supervisor' || user?.role === 'admin') refreshAll();
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [token, user?.role, refresh, refreshAll]);
 
   const addToQueue = useCallback(async (item: SyncItem) => {
     const queue = await getQueue();
@@ -213,7 +194,6 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   const saveInspection = useCallback(async (payload: InspectionPayload): Promise<any> => {
     const client_uuid = payload.client_uuid || uuid();
     const full = { ...payload, client_uuid, fecha_hora: payload.fecha_hora || new Date().toISOString() };
-
     if (isOnline) {
       try {
         const res = await apiCall('/inspections', { method: 'POST', body: full, token });
@@ -221,10 +201,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
         return res;
       } catch (err) {}
     }
-
     await addToQueue({ id: client_uuid, type: 'inspection', method: 'POST', endpoint: '/inspections', payload: full });
-
-    // Add to local cache for visibility
     const pending: Inspection = {
       ...full, id: client_uuid, user_id: user?.id || 'offline',
       created_at: new Date().toISOString(),
@@ -238,47 +215,27 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
 
   const saveVehicleRecord = useCallback(async (payload: any): Promise<any> => {
     const tempId = uuid();
-    if (isOnline) {
-      try {
-        const res = await apiCall('/vehicle-records', { method: 'POST', body: payload, token });
-        return res;
-      } catch (err) {}
-    }
+    if (isOnline) { try { return await apiCall('/vehicle-records', { method: 'POST', body: payload, token }); } catch (err) {} }
     await addToQueue({ id: tempId, type: 'vehicle_record', method: 'POST', endpoint: '/vehicle-records', payload });
     return { id: tempId, _offline: true, entry: payload };
   }, [token, isOnline, addToQueue]);
 
   const saveShippingTicket = useCallback(async (payload: any): Promise<any> => {
     const tempId = uuid();
-    if (isOnline) {
-      try {
-        const res = await apiCall('/shipping-tickets', { method: 'POST', body: payload, token });
-        return res;
-      } catch (err) {}
-    }
+    if (isOnline) { try { return await apiCall('/shipping-tickets', { method: 'POST', body: payload, token }); } catch (err) {} }
     await addToQueue({ id: tempId, type: 'shipping_ticket', method: 'POST', endpoint: '/shipping-tickets', payload });
     return { id: tempId, _offline: true, ...payload };
   }, [token, isOnline, addToQueue]);
 
   const patchVehicleExit = useCallback(async (id: string, payload: any): Promise<any> => {
-    if (isOnline) {
-      try {
-        const res = await apiCall(`/vehicle-records/${id}/exit`, { method: 'PATCH', body: payload, token });
-        return res;
-      } catch (err) {}
-    }
+    if (isOnline) { try { return await apiCall(`/vehicle-records/${id}/exit`, { method: 'PATCH', body: payload, token }); } catch (err) {} }
     await addToQueue({ id, type: 'vehicle_exit', method: 'PATCH', endpoint: `/vehicle-records/${id}/exit`, payload });
     return { id, _offline: true, exit: payload };
   }, [token, isOnline, addToQueue]);
 
-  const getById = useCallback(
-    (id: string) => {
-      const local = inspections.find((i) => i.id === id);
-      if (local) return local;
-      return allInspections.find((i) => i.id === id);
-    },
-    [inspections, allInspections]
-  );
+  const getById = useCallback((id: string) => {
+    return inspections.find((i) => i.id === id) || allInspections.find((i) => i.id === id);
+  }, [inspections, allInspections]);
 
   const approveInspection = useCallback(async (id: string, note: string, name: string, signature: string) => {
     if (!token) return;
