@@ -158,8 +158,20 @@ export default function Supervisor() {
       }, 'es');
 
       if (Platform.OS === 'web') {
-        // En web, Print.printAsync es mucho más fiable que printToFileAsync para evitar capturar el DOM de la app
-        await Print.printAsync({ html });
+        // SOLUCIÓN DEFINITIVA PARA WEB: Inyectar en un iframe oculto para imprimir solo el reporte
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
+        iframe.contentDocument?.open();
+        iframe.contentDocument?.write(html);
+        iframe.contentDocument?.close();
+
+        // Dar un pequeño tiempo para que carguen las firmas/fotos base64
+        setTimeout(() => {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          document.body.removeChild(iframe);
+        }, 500);
       } else {
         const { uri } = await Print.printToFileAsync({ html, base64: false });
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Reporte Consolidado' });
