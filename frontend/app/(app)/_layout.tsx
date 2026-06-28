@@ -62,7 +62,7 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
-        name="caseta"
+        name="caseta/index"
         options={{
           title: t('caseta'),
           tabBarIcon: ({ color, size }) => <Ionicons name="business-sharp" size={size} color={color} />,
@@ -76,7 +76,7 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
-        name="embarque"
+        name="embarque/index"
         options={{
           title: t('embarque'),
           tabBarIcon: ({ color, size }) => <Ionicons name="cube-sharp" size={size} color={color} />,
@@ -91,15 +91,12 @@ export default function AppLayout() {
         }}
       />
 
-      {/* Rutas ocultas de la barra de navegación */}
       <Tabs.Screen name="chat" options={{ href: null }} />
       <Tabs.Screen name="usuarios" options={{ href: null }} />
       <Tabs.Screen name="analitica" options={{ href: null }} />
       <Tabs.Screen name="perfil" options={{ href: null }} />
       <Tabs.Screen name="caseta/[id]" options={{ href: null }} />
       <Tabs.Screen name="embarque/[id]" options={{ href: null }} />
-      <Tabs.Screen name="caseta/index" options={{ href: null }} />
-      <Tabs.Screen name="embarque/index" options={{ href: null }} />
     </Tabs>
   );
 }

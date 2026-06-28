@@ -40,15 +40,8 @@ export default function Supervisor() {
     if (!token) return;
     setLoading(true);
     try {
-      // Cargamos por separado para asegurar que si uno falla, no bloquee al resto
-      const recordsPromise = apiCall<any[]>('/vehicle-records', { token }).catch(e => {
-        console.warn("Records load failed:", e);
-        return [];
-      });
-      const ticketsPromise = apiCall<any[]>('/shipping-tickets', { token }).catch(e => {
-        console.warn("Tickets load failed:", e);
-        return [];
-      });
+      const recordsPromise = apiCall<any[]>('/vehicle-records', { token }).catch(() => []);
+      const ticketsPromise = apiCall<any[]>('/shipping-tickets', { token }).catch(() => []);
 
       const [records, tickets] = await Promise.all([recordsPromise, ticketsPromise]);
       await refreshInspections();
@@ -56,7 +49,7 @@ export default function Supervisor() {
       setAllRecords(Array.isArray(records) ? records : []);
       setAllTickets(Array.isArray(tickets) ? tickets : []);
     } catch (e: any) {
-      console.error("Master Panel general error", e);
+      console.error("Master Panel load error", e);
     } finally {
       setLoading(false);
     }
@@ -66,10 +59,37 @@ export default function Supervisor() {
 
   const filteredData = useMemo(() => {
     const q = query.toLowerCase().trim();
+    const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
+
     let source: any[] = [];
-    if (activeTab === 'caseta') source = allRecords;
-    else if (activeTab === 'inspeccion') source = allInspections;
-    else if (activeTab === 'embarque') source = allTickets;
+    if (activeTab === 'inspeccion') {
+      source = allInspections;
+    } else if (activeTab === 'embarque') {
+      source = allTickets;
+    } else {
+      // PESTAÑA CASETA: Mezclamos registros reales con inspecciones huérfanas para trazabilidad total
+      const recordsPlates = new Set(allRecords.map(r => normalize(r.entry?.placas_unidad)));
+
+      // Crear "registros virtuales" para inspecciones que no tienen un registro de caseta
+      const orphanInsps = allInspections.filter(insp => !recordsPlates.has(normalize(insp.placas_unidad)));
+      const virtualRecords = orphanInsps.map(insp => ({
+        id: `virtual-${insp.id}`,
+        status: insp.approval_status === 'aprobada' ? 'inspeccionado' : 'entrada',
+        created_at: insp.created_at,
+        entry: {
+          placas_unidad: insp.placas_unidad,
+          chofer_nombre: insp.inspector_nombre, // Fallback al inspector si no hay chofer
+          compania_transporte: insp.compania_transportista,
+          fecha_entrada: insp.created_at,
+          numero_caja: insp.numero_trailer,
+          sello_entrada: insp.numero_precinto
+        },
+        inspection_id: insp.id,
+        _is_virtual: true
+      }));
+
+      source = [...allRecords, ...virtualRecords];
+    }
 
     if (!q) return source;
 
@@ -82,16 +102,20 @@ export default function Supervisor() {
     });
   }, [activeTab, query, allRecords, allInspections, allTickets]);
 
-  const handlePdf = async (recordId: string, plates: string) => {
-    setReportLoading(recordId);
+  const handlePdf = async (record: any) => {
+    setReportLoading(record.id);
     try {
-      const fullRecord = await apiCall<any>(`/vehicle-records/${recordId}`, { token });
       const norm = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
+      const plates = record.placas_unidad || record.entry?.placas_unidad;
       const normPlates = norm(plates);
+
+      // Si es virtual, ya tenemos el ID de inspección
+      let fullRecord = record._is_virtual ? record : await apiCall<any>(`/vehicle-records/${record.id}`, { token });
 
       const matchTicket = (allTickets || []).find(tk => norm(tk.placas_unidad) === normPlates);
       const matchInsps = (allInspections || []).filter(i =>
-        i.record_id === recordId ||
+        i.record_id === record.id ||
+        i.id === record.inspection_id ||
         (Array.isArray(fullRecord.inspection_ids) && fullRecord.inspection_ids.includes(i.id)) ||
         norm(i.placas_unidad) === normPlates
       );
@@ -99,7 +123,7 @@ export default function Supervisor() {
       const html = generateConsolidatedReportHtml({
         inspection: matchInsps[0] || { points: [] } as any,
         inspections: matchInsps,
-        caseta: fullRecord,
+        caseta: fullRecord._is_virtual ? null : fullRecord, // Si es virtual, no hay datos de caseta reales
         embarque: matchTicket
       });
 
@@ -157,7 +181,7 @@ export default function Supervisor() {
             item={item}
             type={activeTab}
             t={t}
-            onPdf={() => handlePdf(item.id, item.placas_unidad || item.entry?.placas_unidad)}
+            onPdf={() => handlePdf(item)}
             loadingPdf={reportLoading === item.id}
             router={router}
             records={allRecords}
@@ -178,23 +202,29 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router, records, tickets,
   const subtitle = item.inspector_nombre || item.entry?.chofer_nombre || item.cliente || '-';
 
   const relatedRecord = type === 'caseta' ? item : records.find((r: any) => normalize(r.entry?.placas_unidad) === normPlates);
-  const isFull = relatedRecord?.entry?.tipo_unidad === 'full';
+  const isFull = (relatedRecord?.entry?.tipo_unidad === 'full') || (item.inspection_type === '19_puntos' && item.numero_trailer?.includes('-2'));
 
   const relatedInsps = inspections.filter((i: any) =>
-    i.record_id === relatedRecord?.id || normalize(i.placas_unidad) === normPlates
+    i.record_id === relatedRecord?.id ||
+    i.id === item.inspection_id ||
+    normalize(i.placas_unidad) === normPlates
   );
 
   const hasTicket = type === 'embarque' || tickets.some((tk: any) => normalize(tk.placas_unidad) === normPlates);
   const inspectionComplete = isFull ? relatedInsps.length >= 2 : relatedInsps.length >= 1;
 
   const steps = {
-    entry: !!relatedRecord,
+    entry: !!relatedRecord && !relatedRecord._is_virtual,
     inspection: inspectionComplete,
     shipping: hasTicket,
     exit: relatedRecord?.status === 'salida'
   };
 
   const navigateToDetail = () => {
+    if (item._is_virtual) {
+      router.push(`/inspection/${item.inspection_id}`);
+      return;
+    }
     const targetId = relatedRecord?.id || item.id;
     if (type === 'caseta' || relatedRecord) router.push(`/caseta/${targetId}`);
     else if (type === 'embarque') router.push(`/embarque/${item.id}`);
@@ -204,7 +234,7 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router, records, tickets,
   return (
     <View style={styles.row}>
       <View style={{ flex: 1 }}>
-        <Text style={styles.rowTitle}>{plates} {isFull ? '(FULL)' : ''}</Text>
+        <Text style={styles.rowTitle}>{plates} {isFull ? '(FULL)' : ''} {item._is_virtual ? '(HISTÓRICO)' : ''}</Text>
         <Text style={styles.rowSub}>{subtitle}</Text>
         <View style={{ marginVertical: 8 }}>
           <ProcessTracker steps={steps} compact />
