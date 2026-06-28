@@ -88,7 +88,7 @@ export default function AppLayout() {
         }}
       />
 
-      {/* RUTAS TÉCNICAS OCULTAS - PREVIENE TRIÁNGULOS EN LA BARRA */}
+      {/* RUTAS TÉCNICAS OCULTAS */}
       <Tabs.Screen name="chat" options={{ href: null }} />
       <Tabs.Screen name="usuarios" options={{ href: null }} />
       <Tabs.Screen name="analitica" options={{ href: null }} />

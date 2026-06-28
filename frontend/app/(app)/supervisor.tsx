@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { apiCall } from '@/src/api/client';
-import { colors, spacing } from '@/src/constants/theme';
+import { colors, spacing, typography } from '@/src/constants/theme';
 import { generateConsolidatedReportHtml } from '@/src/utils/reportGenerator';
 import ProcessTracker from '@/src/components/ProcessTracker';
 import MainHeader from '@/src/components/MainHeader';
@@ -57,7 +57,7 @@ export default function Supervisor() {
     setSyncing(true);
     try {
       const res = await apiCall<any>('/admin/repair-links', { method: 'POST', token });
-      Alert.alert("Auditoría Finalizada", `Se han reconstruido ${res.reconstructed} registros y vinculado un total de ${res.total_records} folios.`);
+      Alert.alert("Auditoría Finalizada", `Se han recuperado ${res.reconstructed} registros y vinculado un total de ${res.total_records} folios.`);
       await fetchEverything();
     } catch (e: any) {
       Alert.alert("Error", e.message);
@@ -68,32 +68,31 @@ export default function Supervisor() {
 
   const filteredData = useMemo(() => {
     const q = query.toLowerCase().trim();
+    const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
     let source: any[] = [];
 
+    // TRAZABILIDAD COMPLETA: Usamos las inspecciones como base para asegurar que nada se pierda
+    const recordsPlates = new Set(allRecords.map(r => normalize(r.entry?.placas_unidad)));
+    const ticketPlates = new Set(allTickets.map(tk => normalize(tk.placas_unidad)));
+
     if (activeTab === 'caseta') {
-      // Unir registros de caseta con inspecciones que no tienen caseta aún
-      const regPlates = new Set(allRecords.map(r => r.entry?.placas_unidad?.toUpperCase()));
       const virtuals = allInspections
-        .filter(i => !regPlates.has(i.placas_unidad?.toUpperCase()))
+        .filter(i => !recordsPlates.has(normalize(i.placas_unidad)))
         .map(i => ({
-           id: i.id,
-           _is_virtual: true,
-           status: 'inspeccionado',
-           created_at: i.created_at,
-           entry: {
-             placas_unidad: i.placas_unidad,
-             chofer_nombre: i.inspector_nombre || 'RECUPERADO',
-             compania_transporte: i.compania_transportista || 'HISTÓRICO',
-             fecha_entrada: i.created_at,
-             numero_caja: i.numero_trailer,
-             sello_entrada: i.numero_precinto
-           }
+           id: i.id, _is_virtual: true, status: 'inspeccionado', created_at: i.created_at,
+           entry: { placas_unidad: i.placas_unidad, chofer_nombre: i.inspector_nombre, compania_transporte: i.compania_transportista, fecha_entrada: i.created_at, numero_caja: i.numero_trailer, sello_entrada: i.numero_precinto }
         }));
       source = [...allRecords, ...virtuals];
     } else if (activeTab === 'inspeccion') {
       source = allInspections;
-    } else {
-      source = allTickets;
+    } else if (activeTab === 'embarque') {
+      // TRAZABILIDAD EN EMBARQUE: Mostrar tickets reales + registros que no tienen ticket aún
+      const pendingShipping = allInspections
+        .filter(i => !ticketPlates.has(normalize(i.placas_unidad)))
+        .map(i => ({
+          id: `p-${i.id}`, _is_pending: true, placas_unidad: i.placas_unidad, cliente: 'PENDIENTE DE CARGA', operador: i.inspector_nombre, created_at: i.created_at
+        }));
+      source = [...allTickets, ...pendingShipping];
     }
 
     if (!q) return source;
@@ -217,13 +216,13 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router, records, tickets,
   const isFull = (relatedRecord?.entry?.tipo_unidad === 'full') || (item.inspection_type === '19_puntos' && item.numero_trailer?.includes('-2'));
 
   const relatedInsps = inspections.filter((i: any) => i.record_id === relatedRecord?.id || normalize(i.placas_unidad) === normPlates);
-  const hasTicket = type === 'embarque' || tickets.some((tk: any) => normalize(tk.placas_unidad) === normPlates);
+  const matchTicket = tickets.find((tk: any) => normalize(tk.placas_unidad) === normPlates);
   const inspectionComplete = isFull ? relatedInsps.length >= 2 : relatedInsps.length >= 1;
 
   const steps = {
     entry: !!relatedRecord || item._is_virtual,
     inspection: inspectionComplete,
-    shipping: hasTicket,
+    shipping: !!matchTicket,
     exit: relatedRecord?.status?.toLowerCase() === 'salida' || relatedRecord?.status?.toLowerCase() === 'salió'
   };
 
@@ -232,7 +231,7 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router, records, tickets,
   return (
     <View style={styles.row}>
       <View style={{ flex: 1 }}>
-        <Text style={styles.rowTitle}>{plates} {item.numero_trailer ? `· ${item.numero_trailer}` : ''}</Text>
+        <Text style={styles.rowTitle}>{plates} {item.numero_trailer ? `· ${item.numero_trailer}` : ''} {item._is_virtual || item._is_pending ? '(HISTÓRICO)' : ''}</Text>
         <Text style={styles.rowSub}>{subtitle} {company !== '-' ? `· ${company}` : ''}</Text>
 
         <View style={{ marginVertical: 10 }}>
