@@ -88,15 +88,13 @@ export default function AppLayout() {
         }}
       />
 
-      {/* RUTAS TÉCNICAS OCULTAS */}
+      {/* Ocultar explícitamente rutas que no deben estar en la barra */}
       <Tabs.Screen name="chat" options={{ href: null }} />
       <Tabs.Screen name="usuarios" options={{ href: null }} />
       <Tabs.Screen name="analitica" options={{ href: null }} />
       <Tabs.Screen name="perfil" options={{ href: null }} />
       <Tabs.Screen name="caseta/[id]" options={{ href: null }} />
       <Tabs.Screen name="embarque/[id]" options={{ href: null }} />
-      <Tabs.Screen name="caseta/index" options={{ href: null }} />
-      <Tabs.Screen name="embarque/index" options={{ href: null }} />
     </Tabs>
   );
 }

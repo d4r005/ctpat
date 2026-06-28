@@ -69,30 +69,40 @@ export default function Supervisor() {
   const filteredData = useMemo(() => {
     const q = query.toLowerCase().trim();
     const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
+
+    // Asegurar que sean arrays para evitar fallos de renderizado
+    const safeRecords = Array.isArray(allRecords) ? allRecords : [];
+    const safeTickets = Array.isArray(allTickets) ? allTickets : [];
+    const safeInsps = Array.isArray(allInspections) ? allInspections : [];
+
     let source: any[] = [];
 
-    // TRAZABILIDAD COMPLETA: Usamos las inspecciones como base para asegurar que nada se pierda
-    const recordsPlates = new Set(allRecords.map(r => normalize(r.entry?.placas_unidad)));
-    const ticketPlates = new Set(allTickets.map(tk => normalize(tk.placas_unidad)));
+    const recordsPlates = new Set(safeRecords.map(r => normalize(r.entry?.placas_unidad)));
+    const ticketPlates = new Set(safeTickets.map(tk => normalize(tk.placas_unidad)));
 
     if (activeTab === 'caseta') {
-      const virtuals = allInspections
+      const virtuals = safeInsps
         .filter(i => !recordsPlates.has(normalize(i.placas_unidad)))
         .map(i => ({
            id: i.id, _is_virtual: true, status: 'inspeccionado', created_at: i.created_at,
            entry: { placas_unidad: i.placas_unidad, chofer_nombre: i.inspector_nombre, compania_transporte: i.compania_transportista, fecha_entrada: i.created_at, numero_caja: i.numero_trailer, sello_entrada: i.numero_precinto }
         }));
-      source = [...allRecords, ...virtuals];
+      source = [...safeRecords, ...virtuals];
     } else if (activeTab === 'inspeccion') {
-      source = allInspections;
+      source = safeInsps;
     } else if (activeTab === 'embarque') {
-      // TRAZABILIDAD EN EMBARQUE: Mostrar tickets reales + registros que no tienen ticket aún
-      const pendingShipping = allInspections
+      // TRAZABILIDAD EN EMBARQUE: Mostrar tickets reales + inspecciones pendientes de ticket
+      const pendingShipping = safeInsps
         .filter(i => !ticketPlates.has(normalize(i.placas_unidad)))
         .map(i => ({
-          id: `p-${i.id}`, _is_pending: true, placas_unidad: i.placas_unidad, cliente: 'PENDIENTE DE CARGA', operador: i.inspector_nombre, created_at: i.created_at
+          id: `p-${i.id}`,
+          _is_pending: true,
+          placas_unidad: i.placas_unidad,
+          cliente: 'PENDIENTE DE DESPACHO',
+          operador: i.inspector_nombre,
+          created_at: i.created_at
         }));
-      source = [...allTickets, ...pendingShipping];
+      source = [...safeTickets, ...pendingShipping];
     }
 
     if (!q) return source;
