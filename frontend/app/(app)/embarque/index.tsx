@@ -24,18 +24,6 @@ interface Ticket {
 
 import MainHeader from '@/src/components/MainHeader';
 
-interface Ticket {
-  id: string;
-  almacenista: string;
-  cliente: string;
-  operador: string;
-  placas_unidad: string;
-  numero_caja: string;
-  numero_sello: string;
-  fecha: string;
-  created_at: string;
-}
-
 export default function Embarque() {
   const { token, user } = useAuth();
   const { t } = useTranslation();
@@ -51,7 +39,6 @@ export default function Embarque() {
     try {
       const [ticketsData, recordsData] = await Promise.all([
         apiCall<Ticket[]>('/shipping-tickets', { token }),
-        // Traer registros para vinculación (sin filtrar por salida para que el tracker funcione)
         apiCall<any[]>('/vehicle-records', { token })
       ]);
 
@@ -70,13 +57,11 @@ export default function Embarque() {
 
     return vehicleRecords.filter(r => {
       if (r.status === 'salida') return false;
-
-      // LOGICA: Si es FULL o DESCARGA, NO requiere Ticket de Embarque
       const isFull = r.entry?.tipo_unidad === 'full';
       const isDescarga = r.entry?.condicion_carga === 'descarga';
       if (isFull || isDescarga) return false;
 
-      const hasInspection = !!r.inspection_id || r.status === 'inspeccionado';
+      const hasInspection = !!r.inspection_id || (r.inspection_ids && r.inspection_ids.length > 0) || r.status === 'inspeccionado';
       const plates = normalize(r.entry?.placas_unidad);
       if (!plates) return false;
       const hasTicket = tickets.some(t => {
@@ -99,7 +84,6 @@ export default function Embarque() {
       const isFull = r.entry?.tipo_unidad === 'full';
       const isDescarga = r.entry?.condicion_carga === 'descarga';
 
-      // Si es FULL o DESCARGA, está listo para salida si tiene inspección(es)
       if (isFull || isDescarga) {
         const doneIds = Array.isArray(r.inspection_ids) ? r.inspection_ids : (r.inspection_id ? [r.inspection_id] : []);
         if (isFull) return doneIds.length >= 2;
@@ -148,7 +132,7 @@ export default function Embarque() {
                 onPress={() => {
                   const params = new URLSearchParams({
                     record_id: r.id,
-                    inspection_id: r.inspection_id || '',
+                    inspection_id: r.inspection_id || (r.inspection_ids ? r.inspection_ids[0] : ''),
                     compania: r.entry.compania_transporte,
                     placas: r.entry.placas_unidad,
                     trailer: r.entry.numero_caja,
@@ -236,7 +220,7 @@ export default function Embarque() {
 
     const steps = {
       entry: !!relatedRecord,
-      inspection: !!(relatedRecord?.inspection_id || relatedRecord?.inspection_ids?.length || relatedRecord?.status === 'inspeccionado'),
+      inspection: !!(relatedRecord?.inspection_id || (relatedRecord?.inspection_ids && relatedRecord.inspection_ids.length > 0) || relatedRecord?.status === 'inspeccionado'),
       shipping: true,
       exit: relatedRecord?.status === 'salida'
     };

@@ -62,14 +62,14 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
-        name="caseta"
+        name="caseta/index"
         options={{
           title: t('caseta'),
           tabBarIcon: ({ color, size }) => <Ionicons name="business" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="embarque"
+        name="embarque/index"
         options={{
           title: t('embarque'),
           tabBarIcon: ({ color, size }) => <Ionicons name="cube" size={size} color={color} />,
@@ -126,6 +126,8 @@ export default function AppLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen name="caseta" options={{ href: null }} />
+      <Tabs.Screen name="embarque" options={{ href: null }} />
     </Tabs>
   );
 }
