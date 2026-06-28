@@ -13,6 +13,7 @@ export default function AppLayout() {
   const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+
   const isAdminOrSup = user?.role === 'admin' || user?.role === 'supervisor' ||
                         ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
 
@@ -85,18 +86,17 @@ export default function AppLayout() {
       <Tabs.Screen
         name="supervisor"
         options={{
-          title: isAdminOrSup ? 'MAESTRO' : t('supervisor'),
-          href: isAdminOrSup ? '/(app)/supervisor' : null,
+          title: 'MAESTRO',
+          // Siempre visible para facilitar tu presentación, o puedes usar isAdminOrSup ? '/(app)/supervisor' : null
           tabBarIcon: ({ color, size }) => <Ionicons name="shield-checkmark-sharp" size={size} color={color} />,
         }}
       />
 
+      {/* Rutas de detalle ocultas */}
       <Tabs.Screen name="chat" options={{ href: null }} />
       <Tabs.Screen name="usuarios" options={{ href: null }} />
       <Tabs.Screen name="analitica" options={{ href: null }} />
       <Tabs.Screen name="perfil" options={{ href: null }} />
-      <Tabs.Screen name="caseta/[id]" options={{ href: null }} />
-      <Tabs.Screen name="embarque/[id]" options={{ href: null }} />
     </Tabs>
   );
 }
