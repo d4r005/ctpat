@@ -336,29 +336,34 @@ class ShippingTicket(BaseModel):
 
 # ========== Ayudantes de Procesamiento ==========
 def add_watermark(base64_str: str) -> str:
-    """Añade marca de agua y redimensiona para optimizar peso del email"""
+    """Añade marca de agua y redimensiona agresivamente para emails ligeros"""
     if not base64_str or not isinstance(base64_str, str) or not base64_str.startswith('data:image'):
         return base64_str
     try:
         header, encoded = base64_str.split(",", 1) if "," in base64_str else ("data:image/jpeg;base64", base64_str)
         img = Image.open(io.BytesIO(base64.b64decode(encoded)))
-        if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            background.paste(img, mask=img.split()[3] if img.mode == 'RGBA' else None)
-            img = background
-        elif img.mode != 'RGB': img = img.convert('RGB')
-        max_width = 600
+        if img.mode != 'RGB': img = img.convert('RGB')
+
+        # Redimensión agresiva para correos ligeros (500px máx)
+        max_width = 500
         if img.width > max_width:
             ratio = max_width / float(img.width)
             img = img.resize((max_width, int(float(img.height) * ratio)), Image.LANCZOS)
+
         draw = ImageDraw.Draw(img)
         text = f"SRIUC | {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-        draw.rectangle([0, img.size[1] - 25, img.size[0], img.size[1]], fill=(0, 0, 0))
-        draw.text((10, img.size[1] - 20), text, fill=(255, 255, 255))
+        # Ajuste de dibujo de marca de agua
+        width, height = img.size
+        draw.rectangle([0, height - 20, width, height], fill=(0, 0, 0))
+        draw.text((10, height - 16), text, fill=(255, 255, 255))
+
         buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=50, optimize=True)
+        # Calidad bajada al 40% para asegurar el envío rápido
+        img.save(buf, format="JPEG", quality=40, optimize=True)
         return f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode()}"
     except Exception as e:
+        logger.error(f"Error en watermark: {e}")
+        return base64_str
         logger.error(f"Error en watermark: {e}")
         return base64_str
 
@@ -670,8 +675,10 @@ async def _trigger_automatic_report(rec_id: str):
     if all([h, u, pw]):
         m = MIMEMultipart(); m["From"], m["To"], m["Subject"] = u, os.environ.get("REPORT_RECIPIENT", u), f"REPORTE CONSOLIDADO - {pl}"
         m.attach(MIMEText(html, "html"))
-        try: await aiosmtplib.send(m, hostname=h, port=587, username=u, password=pw, start_tls=True)
-        except: pass
+    try:
+        await aiosmtplib.send(m, hostname=h, port=587, username=u, password=pw, start_tls=True, timeout=90)
+    except Exception as e:
+        logger.error(f"Error SMTP: {e}")
     return True
 
 @api_router.get("/activities")
