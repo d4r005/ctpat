@@ -20,6 +20,7 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 import jwt as pyjwt
 import aiosmtplib
+import requests
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -286,7 +287,7 @@ async def me(u: Dict[str, Any] = Depends(get_current_user)): return UserPublic(*
 # --- Caseta ---
 @api_router.get("/vehicle-records", response_model=List[VehicleRecord])
 async def list_records(u: Dict[str, Any] = Depends(get_current_user)):
-    docs = await db.vehicle_records.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    docs = await db.vehicle_records.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
     res = []
     for d in docs: res.append(VehicleRecord(**(await _ensure_record_links(d))))
     return res
@@ -340,7 +341,7 @@ async def create_inspection(body: InspectionCreate, u: Dict[str, Any] = Depends(
 @api_router.get("/inspections", response_model=List[Inspection])
 async def list_insps(u: Dict[str, Any] = Depends(get_current_user), scope: str = "mine"):
     filt = {} if scope == "all" and (u["role"] in ["supervisor", "admin"] or is_admin(u)) else {"user_id": u["id"]}
-    docs = await db.inspections.find(filt, {"_id": 0}).sort("created_at", -1).to_list(100)
+    docs = await db.inspections.find(filt, {"_id": 0}).sort("created_at", -1).to_list(2000)
     return [Inspection(**d) for d in docs]
 
 @api_router.get("/inspections/{insp_id}", response_model=Inspection)
@@ -370,7 +371,7 @@ async def create_ticket(body: ShippingTicketCreate, u: Dict[str, Any] = Depends(
 
 @api_router.get("/shipping-tickets", response_model=List[Dict[str, Any]])
 async def list_tickets(u: Dict[str, Any] = Depends(get_current_user)):
-    return await db.shipping_tickets.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return await db.shipping_tickets.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
 
 @api_router.get("/shipping-tickets/{id}")
 async def get_ticket(id: str, u: Dict[str, Any] = Depends(get_current_user)):
@@ -388,10 +389,74 @@ async def update_ticket(id: str, body: Dict[str, Any], u: Dict[str, Any] = Depen
     await db.shipping_tickets.update_one({"id": id}, {"$set": body})
     return {"ok": True}
 
+# ========== Sincronización Externa (Google Sheets / Drive) ==========
+
+async def sync_to_google_sheets(tipo: str, payload: Any):
+    url = os.environ.get("GOOGLE_SHEET_WEBHOOK_URL")
+    if not url: return
+    try:
+        data = payload if isinstance(payload, dict) else payload.dict()
+        data["webhook_type"] = tipo
+        # Enviar de forma asíncrona usando executor para requests
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: requests.post(url, json=data, timeout=10))
+    except Exception as e:
+        logger.error(f"Error syncing to Google Sheets: {e}")
+
+async def _trigger_automatic_report(record_id: str):
+    url = os.environ.get("GOOGLE_SHEET_WEBHOOK_URL")
+    if not url: return
+    try:
+        # 1. Obtener registro completo
+        rec = await db.vehicle_records.find_one({"id": record_id}, {"_id": 0})
+        if not rec: return
+
+        # 2. Obtener inspecciones ligadas
+        insps = []
+        insp_ids = rec.get("inspection_ids", [])
+        if rec.get("inspection_id"): insp_ids.append(rec["inspection_id"])
+
+        for iid in list(set(insp_ids)):
+            insp = await db.inspections.find_one({"id": iid}, {"_id": 0})
+            if insp: insps.append(insp)
+
+        # 3. Obtener Ticket
+        ticket = None
+        if rec.get("shipping_ticket_id"):
+            ticket = await db.shipping_tickets.find_one({"id": rec["shipping_ticket_id"]}, {"_id": 0})
+
+        payload = {
+            "webhook_type": "consolidated_report",
+            "caseta": rec,
+            "inspections": insps,
+            "embarque": ticket,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: requests.post(url, json=payload, timeout=15))
+    except Exception as e:
+        logger.error(f"Error triggering automatic report: {e}")
+
+# --- Admin / Reparación ---
+@api_router.post("/admin/repair-links")
+async def repair_links(u: Dict[str, Any] = Depends(get_current_user)):
+    if not is_admin(u): raise HTTPException(403)
+
+    logger.info("Iniciando reparación masiva de vínculos...")
+    records = await db.vehicle_records.find().to_list(2000)
+    count = 0
+
+    for r in records:
+        updated = await _ensure_record_links(r)
+        if updated: count += 1
+
+    return {"status": "success", "processed": len(records), "updated": count}
+
 # --- Actividades ---
 @api_router.get("/activities")
 async def acts(u: Dict[str, Any] = Depends(get_current_user)):
-    return await db.activities.find({}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return await db.activities.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
 
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])

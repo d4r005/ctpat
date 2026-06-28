@@ -33,6 +33,7 @@ export default function Supervisor() {
   const [allRecords, setAllRecords] = useState<any[]>([]);
   const [allTickets, setAllTickets] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [query, setQuery] = useState('');
   const [reportLoading, setReportLoading] = useState<string | null>(null);
 
@@ -54,6 +55,20 @@ export default function Supervisor() {
       setLoading(false);
     }
   }, [token, refreshInspections]);
+
+  const handleRepair = async () => {
+    if (!token) return;
+    setSyncing(true);
+    try {
+      const res = await apiCall<any>('/admin/repair-links', { method: 'POST', token });
+      Alert.alert("Auditoría Finalizada", `Se procesaron ${res.processed} registros y se actualizaron ${res.updated} vínculos históricos.`);
+      await fetchEverything();
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   useFocusEffect(useCallback(() => { fetchEverything(); }, [fetchEverything]));
 
@@ -163,12 +178,21 @@ export default function Supervisor() {
             </Pressable>
           ))}
         </View>
-        <TextInput
-          style={styles.search}
-          placeholder={t('buscar_placeholder')}
-          value={query}
-          onChangeText={setQuery}
-        />
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <TextInput
+            style={[styles.search, { flex: 1 }]}
+            placeholder={t('buscar_placeholder')}
+            value={query}
+            onChangeText={setQuery}
+          />
+          <Pressable
+            onPress={handleRepair}
+            disabled={syncing}
+            style={[styles.tab, { flex: 0, width: 60, padding: 0, justifyContent: 'center', backgroundColor: colors.brandSecondary, borderColor: colors.brandSecondary }]}
+          >
+            {syncing ? <ActivityIndicator color="#FFF" /> : <Ionicons name="build-outline" size={24} color="#FFF" />}
+          </Pressable>
+        </View>
       </View>
 
       <FlatList
