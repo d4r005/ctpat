@@ -39,6 +39,7 @@ export default function Nueva() {
   const [selectedType, setSelectedType] = useState<any>(params.type || null);
   const [pendingInYard, setPendingInYard] = useState<any[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
+  const [unitFilter, setUnitFilter] = useState<'todos' | 'sencillo' | 'full'>('todos');
 
   const fetchPending = async () => {
     if (!token) return;
@@ -279,18 +280,40 @@ export default function Nueva() {
   };
 
   if (showTypeSelector) {
-    return (
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <MainHeader showBack title="NAF" subtitle={t('nueva_inspeccion').toUpperCase()} />
+    const filteredPending = useMemo(() => {
+    if (unitFilter === 'todos') return pendingInYard;
+    return pendingInYard.filter(r => r.entry?.tipo_unidad === unitFilter);
+  }, [pendingInYard, unitFilter]);
 
-        <ScrollView contentContainerStyle={styles.selectorContent} keyboardShouldPersistTaps="handled">
-          {pendingInYard.length > 0 && (
-            <View style={{ marginBottom: spacing.xl }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.md }}>
+  return (
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <MainHeader showBack title="NAF" subtitle={t('nueva_inspeccion').toUpperCase()} />
+
+      <ScrollView contentContainerStyle={styles.selectorContent} keyboardShouldPersistTaps="handled">
+        {pendingInYard.length > 0 && (
+          <View style={{ marginBottom: spacing.xl }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Ionicons name="time-outline" size={20} color={colors.warning} />
-                <Text style={[styles.selectorLabel, { marginBottom: 0, textAlign: 'left' }]}>{t('pendientes_patio').toUpperCase()} ({pendingInYard.length})</Text>
+                <Text style={[styles.selectorLabel, { marginBottom: 0, textAlign: 'left' }]}>{t('pendientes_patio').toUpperCase()} ({filteredPending.length})</Text>
               </View>
-              {pendingInYard.map((r) => (
+            </View>
+
+            <View style={styles.filterRow}>
+              {(['todos', 'sencillo', 'full'] as const).map((f) => (
+                <Pressable
+                  key={f}
+                  onPress={() => setUnitFilter(f)}
+                  style={[styles.filterChip, unitFilter === f && styles.filterChipActive]}
+                >
+                  <Text style={[styles.filterChipText, unitFilter === f && styles.filterChipTextActive]}>
+                    {f === 'todos' ? t('todos').toUpperCase() : f.toUpperCase()}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {filteredPending.map((r) => (
                 <Pressable
                   key={r.id}
                   style={styles.pendingCard}
@@ -794,4 +817,9 @@ const styles = StyleSheet.create({
   },
   typeTitle: { color: '#FFF', fontWeight: '900', fontSize: 18, letterSpacing: 1 },
   typeSub: { color: '#FFF', opacity: 0.8, fontSize: 12, marginTop: 2 },
+  filterRow: { flexDirection: 'row', gap: 8, marginBottom: spacing.md },
+  filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface },
+  filterChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  filterChipText: { fontSize: 10, fontWeight: '900', color: colors.muted },
+  filterChipTextActive: { color: '#FFF' },
 });

@@ -510,17 +510,14 @@ function RecordRow({ item, onEdit, onPdf, onEmail, onDelete, isAdmin, loadingPdf
           <ProcessTracker steps={steps} compact showShipping={showShipping} />
         </View>
         <View style={styles.btnRow}>
-          <Pressable onPress={onEdit} style={styles.actionBtn}>
-            <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
-            <Text style={styles.actionText}>{t('editor').toUpperCase()}</Text>
+          <Pressable onPress={onEdit} style={[styles.actionBtn, styles.iconOnlyBtn]}>
+            <Ionicons name="create-outline" size={18} color={colors.brandPrimary} />
           </Pressable>
-          <Pressable onPress={onPdf} style={[styles.actionBtn, { backgroundColor: colors.brandPrimary, paddingHorizontal: 8, borderRadius: 2 }]} disabled={loadingPdf}>
-            {loadingPdf ? <ActivityIndicator size={14} color="#FFF" /> : <Ionicons name="eye-outline" size={16} color="#FFF" />}
-            <Text style={[styles.actionText, { color: '#FFF' }]}>{t('ver_reporte_pdf').toUpperCase()}</Text>
+          <Pressable onPress={onPdf} style={[styles.actionBtn, styles.iconOnlyBtn, { backgroundColor: colors.brandPrimary }]} disabled={loadingPdf}>
+            {loadingPdf ? <ActivityIndicator size={18} color="#FFF" /> : <Ionicons name="document-text-outline" size={18} color="#FFF" />}
           </Pressable>
-          <Pressable onPress={onEmail} style={styles.actionBtn} disabled={loadingEmail}>
-            {loadingEmail ? <ActivityIndicator size={14} color={colors.brandPrimary} /> : <Ionicons name="mail-outline" size={16} color={colors.brandPrimary} />}
-            <Text style={styles.actionText}>{t('correo_electronico_btn').toUpperCase()}</Text>
+          <Pressable onPress={onEmail} style={[styles.actionBtn, styles.iconOnlyBtn]} disabled={loadingEmail}>
+            {loadingEmail ? <ActivityIndicator size={18} color={colors.brandPrimary} /> : <Ionicons name="mail-outline" size={18} color={colors.brandPrimary} />}
           </Pressable>
         </View>
         <Text style={styles.rowDate}>{new Date(e.fecha_entrada || item.created_at).toLocaleString()}</Text>
@@ -570,9 +567,8 @@ function InspectionRow({ item, onEdit, onDelete, isAdmin, t, records = [], ticke
         <View style={{ marginVertical: 4 }}>
           <ProcessTracker steps={steps} compact showShipping={showShipping} />
         </View>
-        <Pressable onPress={onEdit} style={[styles.actionBtn, { marginTop: 8 }]}>
-          <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
-          <Text style={styles.actionText}>{t('editar_inspeccion').toUpperCase()}</Text>
+        <Pressable onPress={onEdit} style={[styles.actionBtn, styles.iconOnlyBtn, { marginTop: 8 }]}>
+          <Ionicons name="create-outline" size={18} color={colors.brandPrimary} />
         </Pressable>
         <Text style={styles.rowDate}>{new Date(item.created_at).toLocaleString()}</Text>
       </View>
@@ -621,9 +617,8 @@ function TicketRow({ item, onEdit, onDelete, isAdmin, records = [], t }: any) {
         <View style={{ marginVertical: 4 }}>
           <ProcessTracker steps={steps} compact showShipping={showShipping} />
         </View>
-        <Pressable onPress={onEdit} style={[styles.actionBtn, { marginTop: 8 }]}>
-          <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
-          <Text style={styles.actionText}>{t('editar_ticket').toUpperCase()}</Text>
+        <Pressable onPress={onEdit} style={[styles.actionBtn, styles.iconOnlyBtn, { marginTop: 8 }]}>
+          <Ionicons name="create-outline" size={18} color={colors.brandPrimary} />
         </Pressable>
         <Text style={styles.rowDate}>{new Date(item.created_at).toLocaleString()}</Text>
       </View>
@@ -658,6 +653,7 @@ const styles = StyleSheet.create({
   rowSub: { color: colors.muted, fontSize: typography.sizes.sm, marginTop: 2 },
   btnRow: { flexDirection: 'row', gap: spacing.md, marginTop: 10 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  iconOnlyBtn: { borderWidth: 1, borderColor: colors.borderStrong, padding: 8, borderRadius: 4, backgroundColor: colors.surface },
   actionText: { fontWeight: '900', fontSize: 9, color: colors.brandPrimary, letterSpacing: 0.5 },
   statusChip: { paddingHorizontal: spacing.sm, paddingVertical: 4 },
   statusChipText: { color: '#FFF', fontWeight: '900', fontSize: 9, letterSpacing: 1 },
