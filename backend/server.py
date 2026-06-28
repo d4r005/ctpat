@@ -87,6 +87,13 @@ class UserPublic(BaseModel):
     name: str
     role: str = "inspector"
     active: bool = True
+    push_tokens: List[str] = []
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    active: Optional[bool] = None
+    push_token: Optional[str] = None
 
 class ChatMessage(BaseModel):
     id: str
