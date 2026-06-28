@@ -443,15 +443,62 @@ async def _trigger_automatic_report(record_id: str):
 async def repair_links(u: Dict[str, Any] = Depends(get_current_user)):
     if not is_admin(u): raise HTTPException(403)
 
-    logger.info("Iniciando reparación masiva de vínculos...")
-    records = await db.vehicle_records.find().to_list(2000)
-    count = 0
+    logger.info("Iniciando RECONSTRUCCIÓN DE TRAZABILIDAD desde Inspecciones...")
 
-    for r in records:
-        updated = await _ensure_record_links(r)
-        if updated: count += 1
+    # 1. Obtener todo lo que existe en el sistema
+    all_insps = await db.inspections.find({}, {"_id": 0}).to_list(2000)
+    all_records = await db.vehicle_records.find({}, {"_id": 0}).to_list(2000)
 
-    return {"status": "success", "processed": len(records), "updated": count}
+    records_plates = {re.sub(r'[^A-Z0-9]', '', r.get("entry", {}).get("placas_unidad", "")).upper() for r in all_records}
+
+    created_count = 0
+    linked_count = 0
+
+    for insp in all_insps:
+        plates = insp.get("placas_unidad", "").strip().upper()
+        norm_plates = re.sub(r'[^A-Z0-9]', '', plates)
+        if not norm_plates: continue
+
+        # Si la inspección existe pero no hay un registro de caseta para esas placas en MongoDB
+        if norm_plates not in records_plates:
+            # RECONSTRUIR REGISTRO DE CASETA DESDE LA INSPECCIÓN (AUDITORÍA DE HISTORIAL)
+            rid = str(uuid.uuid4())
+            new_record = {
+                "id": rid,
+                "user_id": insp.get("user_id", u["id"]),
+                "status": "inspeccionado",
+                "created_at": insp.get("created_at"),
+                "inspection_id": insp["id"],
+                "inspection_ids": [insp["id"]],
+                "entry": {
+                    "tipo_unidad": "sencillo",
+                    "placas_unidad": plates,
+                    "chofer_nombre": "HISTÓRICO RECUPERADO",
+                    "compania_transporte": insp.get("compania_transportista", ""),
+                    "numero_caja": insp.get("numero_trailer", ""),
+                    "sello_entrada": insp.get("numero_precinto", ""),
+                    "guardia_caseta_nombre": "AUDITORÍA SISTEMA",
+                    "fecha_entrada": insp.get("created_at")
+                },
+                "_is_audited": True
+            }
+            await db.vehicle_records.insert_one(new_record)
+            records_plates.add(norm_plates)
+            created_count += 1
+        else:
+            # Si el registro existe, asegurar que esté vinculado por placas
+            await db.vehicle_records.update_many(
+                {"entry.placas_unidad": {"$regex": f".*{norm_plates}.*", "$options": "i"}},
+                {"$addToSet": {"inspection_ids": insp["id"]}, "$set": {"status": "inspeccionado"}}
+            )
+            linked_count += 1
+
+    return {
+        "status": "success",
+        "inspections_processed": len(all_insps),
+        "new_records_reconstructed": created_count,
+        "existing_links_repaired": linked_count
+    }
 
 # --- Actividades ---
 @api_router.get("/activities")
