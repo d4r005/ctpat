@@ -695,6 +695,7 @@ async def _trigger_automatic_report(rec_id: str):
         if i: inps.append(i)
 
     e = r["entry"]; pl = e["placas_unidad"].upper()
+    e = r["entry"]; pl = e["placas_unidad"].upper()
     tick = await db.shipping_tickets.find_one({"id": r.get("shipping_ticket_id")})
     if not tick:
         # Fallback por placas normalizadas

@@ -93,7 +93,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="chat"
         options={{
-          href: null, // Ocultar de la barra inferior
+          href: null,
         }}
       />
       <Tabs.Screen
