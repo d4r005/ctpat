@@ -51,13 +51,12 @@ export default function Embarque() {
     try {
       const [ticketsData, recordsData] = await Promise.all([
         apiCall<Ticket[]>('/shipping-tickets', { token }),
-        // Traer unidades que NO han salido para ver su proceso de ticket
+        // Traer registros para vinculación (sin filtrar por salida para que el tracker funcione)
         apiCall<any[]>('/vehicle-records', { token })
       ]);
 
-      const activeRecords = (Array.isArray(recordsData) ? recordsData : []).filter(r => r.status !== 'salida');
       setTickets(Array.isArray(ticketsData) ? ticketsData : []);
-      setVehicleRecords(activeRecords);
+      setVehicleRecords(Array.isArray(recordsData) ? recordsData : []);
       await refreshInspections();
     } catch (e) {
       console.error(e);
