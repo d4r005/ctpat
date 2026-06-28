@@ -98,6 +98,10 @@ export default function InspeccionDashboard() {
       setFormData({
         ...formData,
         record_id: record.id,
+        isFull,
+        inspectionsDone: doneCount,
+        numero_caja_2: record.entry.numero_caja_2,
+        sello_entrada_2: record.entry.sello_entrada_2,
         compania: record.entry.compania_transporte || '',
         placas: record.entry.placas_unidad || '',
         trailer: (isFull && doneCount === 1) ? (record.entry.numero_caja_2 || '') : (record.entry.numero_caja || ''),
@@ -106,7 +110,8 @@ export default function InspeccionDashboard() {
     } else {
       setFormData({
         compania: '', placas: '', trailer: '', precinto: '', precintoNA: false, selloAlta: '', selloVerificado: false,
-        points: [], actSospechosa: '', inspectorNombre: user?.name || '', inspectorFirma: '', record_id: ''
+        points: [], actSospechosa: '', inspectorNombre: user?.name || '', inspectorFirma: '', record_id: '',
+        isFull: false, inspectionsDone: 0
       });
     }
     if (typeOverride) setSelectedType(typeOverride);
@@ -245,13 +250,38 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
   const handleFinish = async () => {
     setSaving(true);
     try {
-      await saveInspection({
+      const res = await saveInspection({
         ...data,
         inspection_type: selectedType,
         points,
         fecha_hora: new Date().toISOString(),
       });
-      onClose();
+
+      if (data.isFull && data.inspectionsDone === 0) {
+        Alert.alert(
+          t('inspeccion_guardada'),
+          t('unidad_full_segunda_inspeccion_msg') || "Esta es una unidad FULL. ¿Deseas realizar la segunda inspección ahora?",
+          [
+            { text: t('mas_tarde') || "Más tarde", onPress: () => onClose() },
+            {
+              text: t('si_continuar') || "Sí, continuar",
+              onPress: () => {
+                // Reset for second box
+                setData({
+                  ...data,
+                  trailer: data.numero_caja_2 || '',
+                  selloAlta: data.sello_entrada_2 || '',
+                  inspectionsDone: 1
+                });
+                setStep(0);
+                setPoints(points.map(p => ({ ...p, estado: '', comentarios: '', photo: '' })));
+              }
+            }
+          ]
+        );
+      } else {
+        onClose();
+      }
     } catch (e: any) { alert(e.message); }
     finally { setSaving(false); }
   };

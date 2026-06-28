@@ -37,7 +37,7 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
     subtitle: 'Registro, Inspección y Embarque / 注册、检查和运输',
     generated: 'Generado / 生成日期',
     sectionCaseta: '1. REGISTRO DE CASETA / 门卫室记录',
-    sectionInspection: `2. INSPECCIÓN C-TPAT (${activeInspections[0].points.length} PUNTOS) / C-TPAT 检查`,
+    sectionInspection: `2. INSPECCIÓN C-TPAT / C-TPAT 检查`,
     sectionShipping: '3. TICKET DE EMBARQUE / 运输单',
     sectionPhotos: 'EVIDENCIA FOTOGRÁFICA / 照片证据',
     plates: 'Placas / 车牌号',
@@ -45,6 +45,7 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
     company: 'Compañía / 运输公司',
     license: 'Licencia / 驾驶证',
     tractor: 'Tractor / 牵引车',
+    box: 'Caja / 货箱',
     entryDate: 'Fecha Entrada / 进场时间',
     exitDate: 'Fecha Salida / 出场时间',
     status: 'Estado / 状态',
@@ -107,23 +108,26 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
 
       <tr style="background:#f1f5f9;"><td colspan="2" style="padding:5px; font-weight:bold;">CAJA 1 / 货箱 1</td></tr>
       <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.company} 1</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.compania_caja}</td></tr>
-      <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.tractor} 1</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.numero_caja}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.box} 1</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.numero_caja}</td></tr>
       <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.seal} 1</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.sello_entrada}</td></tr>
 
       ${caseta.entry.tipo_unidad === 'full' ? `
       <tr style="background:#f1f5f9;"><td colspan="2" style="padding:5px; font-weight:bold;">CAJA 2 / 货箱 2</td></tr>
       <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.company} 2</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.compania_caja_2}</td></tr>
-      <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.tractor} 2</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.numero_caja_2}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.box} 2</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.numero_caja_2}</td></tr>
       <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.seal} 2</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.sello_entrada_2}</td></tr>
       ` : ''}
 
       <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.entryDate}</b></td><td style="padding:6px;border:1px solid #ddd;">${new Date(caseta.entry.fecha_entrada).toLocaleString()}</td></tr>
+
       ${caseta.exit ? `
+        <tr style="background:#f1f5f9;"><td colspan="2" style="padding:5px; font-weight:bold;">DATOS DE SALIDA / 出场数据</td></tr>
         <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.exitDate}</b></td><td style="padding:6px;border:1px solid #ddd;">${new Date(caseta.exit.fecha_salida).toLocaleString()}</td></tr>
-        ${caseta.entry.condicion_carga !== 'descarga' ? `
-          <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.seal} (Salida 1)</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.sello_salida || '-'}</td></tr>
-          ${caseta.entry.tipo_unidad === 'full' ? `<tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.seal} (Salida 2)</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.sello_salida_2 || '-'}</td></tr>` : ''}
-        ` : ''}
+        <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.status} Salida</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.condicion_salida || '-'}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.seal} (Salida 1)</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.sello_salida || '-'}</td></tr>
+        ${caseta.entry.tipo_unidad === 'full' ? `<tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.seal} (Salida 2)</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.sello_salida_2 || '-'}</td></tr>` : ''}
+        ${caseta.exit.numero_caja_salida ? `<tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.box} Salida 1</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.numero_caja_salida}</td></tr>` : ''}
+        ${caseta.exit.numero_caja_salida_2 ? `<tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.box} Salida 2</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.numero_caja_salida_2}</td></tr>` : ''}
       ` : ''}
     </table>
 

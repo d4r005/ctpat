@@ -22,9 +22,8 @@ type TabType = 'caseta' | 'inspeccion' | 'embarque';
 export default function Supervisor() {
   const { user, token } = useAuth();
   const userEmail = user?.email?.toLowerCase().trim() || '';
-  // Definición de admin coincidente con InspectionContext
-  const isAdmin = user?.role === 'admin' || user?.role === 'supervisor' ||
-                  userEmail.includes('d.trujillo') || userEmail.includes('d4r005');
+  const isAdminOrSup = user?.role === 'admin' || user?.role === 'supervisor' ||
+                        userEmail.includes('d.trujillo') || userEmail.includes('d4r005');
 
   const router = useRouter();
   const { allInspections, refreshAll: refreshInspections, loading: inspLoading } = useInspections();
@@ -41,14 +40,14 @@ export default function Supervisor() {
     if (!token) return;
     setLoading(true);
     try {
-      const [records, tickets] = await Promise.all([
-        apiCall<any[]>('/vehicle-records', { token }),
-        apiCall<any[]>('/shipping-tickets', { token }),
-        refreshInspections()
-      ]);
-      setAllRecords(Array.isArray(records) ? records : []);
-      setAllTickets(Array.isArray(tickets) ? tickets : []);
-    } catch (e) {
+      // Intentamos obtener todo. Si algo falla, el resto sigue funcionando.
+      const recordsData = await apiCall<any[]>('/vehicle-records', { token }).catch(() => []);
+      const ticketsData = await apiCall<any[]>('/shipping-tickets', { token }).catch(() => []);
+      await refreshInspections();
+
+      setAllRecords(Array.isArray(recordsData) ? recordsData : []);
+      setAllTickets(Array.isArray(ticketsData) ? ticketsData : []);
+    } catch (e: any) {
       console.error("Master Panel load error", e);
     } finally {
       setLoading(false);
@@ -59,13 +58,20 @@ export default function Supervisor() {
 
   const filteredData = useMemo(() => {
     const q = query.toLowerCase().trim();
-    let data = activeTab === 'caseta' ? allRecords :
-               activeTab === 'inspeccion' ? allInspections : allTickets;
+    let source: any[] = [];
+    if (activeTab === 'caseta') source = allRecords;
+    else if (activeTab === 'inspeccion') source = allInspections;
+    else if (activeTab === 'embarque') source = allTickets;
 
-    return (data || []).filter((item: any) => {
-      const plates = item.placas_unidad || item.entry?.placas_unidad || '';
-      const name = item.chofer_nombre || item.inspector_nombre || item.cliente || '';
-      return plates.toLowerCase().includes(q) || name.toLowerCase().includes(q);
+    if (!q) return source;
+
+    return source.filter((item: any) => {
+      const plates = (item.placas_unidad || item.entry?.placas_unidad || '').toLowerCase();
+      const driver = (item.chofer_nombre || item.entry?.chofer_nombre || '').toLowerCase();
+      const client = (item.cliente || '').toLowerCase();
+      const company = (item.compania_transporte || item.entry?.compania_transporte || '').toLowerCase();
+
+      return plates.includes(q) || driver.includes(q) || client.includes(q) || company.includes(q);
     });
   }, [activeTab, query, allRecords, allInspections, allTickets]);
 
@@ -73,14 +79,21 @@ export default function Supervisor() {
     setReportLoading(recordId);
     try {
       const fullRecord = await apiCall<any>(`/vehicle-records/${recordId}`, { token });
-      const tickets = await apiCall<any[]>('/shipping-tickets', { token });
       const norm = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
-      const matchTicket = (tickets || []).find(tk => norm(tk.placas_unidad) === norm(plates));
+      const normPlates = norm(plates);
 
-      const matchInsp = (allInspections || []).find(i => norm(i.placas_unidad) === norm(plates));
+      const matchTicket = (allTickets || []).find(tk => norm(tk.placas_unidad) === normPlates);
+
+      // Trazabilidad FULL: Buscamos todas las inspecciones ligadas a este registro o placas
+      const matchInsps = (allInspections || []).filter(i =>
+        i.record_id === recordId ||
+        (Array.isArray(fullRecord.inspection_ids) && fullRecord.inspection_ids.includes(i.id)) ||
+        norm(i.placas_unidad) === normPlates
+      );
 
       const html = generateConsolidatedReportHtml({
-        inspection: matchInsp || { points: [] } as any,
+        inspection: matchInsps[0] || { points: [] } as any,
+        inspections: matchInsps,
         caseta: fullRecord,
         embarque: matchTicket
       });
@@ -95,13 +108,13 @@ export default function Supervisor() {
         await Sharing.shareAsync(uri);
       }
     } catch (e: any) {
-      alert(e.message);
+      Alert.alert("Error", e.message);
     } finally {
       setReportLoading(null);
     }
   };
 
-  if (!isAdmin) {
+  if (!isAdminOrSup) {
     return (
       <SafeAreaView style={styles.safe}>
         <MainHeader title="NAF" subtitle="ACCESO RESTRINGIDO" />
@@ -143,43 +156,66 @@ export default function Supervisor() {
             onPdf={() => handlePdf(item.id, item.placas_unidad || item.entry?.placas_unidad)}
             loadingPdf={reportLoading === item.id}
             router={router}
+            records={allRecords}
+            tickets={allTickets}
+            inspections={allInspections}
           />
         )}
-        ListEmptyComponent={<Text style={styles.empty}>{t('no_hay_registros')}</Text>}
+        ListEmptyComponent={loading ? <ActivityIndicator color={colors.brandPrimary} style={{ marginTop: 20 }} /> : <Text style={styles.empty}>{t('no_hay_registros')}</Text>}
       />
     </SafeAreaView>
   );
 }
 
-function MasterRow({ item, type, t, onPdf, loadingPdf, router }: any) {
+function MasterRow({ item, type, t, onPdf, loadingPdf, router, records, tickets, inspections }: any) {
+  const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
   const plates = item.placas_unidad || item.entry?.placas_unidad || 'S/P';
+  const normPlates = normalize(plates);
   const subtitle = item.inspector_nombre || item.entry?.chofer_nombre || item.cliente || '-';
 
+  // Buscar registro de caseta relacionado
+  const relatedRecord = type === 'caseta' ? item : records.find((r: any) => normalize(r.entry?.placas_unidad) === normPlates);
+  const isFull = relatedRecord?.entry?.tipo_unidad === 'full';
+
+  // Trazabilidad de Inspecciones
+  const relatedInsps = inspections.filter((i: any) =>
+    i.record_id === relatedRecord?.id || normalize(i.placas_unidad) === normPlates
+  );
+
+  // Trazabilidad de Embarque
+  const hasTicket = type === 'embarque' || tickets.some((tk: any) => normalize(tk.placas_unidad) === normPlates);
+
+  // Una unidad FULL requiere 2 inspecciones
+  const inspectionComplete = isFull ? relatedInsps.length >= 2 : relatedInsps.length >= 1;
+
   const steps = {
-    entry: true,
-    inspection: !!(item.inspection_id || item.inspection_ids?.length || type === 'inspeccion'),
-    shipping: !!(item.has_shipping_ticket || type === 'embarque'),
-    exit: item.status === 'salida'
+    entry: !!relatedRecord,
+    inspection: inspectionComplete,
+    shipping: hasTicket,
+    exit: relatedRecord?.status === 'salida'
   };
 
   const navigateToDetail = () => {
-    const route = type === 'caseta' ? `/caseta/${item.id}` :
-                  type === 'embarque' ? `/embarque/${item.id}` :
-                  `/inspection/${item.id}`;
-    router.push(route);
+    if (type === 'caseta' || relatedRecord) {
+      router.push(`/caseta/${relatedRecord?.id || item.id}`);
+    } else if (type === 'embarque') {
+      router.push(`/embarque/${item.id}`);
+    } else {
+      router.push(`/inspection/${item.id}`);
+    }
   };
 
   return (
     <View style={styles.row}>
       <View style={{ flex: 1 }}>
-        <Text style={styles.rowTitle}>{plates}</Text>
+        <Text style={styles.rowTitle}>{plates} {isFull ? '(FULL)' : ''}</Text>
         <Text style={styles.rowSub}>{subtitle}</Text>
         <View style={{ marginVertical: 8 }}>
           <ProcessTracker steps={steps} compact />
         </View>
         <View style={styles.actions}>
           <Pressable style={styles.iconBtn} onPress={navigateToDetail}>
-            <Ionicons name="create-outline" size={20} color={colors.brandPrimary} />
+            <Ionicons name="eye-outline" size={20} color={colors.brandPrimary} />
           </Pressable>
           <Pressable style={[styles.iconBtn, { backgroundColor: colors.brandPrimary }]} onPress={onPdf} disabled={loadingPdf}>
             {loadingPdf ? <ActivityIndicator size={16} color="#FFF" /> : <Ionicons name="document-text-outline" size={20} color="#FFF" />}
@@ -187,8 +223,8 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router }: any) {
         </View>
       </View>
       <View style={styles.statusSide}>
-        <View style={[styles.chip, { backgroundColor: item.status === 'salida' ? colors.success : colors.warning }]}>
-          <Text style={styles.chipText}>{(item.status || 'PROCESO').toUpperCase()}</Text>
+        <View style={[styles.chip, { backgroundColor: (relatedRecord?.status === 'salida' || item.status === 'salida') ? colors.success : colors.warning }]}>
+          <Text style={styles.chipText}>{(item.status || relatedRecord?.status || 'PROCESO').toUpperCase()}</Text>
         </View>
         <Text style={{ fontSize: 9, color: colors.muted, marginTop: 10 }}>{new Date(item.created_at || item.entry?.fecha_entrada).toLocaleDateString()}</Text>
       </View>
@@ -201,14 +237,14 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   headerCont: { padding: spacing.md, gap: spacing.md },
   tabRow: { flexDirection: 'row', gap: 10 },
-  tab: { flex: 1, padding: 12, alignItems: 'center', backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
+  tab: { flex: 1, padding: 12, alignItems: 'center', backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong },
   tabActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   tabText: { fontWeight: '900', fontSize: 10, color: colors.muted },
   tabTextActive: { color: '#FFF' },
-  search: { backgroundColor: '#FFF', borderWidth: 2, borderColor: colors.borderStrong, padding: 12, fontSize: 14 },
+  search: { backgroundColor: '#FFF', borderWidth: 2, borderColor: colors.borderStrong, padding: 12, fontSize: 14, fontWeight: '700' },
   row: { backgroundColor: colors.surfaceSecondary, padding: 15, marginBottom: 10, borderWidth: 2, borderColor: colors.borderStrong, flexDirection: 'row' },
   rowTitle: { fontWeight: '900', fontSize: 16 },
-  rowSub: { color: colors.muted, fontSize: 12 },
+  rowSub: { color: colors.muted, fontSize: 12, fontWeight: '700' },
   actions: { flexDirection: 'row', gap: 15, marginTop: 5 },
   iconBtn: { padding: 8, borderWidth: 1, borderColor: colors.borderStrong, borderRadius: 4 },
   statusSide: { alignItems: 'flex-end', justifyContent: 'space-between' },

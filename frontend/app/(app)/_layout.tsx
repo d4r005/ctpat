@@ -91,7 +91,6 @@ export default function AppLayout() {
         }}
       />
 
-      {/* RUTAS TÉCNICAS OCULTAS */}
       <Tabs.Screen name="chat" options={{ href: null }} />
       <Tabs.Screen name="usuarios" options={{ href: null }} />
       <Tabs.Screen name="analitica" options={{ href: null }} />
