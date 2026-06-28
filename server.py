@@ -513,15 +513,59 @@ async def create_vehicle_record(body: VehicleEntry, current_user: Dict[str, Any]
 
 
 async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
-    placas = record["entry"].get("placas_unidad", "").upper()
-    if not record.get("inspection_id"):
-        insp = await db.inspections.find_one({"placas_unidad": placas}, sort=[("created_at", -1)])
+    """Busca y vincula inspecciones y tickets de forma robusta (flexible con placas)"""
+    placas_original = record["entry"].get("placas_unidad", "").strip().upper()
+    if not placas_original:
+        return record
+
+    # Normalizar placas para búsqueda flexible (quitar todo lo que no sea letra o número)
+    placas_norm = re.sub(r'[^A-Z0-9]', '', placas_original)
+    if not placas_norm:
+        return record
+
+    updated = False
+
+    # 1. Vincular Inspección si falta
+    if not record.get("inspection_id") or not record.get("inspection_ids"):
+        # Búsqueda por Regex flexible: permite cualquier caracter entre los números/letras de la placa
+        flex_regex = ".*".join(list(placas_norm))
+        insp = await db.inspections.find_one(
+            {"placas_unidad": {"$regex": f".*{flex_regex}.*", "$options": "i"}},
+            sort=[("created_at", -1)]
+        )
         if insp:
             record["inspection_id"] = insp["id"]
-            if record["status"] == "entrada": record["status"] = "inspeccionado"
+            if "inspection_ids" not in record or not isinstance(record["inspection_ids"], list):
+                record["inspection_ids"] = []
+            if insp["id"] not in record["inspection_ids"]:
+                record["inspection_ids"].append(insp["id"])
+            if record["status"] == "entrada":
+                record["status"] = "inspeccionado"
+            updated = True
+
+    # 2. Vincular Ticket si falta
     if not record.get("shipping_ticket_id"):
-        tick = await db.shipping_tickets.find_one({"placas_unidad": placas}, sort=[("created_at", -1)])
-        if tick: record["shipping_ticket_id"] = tick["id"]; record["has_shipping_ticket"] = True
+        flex_regex = ".*".join(list(placas_norm))
+        ticket = await db.shipping_tickets.find_one(
+            {"placas_unidad": {"$regex": f".*{flex_regex}.*", "$options": "i"}},
+            sort=[("created_at", -1)]
+        )
+        if ticket:
+            record["shipping_ticket_id"] = ticket["id"]
+            record["has_shipping_ticket"] = True
+            updated = True
+
+    if updated:
+        await db.vehicle_records.update_one(
+            {"id": record["id"]},
+            {"$set": {
+                "inspection_id": record.get("inspection_id"),
+                "inspection_ids": record.get("inspection_ids", []),
+                "shipping_ticket_id": record.get("shipping_ticket_id"),
+                "has_shipping_ticket": record.get("has_shipping_ticket", True),
+                "status": record["status"]
+            }}
+        )
     return record
 
 
