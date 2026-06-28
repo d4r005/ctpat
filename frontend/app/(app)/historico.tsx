@@ -58,12 +58,15 @@ export default function Historico() {
   }, [inspections, query, filter]);
 
   const renderItem = ({ item }: { item: any }) => {
+    const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
+    const inspPlates = normalize(item.placas_unidad);
+
     const relatedRecord = records.find(r =>
       (r.inspection_id === item.id) ||
       (r.inspection_ids && r.inspection_ids.includes(item.id)) ||
-      (r.entry.placas_unidad === item.placas_unidad)
+      normalize(r.entry.placas_unidad) === inspPlates
     );
-    const hasTicket = tickets.some(t => t.placas_unidad === item.placas_unidad);
+    const hasTicket = tickets.some(t => normalize(t.placas_unidad) === inspPlates);
 
     const isFull = relatedRecord?.entry?.tipo_unidad === 'full';
     const isDescarga = relatedRecord?.entry?.condicion_carga === 'descarga';

@@ -526,12 +526,14 @@ function RecordRow({ item, onEdit, onPdf, onEmail, onDelete, isAdmin, loadingPdf
 
 function InspectionRow({ item, onEdit, onDelete, isAdmin, t, records = [], tickets = [] }: any) {
   const statusColor = item.approval_status === 'aprobada' ? colors.success : item.approval_status === 'rechazada' ? colors.error : colors.warning;
+  const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
+  const inspPlates = normalize(item.placas_unidad);
 
   // Corregir búsqueda de record relacionado para mostrar el rastreador
   const relatedRecord = records.find((r: any) =>
     r.inspection_id === item.id ||
     (r.inspection_ids && r.inspection_ids.includes(item.id)) ||
-    r.entry?.placas_unidad?.trim().toUpperCase() === item.placas_unidad?.trim().toUpperCase()
+    normalize(r.entry?.placas_unidad) === inspPlates
   );
 
   const isFull = relatedRecord?.entry?.tipo_unidad === 'full';
@@ -541,7 +543,7 @@ function InspectionRow({ item, onEdit, onDelete, isAdmin, t, records = [], ticke
   const steps = {
     entry: !!relatedRecord,
     inspection: true,
-    shipping: !!tickets.some((tick: any) => tick.placas_unidad?.trim().toUpperCase() === item.placas_unidad?.trim().toUpperCase()),
+    shipping: !!tickets.some((tick: any) => normalize(tick.placas_unidad) === inspPlates),
     exit: relatedRecord?.status === 'salida'
   };
 
@@ -577,8 +579,11 @@ function InspectionRow({ item, onEdit, onDelete, isAdmin, t, records = [], ticke
 }
 
 function TicketRow({ item, onEdit, onDelete, isAdmin, records = [], t }: any) {
+  const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
+  const ticketPlates = normalize(item.placas_unidad);
+
   const relatedRecord = records.find((r: any) =>
-    r.entry.placas_unidad?.trim().toUpperCase() === item.placas_unidad?.trim().toUpperCase() &&
+    normalize(r.entry?.placas_unidad) === ticketPlates &&
     new Date(r.created_at).getTime() <= new Date(item.created_at).getTime()
   );
 

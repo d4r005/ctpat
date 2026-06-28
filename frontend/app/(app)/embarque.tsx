@@ -67,6 +67,8 @@ export default function Embarque() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const pendingTicketsFromRecords = useMemo(() => {
+    const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
+
     return vehicleRecords.filter(r => {
       if (r.status === 'salida') return false;
 
@@ -76,10 +78,10 @@ export default function Embarque() {
       if (isFull || isDescarga) return false;
 
       const hasInspection = !!r.inspection_id || r.status === 'inspeccionado';
-      const plates = r.entry?.placas_unidad?.trim().toUpperCase();
+      const plates = normalize(r.entry?.placas_unidad);
       if (!plates) return false;
       const hasTicket = tickets.some(t => {
-        const samePlates = t.placas_unidad?.trim().toUpperCase() === plates;
+        const samePlates = normalize(t.placas_unidad) === plates;
         const isRecent = new Date(t.created_at).getTime() >= new Date(r.created_at).getTime();
         return samePlates && isRecent;
       });
@@ -88,9 +90,11 @@ export default function Embarque() {
   }, [vehicleRecords, tickets]);
 
   const pendingExits = useMemo(() => {
+    const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
+
     return vehicleRecords.filter(r => {
       if (r.status === 'salida') return false;
-      const plates = r.entry?.placas_unidad?.trim().toUpperCase();
+      const plates = normalize(r.entry?.placas_unidad);
       if (!plates) return false;
 
       const isFull = r.entry?.tipo_unidad === 'full';
@@ -104,7 +108,7 @@ export default function Embarque() {
       }
 
       const hasTicket = tickets.some(t => {
-        const samePlates = t.placas_unidad?.trim().toUpperCase() === plates;
+        const samePlates = normalize(t.placas_unidad) === plates;
         const isRecent = new Date(t.created_at).getTime() >= new Date(r.created_at).getTime();
         return samePlates && isRecent;
       });
@@ -222,14 +226,18 @@ export default function Embarque() {
       return null;
     }
 
-    const relatedRecord = vehicleRecords.find(r =>
-      r.entry?.placas_unidad?.trim().toUpperCase() === item.placas_unidad?.trim().toUpperCase() &&
-      new Date(r.created_at).getTime() <= new Date(item.created_at).getTime()
-    );
+    const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
+    const ticketPlates = normalize(item.placas_unidad);
+
+    const relatedRecord = vehicleRecords.find(r => {
+      const recordPlates = normalize(r.entry?.placas_unidad);
+      return recordPlates === ticketPlates &&
+             new Date(r.created_at).getTime() <= new Date(item.created_at).getTime();
+    });
 
     const steps = {
       entry: !!relatedRecord,
-      inspection: !!(relatedRecord?.inspection_id || relatedRecord?.status === 'inspeccionado'),
+      inspection: !!(relatedRecord?.inspection_id || relatedRecord?.inspection_ids?.length || relatedRecord?.status === 'inspeccionado'),
       shipping: true,
       exit: relatedRecord?.status === 'salida'
     };
