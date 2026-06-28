@@ -199,13 +199,21 @@ export default function Supervisor() {
   const orphanInspections = useMemo(() => {
     return allInspections.filter(i => {
       // Una inspección es huérfana si no tiene un record de caseta que la referencie por ID
-      // O si no hay un record con las mismas placas
-      return !allRecords.some(r => r.inspection_id === i.id || r.entry.placas_unidad === i.placas_unidad);
+      // en el campo inspection_id o en la lista inspection_ids
+      return !allRecords.some(r =>
+          r.inspection_id === i.id ||
+          (r.inspection_ids && r.inspection_ids.includes(i.id))
+      );
     });
   }, [allInspections, allRecords]);
 
   const orphanRecords = useMemo(() => {
-    return allRecords.filter(r => !r.inspection_id);
+    return allRecords.filter(r => {
+        const isFull = r.entry?.tipo_unidad === 'full';
+        const doneIds = Array.isArray(r.inspection_ids) ? r.inspection_ids : (r.inspection_id ? [r.inspection_id] : []);
+        if (isFull) return doneIds.length < 2;
+        return doneIds.length === 0;
+    });
   }, [allRecords]);
 
   const handleLink = async (recordId: string, inspectionId: string) => {
@@ -231,17 +239,24 @@ export default function Supervisor() {
         return (plates?.toLowerCase() || "").includes(q) || (name?.toLowerCase() || "").includes(q);
       });
 
-      // Ordenar por fecha: primero los más recientes
       return filtered.sort((a, b) => {
         const dateA = new Date(a.created_at || a.entry?.fecha_entrada || 0).getTime();
         const dateB = new Date(b.created_at || b.entry?.fecha_entrada || 0).getTime();
         return dateB - dateA;
       });
     } else {
-      // Unimos tickets realizados + registros de caseta pendientes de embarque
-      const pendingShipping = allRecords.filter(r => (r.inspection_id || r.status === 'inspeccionado') && !allTickets.some(t => t.placas_unidad === r.entry.placas_unidad));
-      const pendingMapped = pendingShipping.map(r => ({ ...r, _is_pending_shipping: true }));
+      // Unimos tickets realizados + registros de caseta pendientes de embarque (EXCLUYENDO FULL Y DESCARGA)
+      const pendingShipping = allRecords.filter(r => {
+          const isFull = r.entry?.tipo_unidad === 'full';
+          const isDescarga = r.entry?.condicion_carga === 'descarga';
+          if (isFull || isDescarga) return false;
 
+          const hasInspection = !!(r.inspection_id || r.status === 'inspeccionado');
+          const alreadyHasTicket = allTickets.some(t => t.placas_unidad === r.entry.placas_unidad);
+          return hasInspection && !alreadyHasTicket;
+      });
+
+      const pendingMapped = pendingShipping.map(r => ({ ...r, _is_pending_shipping: true }));
       const combined = [...pendingMapped, ...allTickets];
 
       const filtered = combined.filter(t => {
@@ -287,13 +302,21 @@ export default function Supervisor() {
               <Text style={{ fontSize: 10, color: colors.muted }}>{t('no_hay_registros')}</Text>
             ) : (
               orphanRecords.map(r => {
-                const match = orphanInspections.find(i => i.placas_unidad === r.entry.placas_unidad);
+                // Buscar coincidencia por placas que NO esté vinculada
+                const match = orphanInspections.find(i =>
+                    i.placas_unidad?.trim().toUpperCase() === r.entry.placas_unidad?.trim().toUpperCase()
+                );
+
+                const isFull = r.entry?.tipo_unidad === 'full';
+                const doneIds = Array.isArray(r.inspection_ids) ? r.inspection_ids : (r.inspection_id ? [r.inspection_id] : []);
+                const statusSuffix = isFull ? ` (${doneIds.length}/2 INSP)` : '';
+
                 return (
                   <View key={r.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-                    <Text style={{ fontSize: 10, fontWeight: '700' }}>{r.entry.placas_unidad} ({r.entry.chofer_nombre})</Text>
+                    <Text style={{ fontSize: 10, fontWeight: '700' }}>{r.entry.placas_unidad}{statusSuffix}</Text>
                     {match ? (
                       <Pressable style={{ backgroundColor: colors.success, paddingHorizontal: 8, paddingVertical: 2 }} onPress={() => handleLink(r.id, match.id)}>
-                        <Text style={{ fontSize: 9, color: '#FFF', fontWeight: '900' }}>{t('vincular_con')} INSP: {match.id.slice(0,5)}</Text>
+                        <Text style={{ fontSize: 9, color: '#FFF', fontWeight: '900' }}>{t('vincular_con')} {match.numero_trailer} ({match.id.slice(0,5)})</Text>
                       </Pressable>
                     ) : (
                       <Text style={{ fontSize: 9, color: colors.error }}>{t('sin_insp_encontrada')}</Text>
@@ -450,9 +473,13 @@ function RecordRow({ item, onEdit, onPdf, onEmail, onDelete, isAdmin, loadingPdf
   const e = item.entry;
   const statusColor = item.status === 'salida' ? colors.success : item.status === 'inspeccionado' ? colors.info : colors.warning;
 
+  const isFull = e?.tipo_unidad === 'full';
+  const isDescarga = e?.condicion_carga === 'descarga';
+  const showShipping = !isFull && !isDescarga;
+
   const steps = {
     entry: true,
-    inspection: !!item.inspection_id || item.status === 'inspeccionado',
+    inspection: (item.inspection_ids?.length || (item.inspection_id ? 1 : 0)) > 0,
     shipping: !!item.has_shipping_ticket,
     exit: item.status === 'salida'
   };
@@ -462,10 +489,10 @@ function RecordRow({ item, onEdit, onPdf, onEmail, onDelete, isAdmin, loadingPdf
   return (
     <View style={styles.row}>
       <View style={{ flex: 1 }}>
-        <Text style={styles.rowTitle}>{e.placas_unidad}</Text>
+        <Text style={styles.rowTitle}>{e.placas_unidad} {isFull ? '(FULL)' : ''}</Text>
         <Text style={styles.rowSub}>{e.chofer_nombre} · {e.compania_transporte}</Text>
         <View style={{ marginVertical: 4 }}>
-          <ProcessTracker steps={steps} compact />
+          <ProcessTracker steps={steps} compact showShipping={showShipping} />
         </View>
         <View style={styles.btnRow}>
           <Pressable onPress={onEdit} style={styles.actionBtn}>
@@ -503,8 +530,13 @@ function InspectionRow({ item, onEdit, onDelete, isAdmin, t, records = [], ticke
   // Corregir búsqueda de record relacionado para mostrar el rastreador
   const relatedRecord = records.find((r: any) =>
     r.inspection_id === item.id ||
+    (r.inspection_ids && r.inspection_ids.includes(item.id)) ||
     r.entry?.placas_unidad?.trim().toUpperCase() === item.placas_unidad?.trim().toUpperCase()
   );
+
+  const isFull = relatedRecord?.entry?.tipo_unidad === 'full';
+  const isDescarga = relatedRecord?.entry?.condicion_carga === 'descarga';
+  const showShipping = !isFull && !isDescarga;
 
   const steps = {
     entry: !!relatedRecord,
@@ -516,10 +548,10 @@ function InspectionRow({ item, onEdit, onDelete, isAdmin, t, records = [], ticke
   return (
     <View style={styles.row}>
       <View style={{ flex: 1 }}>
-        <Text style={styles.rowTitle}>{item.placas_unidad} · {item.numero_trailer}</Text>
+        <Text style={styles.rowTitle}>{item.placas_unidad} · {item.numero_trailer} {isFull ? '(FULL)' : ''}</Text>
         <Text style={styles.rowSub}>{item.inspector_nombre}</Text>
         <View style={{ marginVertical: 4 }}>
-          <ProcessTracker steps={steps} compact />
+          <ProcessTracker steps={steps} compact showShipping={showShipping} />
         </View>
         <Pressable onPress={onEdit} style={[styles.actionBtn, { marginTop: 8 }]}>
           <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />
@@ -550,9 +582,13 @@ function TicketRow({ item, onEdit, onDelete, isAdmin, records = [], t }: any) {
     new Date(r.created_at).getTime() <= new Date(item.created_at).getTime()
   );
 
+  const isFull = relatedRecord?.entry?.tipo_unidad === 'full';
+  const isDescarga = relatedRecord?.entry?.condicion_carga === 'descarga';
+  const showShipping = !isFull && !isDescarga;
+
   const steps = {
     entry: !!relatedRecord,
-    inspection: !!(relatedRecord?.inspection_id || relatedRecord?.status === 'inspeccionado'),
+    inspection: (relatedRecord?.inspection_ids?.length || (relatedRecord?.inspection_id ? 1 : 0)) > 0,
     shipping: true,
     exit: relatedRecord?.status === 'salida'
   };
@@ -560,10 +596,10 @@ function TicketRow({ item, onEdit, onDelete, isAdmin, records = [], t }: any) {
   return (
     <View style={styles.row}>
       <View style={{ flex: 1 }}>
-        <Text style={styles.rowTitle}>{item.placas_unidad} · {item.cliente}</Text>
+        <Text style={styles.rowTitle}>{item.placas_unidad} · {item.cliente} {isFull ? '(FULL)' : ''}</Text>
         <Text style={styles.rowSub}>{item.almacenista}</Text>
         <View style={{ marginVertical: 4 }}>
-          <ProcessTracker steps={steps} compact />
+          <ProcessTracker steps={steps} compact showShipping={showShipping} />
         </View>
         <Pressable onPress={onEdit} style={[styles.actionBtn, { marginTop: 8 }]}>
           <Ionicons name="create-outline" size={16} color={colors.brandPrimary} />

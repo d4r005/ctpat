@@ -49,7 +49,17 @@ export default function Caseta() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const pendingInspections = useMemo(() => {
-    return records.filter(r => r.status === 'entrada' && !r.inspection_id);
+    return records.filter(r => {
+      if (r.status === 'salida') return false;
+      const isFull = r.entry?.tipo_unidad === 'full';
+      const doneIds = Array.isArray(r.inspection_ids) ? r.inspection_ids : (r.inspection_id ? [r.inspection_id] : []);
+
+      if (isFull) {
+        return doneIds.length < 2; // Pendiente si le falta 1 o las 2 inspecciones
+      } else {
+        return doneIds.length === 0;
+      }
+    });
   }, [records]);
 
   const renderItem = ({ item }: { item: VehicleRecord | 'header' | 'pending' | 'title' }) => {
@@ -82,21 +92,33 @@ export default function Caseta() {
               key={r.id}
               style={[styles.activityCard, { borderLeftWidth: 4, borderLeftColor: colors.warning }]}
               onPress={() => {
+                const isFull = r.entry?.tipo_unidad === 'full';
+                const doneIds = Array.isArray(r.inspection_ids) ? r.inspection_ids : (r.inspection_id ? [r.inspection_id] : []);
+
                 const params = new URLSearchParams({
                   record_id: r.id,
                   compania: r.entry.compania_transporte || '',
                   placas: r.entry.placas_unidad || '',
-                  trailer: r.entry.numero_caja || '',
-                  sello: r.entry.sello_entrada !== 'N/A' ? r.entry.sello_entrada : ''
+                  trailer: (isFull && doneIds.length === 1) ? (r.entry.numero_caja_2 || '') : (r.entry.numero_caja || ''),
+                  sello: (isFull && doneIds.length === 1) ? (r.entry.sello_entrada_2 !== 'N/A' ? r.entry.sello_entrada_2 : '') : (r.entry.sello_entrada !== 'N/A' ? r.entry.sello_entrada : '')
                 });
                 router.push(`/(app)/nueva?${params.toString()}`);
               }}
             >
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitleText}>{r.entry.placas_unidad}</Text>
+                <Text style={styles.cardTitleText}>{r.entry.placas_unidad} {r.entry?.tipo_unidad === 'full' ? '(FULL)' : ''}</Text>
                 <Text style={styles.cardSubText}>{r.entry.chofer_nombre}</Text>
                 <View style={{ marginTop: 4 }}>
-                  <ProcessTracker steps={{ entry: true, inspection: false, shipping: !!r.has_shipping_ticket, exit: false }} compact />
+                  <ProcessTracker
+                    steps={{
+                      entry: true,
+                      inspection: (r.inspection_ids?.length || (r.inspection_id ? 1 : 0)) > 0,
+                      shipping: !!r.has_shipping_ticket,
+                      exit: false
+                    }}
+                    compact
+                    showShipping={r.entry?.tipo_unidad !== 'full' && r.entry?.condicion_carga !== 'descarga'}
+                  />
                 </View>
               </View>
               <View style={[styles.miniStatusBadge, { backgroundColor: colors.warning }]}>

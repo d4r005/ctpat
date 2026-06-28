@@ -69,6 +69,12 @@ export default function Embarque() {
   const pendingTicketsFromRecords = useMemo(() => {
     return vehicleRecords.filter(r => {
       if (r.status === 'salida') return false;
+
+      // LOGICA: Si es FULL o DESCARGA, NO requiere Ticket de Embarque
+      const isFull = r.entry?.tipo_unidad === 'full';
+      const isDescarga = r.entry?.condicion_carga === 'descarga';
+      if (isFull || isDescarga) return false;
+
       const hasInspection = !!r.inspection_id || r.status === 'inspeccionado';
       const plates = r.entry?.placas_unidad?.trim().toUpperCase();
       if (!plates) return false;
@@ -86,6 +92,17 @@ export default function Embarque() {
       if (r.status === 'salida') return false;
       const plates = r.entry?.placas_unidad?.trim().toUpperCase();
       if (!plates) return false;
+
+      const isFull = r.entry?.tipo_unidad === 'full';
+      const isDescarga = r.entry?.condicion_carga === 'descarga';
+
+      // Si es FULL o DESCARGA, está listo para salida si tiene inspección(es)
+      if (isFull || isDescarga) {
+        const doneIds = Array.isArray(r.inspection_ids) ? r.inspection_ids : (r.inspection_id ? [r.inspection_id] : []);
+        if (isFull) return doneIds.length >= 2;
+        return doneIds.length >= 1;
+      }
+
       const hasTicket = tickets.some(t => {
         const samePlates = t.placas_unidad?.trim().toUpperCase() === plates;
         const isRecent = new Date(t.created_at).getTime() >= new Date(r.created_at).getTime();
@@ -145,7 +162,7 @@ export default function Embarque() {
                   <Text style={styles.cardTitleText}>{r.entry.placas_unidad}</Text>
                   <Text style={styles.cardSubText}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
                   <View style={{ marginTop: 4 }}>
-                    <ProcessTracker steps={{ entry: true, inspection: true, shipping: false, exit: false }} compact />
+                    <ProcessTracker steps={{ entry: true, inspection: true, shipping: false, exit: false }} compact showShipping={true} />
                   </View>
                 </View>
                 <View style={[styles.miniStatusBadge, { backgroundColor: colors.warning }]}>
@@ -166,24 +183,39 @@ export default function Embarque() {
         return (
           <View style={[styles.pendingSection, { marginTop: spacing.xl }]}>
             <Text style={styles.sectionTitle}>{t('unidades_listas_salida')}</Text>
-            {pendingExits.map((r) => (
-              <Pressable
-                key={r.id}
-                style={[styles.activityCard, { borderLeftWidth: 4, borderLeftColor: colors.success }]}
-                onPress={() => router.push(`/caseta/${r.id}`)}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.cardTitleText}>{r.entry.placas_unidad}</Text>
-                  <Text style={styles.cardSubText}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
-                  <View style={{ marginTop: 4 }}>
-                    <ProcessTracker steps={{ entry: true, inspection: true, shipping: true, exit: false }} compact />
+            {pendingExits.map((r) => {
+              const isFull = r.entry?.tipo_unidad === 'full';
+              const isDescarga = r.entry?.condicion_carga === 'descarga';
+              const showShipping = !isFull && !isDescarga;
+
+              return (
+                <Pressable
+                  key={r.id}
+                  style={[styles.activityCard, { borderLeftWidth: 4, borderLeftColor: colors.success }]}
+                  onPress={() => router.push(`/caseta/${r.id}`)}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardTitleText}>{r.entry.placas_unidad} {isFull ? '(FULL)' : ''}</Text>
+                    <Text style={styles.cardSubText}>{r.entry.chofer_nombre} · {r.entry.compania_transporte}</Text>
+                    <View style={{ marginTop: 4 }}>
+                      <ProcessTracker
+                        steps={{
+                            entry: true,
+                            inspection: (r.inspection_ids?.length || (r.inspection_id ? 1 : 0)) > 0,
+                            shipping: !!r.has_shipping_ticket,
+                            exit: false
+                        }}
+                        compact
+                        showShipping={showShipping}
+                      />
+                    </View>
                   </View>
-                </View>
-                <View style={[styles.miniStatusBadge, { backgroundColor: colors.success }]}>
-                  <Text style={styles.miniStatusText}>{t('dar_salida').toUpperCase()}</Text>
-                </View>
-              </Pressable>
-            ))}
+                  <View style={[styles.miniStatusBadge, { backgroundColor: colors.success }]}>
+                    <Text style={styles.miniStatusText}>{t('dar_salida').toUpperCase()}</Text>
+                  </View>
+                </Pressable>
+              );
+            })}
           </View>
         );
       }
