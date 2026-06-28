@@ -231,7 +231,6 @@ export default function CasetaDetail() {
           )}
         </Section>
 
-        {/* ... Resto de secciones similar al original ... */}
         {(rec.status === 'entrada' || rec.status === 'inspeccionado') && (
           <Pressable style={styles.bigBtn} onPress={() => goInspeccion(e.numero_caja, e.sello_entrada)}>
             <Ionicons name="clipboard" size={24} color={colors.onBrandPrimary} />
