@@ -287,10 +287,9 @@ async def me(u: Dict[str, Any] = Depends(get_current_user)): return UserPublic(*
 # --- Caseta ---
 @api_router.get("/vehicle-records", response_model=List[VehicleRecord])
 async def list_records(u: Dict[str, Any] = Depends(get_current_user)):
+    # OPTIMIZACIÓN: Solo obtenemos los registros. La vinculación pesada se hace en el Panel Maestro.
     docs = await db.vehicle_records.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
-    res = []
-    for d in docs: res.append(VehicleRecord(**(await _ensure_record_links(d))))
-    return res
+    return [VehicleRecord(**d) for d in docs]
 
 @api_router.post("/vehicle-records", response_model=VehicleRecord)
 async def create_record(body: VehicleEntry, u: Dict[str, Any] = Depends(get_current_user)):

@@ -5,7 +5,6 @@ import { useAuth } from '@/src/context/AuthContext';
 import { colors } from '@/src/constants/theme';
 import { View, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
 import { useTranslation } from 'react-i18next';
 
 export default function AppLayout() {
@@ -35,8 +34,6 @@ export default function AppLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.brandPrimary,
         tabBarInactiveTintColor: colors.muted,
-        animation: 'none',
-        lazy: true,
         tabBarStyle: {
           backgroundColor: colors.surfaceSecondary,
           borderTopWidth: 2,
@@ -52,51 +49,54 @@ export default function AppLayout() {
         name="inicio"
         options={{
           title: t('inicio'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="home-sharp" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="home-sharp" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="historico"
         options={{
           title: t('historico'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="time-sharp" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="time-sharp" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="caseta"
         options={{
           title: t('caseta'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="business-sharp" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="business-sharp" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="nueva"
         options={{
           title: t('inspeccion'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="clipboard-sharp" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="clipboard-sharp" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="embarque"
         options={{
           title: t('embarque'),
-          tabBarIcon: ({ color, size }) => <Ionicons name="cube-sharp" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="cube-sharp" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="supervisor"
         options={{
           title: 'MAESTRO',
-          // Siempre visible para facilitar tu presentación, o puedes usar isAdminOrSup ? '/(app)/supervisor' : null
-          tabBarIcon: ({ color, size }) => <Ionicons name="shield-checkmark-sharp" size={size} color={color} />,
+          tabBarIcon: ({ color }) => <Ionicons name="shield-checkmark-sharp" size={22} color={color} />,
         }}
       />
 
-      {/* Rutas de detalle ocultas */}
+      {/* RUTAS TÉCNICAS OCULTAS - PREVIENE TRIÁNGULOS EN LA BARRA */}
       <Tabs.Screen name="chat" options={{ href: null }} />
       <Tabs.Screen name="usuarios" options={{ href: null }} />
       <Tabs.Screen name="analitica" options={{ href: null }} />
       <Tabs.Screen name="perfil" options={{ href: null }} />
+      <Tabs.Screen name="caseta/[id]" options={{ href: null }} />
+      <Tabs.Screen name="embarque/[id]" options={{ href: null }} />
+      <Tabs.Screen name="caseta/index" options={{ href: null }} />
+      <Tabs.Screen name="embarque/index" options={{ href: null }} />
     </Tabs>
   );
 }
