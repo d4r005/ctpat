@@ -57,7 +57,7 @@ export default function Supervisor() {
     setSyncing(true);
     try {
       const res = await apiCall<any>('/admin/repair-links', { method: 'POST', token });
-      Alert.alert("Auditoría Finalizada", `Se han recuperado e inyectado ${res.new_records_reconstructed} registros históricos desde Google Drive/Inspecciones.`);
+      Alert.alert("Auditoría Finalizada", `Se han recuperado ${res.reconstructed} registros y vinculado un total de ${res.total_records} folios.`);
       await fetchEverything();
     } catch (e: any) {
       Alert.alert("Error", e.message);
@@ -116,7 +116,7 @@ export default function Supervisor() {
       <MainHeader title="NAF" subtitle="SUPERVISOR DEL PANEL" />
 
       <ScrollView stickyHeaderIndices={[1]} refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchEverything} />}>
-        {/* HERRAMIENTAS ADMIN - Diseño original recuperado */}
+        {/* HERRAMIENTAS ADMIN */}
         <View style={styles.adminBox}>
           <Text style={styles.adminTitle}>HERRAMIENTAS ADMIN</Text>
           <View style={styles.adminRow}>
@@ -179,7 +179,7 @@ export default function Supervisor() {
 function TabBtn({ label, icon, active, on }: any) {
   return (
     <Pressable onPress={on} style={[styles.tab, active && styles.tabActive]}>
-      <Ionicons name={icon} size={20} color={active ? '#FFF' : '#333'} />
+      <Ionicons name={icon} size={18} color={active ? '#FFF' : '#333'} />
       <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
     </Pressable>
   );
@@ -193,7 +193,7 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router, records, tickets,
   const company = item.entry?.compania_transporte || item.compania_transportista || '-';
 
   const relatedRecord = type === 'caseta' ? item : records.find((r: any) => normalize(r.entry?.placas_unidad) === normPlates);
-  const isFull = relatedRecord?.entry?.tipo_unidad === 'full';
+  const isFull = (relatedRecord?.entry?.tipo_unidad === 'full') || (item.inspection_type === '19_puntos' && item.numero_trailer?.includes('-2'));
 
   const relatedInsps = inspections.filter((i: any) => i.record_id === relatedRecord?.id || normalize(i.placas_unidad) === normPlates);
   const hasTicket = type === 'embarque' || tickets.some((tk: any) => normalize(tk.placas_unidad) === normPlates);
@@ -228,6 +228,10 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router, records, tickets,
              <Text style={styles.pdfBtnText}>VER REPORTE COMPLETO (PDF)</Text>
              {loadingPdf && <ActivityIndicator size="small" color="#FFF" style={{ marginLeft: 5 }} />}
            </Pressable>
+           <Pressable style={styles.actionLink}>
+              <Ionicons name="mail-outline" size={16} color="#333" />
+              <Text style={styles.actionLinkText}>CORREO</Text>
+           </Pressable>
         </View>
       </View>
 
@@ -235,11 +239,11 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router, records, tickets,
          <View style={[styles.statusChip, { backgroundColor: status === 'SALIDA' || status === 'SALIÓ' ? colors.success : status === 'INSPECCIONADO' ? colors.info : colors.warning }]}>
            <Text style={styles.statusChipText}>{status === 'INSPECCIONADO' ? 'BUENO' : status}</Text>
          </View>
-         <View style={[styles.statusChip, { backgroundColor: colors.warning, marginTop: 4 }]}>
-           <Text style={styles.statusChipText}>PENDIENTE</Text>
+         <View style={[styles.statusChip, { backgroundColor: inspectionComplete ? colors.success : colors.warning, marginTop: 4 }]}>
+           <Text style={styles.statusChipText}>{inspectionComplete ? 'APROBADO' : 'PENDIENTE'}</Text>
          </View>
          <Pressable style={styles.deleteBtn}><Ionicons name="trash-outline" size={18} color={colors.error} /></Pressable>
-         <Text style={styles.dateText}>{new Date(item.created_at || item.entry?.fecha_entrada).toLocaleString()}</Text>
+         <Text style={styles.dateText}>{new Date(item.created_at || item.entry?.fecha_entrada).toLocaleDateString()}</Text>
       </View>
     </View>
   );
@@ -254,7 +258,7 @@ const styles = StyleSheet.create({
   adminBtnText: { fontWeight: '900', fontSize: 9, color: '#1E40AF' },
   headerFixed: { backgroundColor: '#FFF', borderBottomWidth: 2, borderBottomColor: '#000' },
   tabRow: { flexDirection: 'row' },
-  tab: { flex: 1, padding: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRightWidth: 1, borderRightColor: '#EEE' },
+  tab: { flex: 1, padding: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRightWidth: 1, borderRightColor: '#EEE' },
   tabActive: { backgroundColor: '#0A2540', borderBottomWidth: 4, borderBottomColor: colors.brandSecondary },
   tabText: { fontWeight: '900', fontSize: 11, color: '#333' },
   tabTextActive: { color: '#FFF' },
@@ -263,7 +267,7 @@ const styles = StyleSheet.create({
   row: { backgroundColor: '#FFF', padding: 15, marginBottom: 12, borderWidth: 2, borderColor: '#000', flexDirection: 'row' },
   rowTitle: { fontWeight: '900', fontSize: 15 },
   rowSub: { color: colors.muted, fontSize: 12, marginTop: 2, fontWeight: '600' },
-  rowActions: { flexDirection: 'row', gap: 10, marginTop: 10, alignItems: 'center' },
+  rowActions: { flexDirection: 'row', gap: 10, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' },
   actionLink: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   actionLinkText: { fontWeight: '900', fontSize: 10, textDecorationLine: 'underline' },
   pdfBtn: { backgroundColor: '#0A2540', paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 6 },

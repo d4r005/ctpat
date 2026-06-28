@@ -443,62 +443,62 @@ async def _trigger_automatic_report(record_id: str):
 async def repair_links(u: Dict[str, Any] = Depends(get_current_user)):
     if not is_admin(u): raise HTTPException(403)
 
-    logger.info("Iniciando RECONSTRUCCIÓN DE TRAZABILIDAD desde Inspecciones...")
+    logger.info("Iniciando RECONSTRUCCIÓN TOTAL desde Inspecciones y Tickets...")
 
-    # 1. Obtener todo lo que existe en el sistema
-    all_insps = await db.inspections.find({}, {"_id": 0}).to_list(2000)
-    all_records = await db.vehicle_records.find({}, {"_id": 0}).to_list(2000)
+    # 1. Obtener toda la data existente
+    all_insps = await db.inspections.find({}, {"_id": 0}).to_list(5000)
+    all_tickets = await db.shipping_tickets.find({}, {"_id": 0}).to_list(5000)
+    all_records = await db.vehicle_records.find({}, {"_id": 0}).to_list(5000)
 
-    records_plates = {re.sub(r'[^A-Z0-9]', '', r.get("entry", {}).get("placas_unidad", "")).upper() for r in all_records}
+    existing_plates = {re.sub(r'[^A-Z0-9]', '', r.get("entry", {}).get("placas_unidad", "")).upper() for r in all_records}
 
     created_count = 0
-    linked_count = 0
+
+    # Recolectar todas las placas que aparecen en inspecciones o tickets pero no en registros
+    missing_plates_data = {} # norm_plates -> {plates, type, date, data}
 
     for insp in all_insps:
-        plates = insp.get("placas_unidad", "").strip().upper()
-        norm_plates = re.sub(r'[^A-Z0-9]', '', plates)
-        if not norm_plates: continue
+        p = insp.get("placas_unidad", "").strip().upper()
+        norm = re.sub(r'[^A-Z0-9]', '', p)
+        if norm and norm not in existing_plates:
+            if norm not in missing_plates_data:
+                missing_plates_data[norm] = {"p": p, "date": insp.get("created_at"), "company": insp.get("compania_transportista"), "box": insp.get("numero_trailer"), "sello": insp.get("numero_precinto"), "driver": insp.get("inspector_nombre")}
 
-        # Si la inspección existe pero no hay un registro de caseta para esas placas en MongoDB
-        if norm_plates not in records_plates:
-            # RECONSTRUIR REGISTRO DE CASETA DESDE LA INSPECCIÓN (AUDITORÍA DE HISTORIAL)
-            rid = str(uuid.uuid4())
-            new_record = {
-                "id": rid,
-                "user_id": insp.get("user_id", u["id"]),
-                "status": "inspeccionado",
-                "created_at": insp.get("created_at"),
-                "inspection_id": insp["id"],
-                "inspection_ids": [insp["id"]],
-                "entry": {
-                    "tipo_unidad": "sencillo",
-                    "placas_unidad": plates,
-                    "chofer_nombre": "HISTÓRICO RECUPERADO",
-                    "compania_transporte": insp.get("compania_transportista", ""),
-                    "numero_caja": insp.get("numero_trailer", ""),
-                    "sello_entrada": insp.get("numero_precinto", ""),
-                    "guardia_caseta_nombre": "AUDITORÍA SISTEMA",
-                    "fecha_entrada": insp.get("created_at")
-                },
-                "_is_audited": True
+    for tick in all_tickets:
+        p = tick.get("placas_unidad", "").strip().upper()
+        norm = re.sub(r'[^A-Z0-9]', '', p)
+        if norm and norm not in existing_plates:
+            if norm not in missing_plates_data:
+                missing_plates_data[norm] = {"p": p, "date": tick.get("created_at"), "company": tick.get("linea_transporte"), "box": tick.get("numero_caja"), "sello": tick.get("numero_sello"), "driver": tick.get("operador")}
+
+    for norm, data in missing_plates_data.items():
+        rid = str(uuid.uuid4())
+        new_record = {
+            "id": rid,
+            "user_id": u["id"],
+            "status": "inspeccionado",
+            "created_at": data["date"],
+            "entry": {
+                "tipo_unidad": "sencillo",
+                "placas_unidad": data["p"],
+                "chofer_nombre": data["driver"] or "HISTÓRICO",
+                "compania_transporte": data["company"] or "",
+                "numero_caja": data["box"] or "",
+                "sello_entrada": data["sello"] or "",
+                "guardia_caseta_nombre": "RECONSTRUIDO",
+                "fecha_entrada": data["date"]
             }
-            await db.vehicle_records.insert_one(new_record)
-            records_plates.add(norm_plates)
-            created_count += 1
-        else:
-            # Si el registro existe, asegurar que esté vinculado por placas
-            await db.vehicle_records.update_many(
-                {"entry.placas_unidad": {"$regex": f".*{norm_plates}.*", "$options": "i"}},
-                {"$addToSet": {"inspection_ids": insp["id"]}, "$set": {"status": "inspeccionado"}}
-            )
-            linked_count += 1
+        }
+        await db.vehicle_records.insert_one(new_record)
+        existing_plates.add(norm)
+        created_count += 1
 
-    return {
-        "status": "success",
-        "inspections_processed": len(all_insps),
-        "new_records_reconstructed": created_count,
-        "existing_links_repaired": linked_count
-    }
+    # Ahora re-vincular todo (incluyendo los nuevos)
+    records = await db.vehicle_records.find().to_list(5000)
+    for r in records:
+        await _ensure_record_links(r)
+
+    return {"status": "success", "reconstructed": created_count, "total_records": len(records)}
 
 # --- Actividades ---
 @api_router.get("/activities")
