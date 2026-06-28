@@ -641,6 +641,29 @@ async def list_tickets(u: Dict[str, Any] = Depends(get_current_user)):
     docs = await db.shipping_tickets.find({}, proj).sort("created_at", -1).to_list(100)
     return docs
 
+@api_router.get("/shipping-tickets/{ticket_id}")
+async def get_ticket(ticket_id: str, u: Dict[str, Any] = Depends(get_current_user)):
+    doc = await db.shipping_tickets.find_one({"id": ticket_id}, {"_id": 0})
+    if not doc: raise HTTPException(status_code=404, detail="Ticket no encontrado")
+    return doc
+
+@api_router.put("/shipping-tickets/{ticket_id}")
+async def update_ticket(ticket_id: str, body: Dict[str, Any], u: Dict[str, Any] = Depends(get_current_user)):
+    if "_id" in body: del body["_id"]
+    # Limpiar imágenes si vienen en el body
+    for f in ["foto_inicio_carga", "foto_media_carga", "foto_final_carga", "firma_almacenista", "firma_guardia"]:
+        if body.get(f) and body[f].startswith("data:image"):
+            body[f] = ensure_clean_image(body[f])
+
+    await db.shipping_tickets.update_one({"id": ticket_id}, {"$set": body})
+    return {"ok": True}
+
+@api_router.delete("/shipping-tickets/{ticket_id}/admin-delete")
+async def del_ticket(ticket_id: str, u: Dict[str, Any] = Depends(get_current_user)):
+    if not is_admin(u): raise HTTPException(status_code=403)
+    await db.shipping_tickets.delete_one({"id": ticket_id})
+    return {"ok": True}
+
 # ========== Reporte y Analítica ==========
 async def _trigger_automatic_report(rec_id: str):
     r = await db.vehicle_records.find_one({"id": rec_id}); r = await _ensure_record_links(r)
@@ -650,6 +673,10 @@ async def _trigger_automatic_report(rec_id: str):
         if i: inps.append(i)
 
     tick = await db.shipping_tickets.find_one({"id": r.get("shipping_ticket_id")})
+    if not tick:
+        # Fallback por placas
+        flex_regex = ".*".join(list(pl.replace(' ', '')))
+        tick = await db.shipping_tickets.find_one({"placas_unidad": {"$regex": f".*{flex_regex}.*", "$options": "i"}}, sort=[("created_at", -1)])
     e = r["entry"]; pl = e["placas_unidad"].upper()
 
     def ph(b64, lb):
