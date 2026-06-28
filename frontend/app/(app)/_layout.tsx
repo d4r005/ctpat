@@ -34,8 +34,8 @@ export default function AppLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.brandPrimary,
         tabBarInactiveTintColor: colors.muted,
-        animation: 'none', // Desactiva animaciones pesadas en web
-        lazy: true,        // Solo carga el panel cuando lo tocas
+        animation: 'none',
+        lazy: true,
         tabBarStyle: {
           backgroundColor: colors.surfaceSecondary,
           borderTopWidth: 2,
@@ -62,14 +62,14 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
-        name="caseta"
+        name="caseta/index"
         options={{
           title: t('caseta'),
           tabBarIcon: ({ color, size }) => <Ionicons name="business" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="embarque"
+        name="embarque/index"
         options={{
           title: t('embarque'),
           tabBarIcon: ({ color, size }) => <Ionicons name="cube" size={size} color={color} />,
@@ -90,42 +90,12 @@ export default function AppLayout() {
           tabBarIcon: ({ color, size }) => <Ionicons name={isAdmin ? "shield-half" : "shield-checkmark"} size={size} color={color} />,
         }}
       />
-      <Tabs.Screen
-        name="chat"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="usuarios"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="analitica"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="perfil"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="caseta/[id]"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="embarque/[id]"
-        options={{
-          href: null,
-        }}
-      />
+      <Tabs.Screen name="chat" options={{ href: null }} />
+      <Tabs.Screen name="usuarios" options={{ href: null }} />
+      <Tabs.Screen name="analitica" options={{ href: null }} />
+      <Tabs.Screen name="perfil" options={{ href: null }} />
+      <Tabs.Screen name="caseta/[id]" options={{ href: null }} />
+      <Tabs.Screen name="embarque/[id]" options={{ href: null }} />
     </Tabs>
   );
 }
