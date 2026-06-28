@@ -120,41 +120,52 @@ export default function Supervisor() {
   const handleDownloadPdf = async (recordId: string, plates: string) => {
     setReportLoading(recordId);
     try {
-      const record = allRecords.find(r => r.id === recordId);
-      const cleanPlates = plates.trim().toUpperCase();
-      const normalize = (s: string) => s?.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() || '';
-      const normPlates = normalize(cleanPlates);
+      // OBTENER DATOS COMPLETOS (Con fotos y firmas) antes de generar PDF
+      const fullRecord = await apiCall<any>(`/vehicle-records/${recordId}`, { token });
 
-      // Robust search for linked inspections (supporting both single and list)
-      let inspectionsToReport: Inspection[] = [];
+      const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
+      const normPlates = normalize(plates);
 
-      if (record?.inspection_ids && record.inspection_ids.length > 0) {
-        inspectionsToReport = allInspections.filter(i => record.inspection_ids.includes(i.id));
-      } else if (record?.inspection_id) {
-        const found = allInspections.find(i => i.id === record.inspection_id);
-        if (found) inspectionsToReport = [found];
+      // Buscar inspecciones completas
+      const inspIds = fullRecord.inspection_ids || (fullRecord.inspection_id ? [fullRecord.inspection_id] : []);
+      const inspectionsToReport: Inspection[] = [];
+
+      for (const id of inspIds) {
+        const fullInsp = await apiCall<Inspection>(`/inspections/${id}`, { token }).catch(() => null);
+        if (fullInsp) inspectionsToReport.push(fullInsp);
       }
 
-      // Fallback to plates search if none found by ID
+      // Si no hay vinculadas, intentar por placas (completa)
       if (inspectionsToReport.length === 0) {
-        inspectionsToReport = allInspections.filter(i => normalize(i.placas_unidad) === normPlates);
+        const results = await apiCall<Inspection[]>(`/inspections?scope=all`, { token });
+        const matches = results.filter(i => normalize(i.placas_unidad) === normPlates);
+        for (const m of matches) {
+           const full = await apiCall<Inspection>(`/inspections/${m.id}`, { token }).catch(() => null);
+           if (full) inspectionsToReport.push(full);
+        }
       }
 
       if (inspectionsToReport.length === 0) {
-          throw new Error('No se encontró inspección digital vinculada. Verifique que las placas coincidan.');
+          throw new Error('No se encontró inspección con fotos. Verifique el vínculo.');
       }
 
-      // Sort inspections by date
-      inspectionsToReport.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      // Buscar ticket completo
+      let fullTicket = null;
+      if (fullRecord.shipping_ticket_id) {
+          fullTicket = await apiCall<any>(`/shipping-tickets/${fullRecord.shipping_ticket_id}`, { token }).catch(() => null);
+      }
 
-      const ticket = allTickets.find(t => normalize(t.placas_unidad) === normPlates);
+      if (!fullTicket) {
+          const tickets = await apiCall<any[]>('/shipping-tickets', { token });
+          const match = tickets.find(t => normalize(t.placas_unidad) === normPlates);
+          if (match) fullTicket = await apiCall<any>(`/shipping-tickets/${match.id}`, { token }).catch(() => null);
+      }
 
-      // Use the first inspection as reference for the main object, but pass all in the array
       const html = generateConsolidatedReportHtml({
         inspection: inspectionsToReport[0],
         inspections: inspectionsToReport,
-        caseta: record,
-        embarque: ticket
+        caseta: fullRecord,
+        embarque: fullTicket
       }, 'es');
 
       if (Platform.OS === 'web') {

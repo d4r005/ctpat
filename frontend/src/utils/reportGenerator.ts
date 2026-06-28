@@ -127,13 +127,13 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
       ` : ''}
     </table>
 
-    <div style="background: #f1f5f9; padding: 10px; border: 1px solid #ddd; margin-bottom: 10px; font-size: 8px;">
+    <div style="background: #f1f5f9; padding: 10px; border: 1px solid #ddd; margin-bottom: 10px; font-size: 8px; background-color: #f1f5f9;">
       <p style="margin: 0 0 5px 0; font-weight: bold; color: #0A2540;">REGLAMENTO Y SEGURIDAD / 安全条例:</p>
       ${rulesHtml}
       <p style="margin: 10px 0 5px 0; font-weight: bold; color: #0A2540;">DECLARACIONES / 司机声明:</p>
       ${declsHtml}
       <p style="margin-top: 10px; font-weight: bold; color: #16a34a;">ACEPTADO / 已接受 ✓</p>
-      ${caseta.entry.firma_operador ? `<div style="margin-top:5px;"><img src="${caseta.entry.firma_operador}" style="height:60px; border-bottom:1px solid #0A2540;" /></div>` : ''}
+      ${caseta.entry.firma_operador ? `<div style="margin-top:5px; text-align:center;"><img src="${caseta.entry.firma_operador}" style="height:70px; border-bottom:2px solid #0A2540; background:#FFF;" /><br/><span style="font-size:7px; color:#666;">FIRMA DEL OPERADOR / 司机签字</span></div>` : ''}
     </div>
 
     <div style="margin-bottom:15px;">
@@ -249,8 +249,19 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
           </tr>
           <tr>
             <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.inspector}</b></td>
-            <td style="padding:6px;border:1px solid #ddd;">${insp.inspector_nombre}</td>
+            <td style="padding:6px;border:1px solid #ddd;">
+              ${insp.inspector_nombre}<br/>
+              ${insp.inspector_firma ? `<img src="${insp.inspector_firma}" style="height:40px; margin-top:5px; border-bottom:1px solid #0A2540;" />` : ''}
+            </td>
           </tr>
+          ${insp.approved_by_name ? `
+          <tr>
+            <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.supervisor}</b></td>
+            <td style="padding:6px;border:1px solid #ddd;">
+              ${insp.approved_by_name}<br/>
+              ${insp.approved_by_signature ? `<img src="${insp.approved_by_signature}" style="height:40px; margin-top:5px; border-bottom:1px solid #0A2540;" />` : ''}
+            </td>
+          </tr>` : ''}
         </table>
 
         <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
