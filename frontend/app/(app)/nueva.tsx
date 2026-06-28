@@ -15,6 +15,7 @@ import ProcessTracker from '@/src/components/ProcessTracker';
 import MainHeader from '@/src/components/MainHeader';
 import { getInspectionPoints } from '@/src/constants/inspectionPoints';
 import BarcodeScanner from '@/src/components/BarcodeScanner';
+import Signature from '@/src/components/SignaturePad';
 import * as ImagePicker from 'expo-image-picker';
 
 const TOTAL_STEPS = 4;
@@ -25,14 +26,14 @@ export default function InspeccionDashboard() {
   const { t } = useTranslation();
   const { inspections, refresh: refreshInsps, loading: loadingInsps, saveInspection } = useInspections();
 
-  // Estados del Dashboard
   const [records, setRecords] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
   const [loadingExtra, setLoadingExtra] = useState(false);
   const [query, setQuery] = useState('');
-  const [showForm, setShowForm] = useState(false); // Controla si mostramos el listado o el formulario nuevo
+  const [showForm, setShowForm] = useState(false);
+  const [unitFilter, setUnitFilter] = useState<'todos' | 'sencillo' | 'full'>('todos');
 
-  // Estados del Formulario (si se activa)
+  // Estados del Formulario
   const [selectedType, setSelectedType] = useState<'19_puntos' | '9_puntos_contenedor' | null>(null);
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -53,7 +54,7 @@ export default function InspeccionDashboard() {
       setRecords(r);
       setTickets(tick);
     } catch (e) {
-      console.error("Error loading inspection dashboard data", e);
+      console.error("Error loading dashboard data", e);
     } finally {
       setLoadingExtra(false);
     }
@@ -61,15 +62,17 @@ export default function InspeccionDashboard() {
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
-  // Lógica de filtrado idéntica al Panel Maestro
   const pendingRecords = useMemo(() => {
     return records.filter(r => {
       if (r.status === 'salida') return false;
       const isFull = r.entry?.tipo_unidad === 'full';
       const doneIds = Array.isArray(r.inspection_ids) ? r.inspection_ids : (r.inspection_id ? [r.inspection_id] : []);
-      return isFull ? doneIds.length < 2 : doneIds.length === 0;
+      const match = isFull ? doneIds.length < 2 : doneIds.length === 0;
+      if (!match) return false;
+      if (unitFilter === 'todos') return true;
+      return r.entry?.tipo_unidad === unitFilter;
     });
-  }, [records]);
+  }, [records, unitFilter]);
 
   const combinedData = useMemo(() => {
     const q = query.toLowerCase().trim();
@@ -89,13 +92,21 @@ export default function InspeccionDashboard() {
 
   const handleStartInspection = (record?: any, typeOverride?: any) => {
     if (record) {
+      const isFull = record.entry?.tipo_unidad === 'full';
+      const doneCount = Array.isArray(record.inspection_ids) ? record.inspection_ids.length : (record.inspection_id ? 1 : 0);
+
       setFormData({
         ...formData,
         record_id: record.id,
         compania: record.entry.compania_transporte || '',
         placas: record.entry.placas_unidad || '',
-        trailer: record.entry.numero_caja || '',
-        selloAlta: record.entry.sello_entrada || '',
+        trailer: (isFull && doneCount === 1) ? (record.entry.numero_caja_2 || '') : (record.entry.numero_caja || ''),
+        selloAlta: (isFull && doneCount === 1) ? (record.entry.sello_entrada_2 || '') : (record.entry.sello_entrada || ''),
+      });
+    } else {
+      setFormData({
+        compania: '', placas: '', trailer: '', precinto: '', precintoNA: false, selloAlta: '', selloVerificado: false,
+        points: [], actSospechosa: '', inspectorNombre: user?.name || '', inspectorFirma: '', record_id: ''
       });
     }
     if (typeOverride) setSelectedType(typeOverride);
@@ -104,9 +115,9 @@ export default function InspeccionDashboard() {
   };
 
   if (showForm) {
-     return <InspectionForm
+     return <InspectionWizard
               type={selectedType}
-              onClose={() => { setShowForm(false); setSelectedType(null); }}
+              onClose={() => { setShowForm(false); setSelectedType(null); loadData(); }}
               initialData={formData}
               t={t}
               saveInspection={saveInspection}
@@ -133,6 +144,14 @@ export default function InspeccionDashboard() {
         </Pressable>
       </View>
 
+      <View style={styles.filterRow}>
+        {(['todos', 'sencillo', 'full'] as const).map((f) => (
+          <Pressable key={f} onPress={() => setUnitFilter(f)} style={[styles.filterChip, unitFilter === f && styles.filterChipActive]}>
+            <Text style={[styles.filterChipText, unitFilter === f && { color: '#FFF' }]}>{f.toUpperCase()}</Text>
+          </Pressable>
+        ))}
+      </View>
+
       <FlatList
         data={combinedData}
         keyExtractor={(item) => item.id}
@@ -145,12 +164,12 @@ export default function InspeccionDashboard() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowTitle}>{item.entry.placas_unidad} {item.entry.tipo_unidad === 'full' ? '(FULL)' : ''}</Text>
                   <Text style={styles.rowSub}>{item.entry.chofer_nombre} · {item.entry.compania_transporte}</Text>
-                  <View style={{ marginVertical: 6 }}>
+                  <View style={{ marginVertical: 8 }}>
                     <ProcessTracker steps={{ entry: true, inspection: false, shipping: !!item.has_shipping_ticket, exit: false }} compact />
                   </View>
                   <Pressable style={styles.actionBtn} onPress={() => handleStartInspection(item)}>
                     <Ionicons name="clipboard-outline" size={16} color={colors.brandPrimary} />
-                    <Text style={styles.actionText}>{t('realizar_inspeccion_ahora').toUpperCase()}</Text>
+                    <Text style={styles.actionText}>{t('inspeccionar').toUpperCase()}</Text>
                   </Pressable>
                 </View>
                 <View style={[styles.statusChip, { backgroundColor: colors.warning }]}>
@@ -169,7 +188,7 @@ export default function InspeccionDashboard() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowTitle}>{item.placas_unidad} · {item.numero_trailer}</Text>
                 <Text style={styles.rowSub}>{item.inspector_nombre}</Text>
-                <View style={{ marginVertical: 6 }}>
+                <View style={{ marginVertical: 8 }}>
                   <ProcessTracker
                     steps={{
                       entry: !!relatedRecord,
@@ -199,44 +218,107 @@ export default function InspeccionDashboard() {
   );
 }
 
-// Sub-componente simplificado para el formulario
-function InspectionForm({ type, onClose, initialData, t, saveInspection, user }: any) {
+// Implementación del Wizard de Inspección integrada
+function InspectionWizard({ type, onClose, initialData, t, saveInspection, user }: any) {
   const [selectedType, setSelectedType] = useState(type);
   const [step, setStep] = useState(0);
   const [data, setData] = useState(initialData);
+  const [points, setPoints] = useState<any[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [showSig, setShowSig] = useState(false);
+  const sigRef = React.useRef<any>(null);
+
+  React.useEffect(() => {
+    if (selectedType) {
+      const def = getInspectionPoints(selectedType);
+      setPoints(def.map(p => ({ number: p.number, name: p.name, estado: '', comentarios: '', photo: '' })));
+    }
+  }, [selectedType]);
+
+  const canNext = () => {
+    if (step === 0) return data.placas && data.trailer;
+    if (step === 1) return points.every(p => p.estado !== '' && (p.estado !== 'malo' || p.photo));
+    if (step === 3) return data.inspectorFirma;
+    return true;
+  };
+
+  const handleFinish = async () => {
+    setSaving(true);
+    try {
+      await saveInspection({
+        ...data,
+        inspection_type: selectedType,
+        points,
+        fecha_hora: new Date().toISOString(),
+      });
+      onClose();
+    } catch (e: any) { alert(e.message); }
+    finally { setSaving(false); }
+  };
 
   if (!selectedType) {
     return (
       <SafeAreaView style={styles.safe}>
         <MainHeader showBack onBack={onClose} title="NAF" subtitle={t('nueva_inspeccion').toUpperCase()} />
-        <ScrollView contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }}>
-           <Pressable style={[styles.typeCard, { backgroundColor: colors.brandPrimary }]} onPress={() => setSelectedType('19_puntos')}>
-             <Ionicons name="car-sport" size={32} color="#FFF" />
-             <View><Text style={styles.typeTitle}>{t('inspeccion_19_puntos').toUpperCase()}</Text></View>
-           </Pressable>
-           <Pressable style={[styles.typeCard, { backgroundColor: colors.info }]} onPress={() => setSelectedType('9_puntos_contenedor')}>
-             <Ionicons name="cube" size={32} color="#FFF" />
-             <View><Text style={styles.typeTitle}>{t('inspeccion_9_puntos').toUpperCase()}</Text></View>
-           </Pressable>
-        </ScrollView>
+        <View style={{ padding: 20, gap: 15 }}>
+          <Pressable style={[styles.typeCard, { backgroundColor: colors.brandPrimary }]} onPress={() => setSelectedType('19_puntos')}>
+            <Ionicons name="car-sport" size={32} color="#FFF" />
+            <Text style={styles.typeTitle}>{t('inspeccion_19_puntos').toUpperCase()}</Text>
+          </Pressable>
+          <Pressable style={[styles.typeCard, { backgroundColor: colors.info }]} onPress={() => setSelectedType('9_puntos_contenedor')}>
+            <Ionicons name="cube" size={32} color="#FFF" />
+            <Text style={styles.typeTitle}>{t('inspeccion_9_puntos').toUpperCase()}</Text>
+          </Pressable>
+        </View>
       </SafeAreaView>
     );
   }
 
-  // Aquí iría la lógica de pasos (step 0 a 3) similar a la que tenías,
-  // pero por brevedad y para asegurar la sincronía, este componente
-  // ahora está integrado y bajo el mismo contexto de datos.
   return (
     <SafeAreaView style={styles.safe}>
-       <View style={styles.progressHeader}>
-          <Pressable onPress={onClose} style={{ padding: 10 }}><Ionicons name="close" size={24} color="#FFF" /></Pressable>
-          <Text style={{ color: "#FFF", fontWeight: '900' }}>MODO FORMULARIO ACTIVO</Text>
-       </View>
-       <View style={styles.center}>
-          <Text style={{ fontWeight: '900' }}>REDIRECCIONANDO AL PROCESO...</Text>
-          <ActivityIndicator color={colors.brandPrimary} style={{ marginTop: 20 }} />
-       </View>
-       {/* Re-activar el flujo de pasos original aquí */}
+      <View style={styles.progressHeader}>
+         <Pressable onPress={onClose} style={{ padding: 10 }}><Ionicons name="close" size={24} color="#FFF" /></Pressable>
+         <Text style={{ color: "#FFF", fontWeight: '900' }}>{selectedType.replace('_', ' ').toUpperCase()} - PASO {step+1}</Text>
+      </View>
+      <ScrollView contentContainerStyle={{ padding: 20 }}>
+          {step === 0 && (
+            <View>
+              <Text style={styles.label}>{t('placas').toUpperCase()}</Text>
+              <TextInput style={styles.input} value={data.placas} onChangeText={v => setData({...data, placas: v.toUpperCase()})} autoCapitalize="characters" />
+              <Text style={styles.label}>{t('trailer').toUpperCase()}</Text>
+              <TextInput style={styles.input} value={data.trailer} onChangeText={v => setData({...data, trailer: v.toUpperCase()})} autoCapitalize="characters" />
+            </View>
+          )}
+          {step === 1 && (
+            <View>
+              <Text style={{ fontWeight: '900', marginBottom: 10 }}>PUNTOS DE INSPECCIÓN ({points.filter(p=>p.estado!=='').length}/{points.length})</Text>
+              {points.map((p, idx) => (
+                <View key={p.number} style={{ marginBottom: 15, padding: 10, backgroundColor: '#F5F5F5', borderWidth: 1, borderColor: '#DDD' }}>
+                  <Text style={{ fontWeight: '700' }}>{p.number}. {p.name}</Text>
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 5 }}>
+                    <Pressable onPress={() => { const n = [...points]; n[idx].estado = 'bueno'; setPoints(n); }} style={{ flex: 1, padding: 8, backgroundColor: p.estado === 'bueno' ? colors.success : '#FFF', borderWidth: 1 }}>
+                      <Text style={{ textAlign: 'center', fontWeight: '900', color: p.estado === 'bueno' ? '#FFF' : '#333' }}>BUENO</Text>
+                    </Pressable>
+                    <Pressable onPress={() => { const n = [...points]; n[idx].estado = 'malo'; setPoints(n); }} style={{ flex: 1, padding: 8, backgroundColor: p.estado === 'malo' ? colors.error : '#FFF', borderWidth: 1 }}>
+                      <Text style={{ textAlign: 'center', fontWeight: '900', color: p.estado === 'malo' ? '#FFF' : '#333' }}>FALLA</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+          {/* ... Resto de pasos (Firma, etc) ... */}
+      </ScrollView>
+      <View style={styles.wizardFooter}>
+         {step > 0 && <Pressable style={styles.wizBtnSec} onPress={() => setStep(step-1)}><Text style={{fontWeight:'900'}}>ATRÁS</Text></Pressable>}
+         <Pressable
+           style={[styles.wizBtnPri, !canNext() && { opacity: 0.5 }]}
+           onPress={() => step < 3 ? setStep(step+1) : handleFinish()}
+           disabled={!canNext() || saving}
+         >
+           {saving ? <ActivityIndicator color="#FFF" /> : <Text style={{fontWeight:'900', color:'#FFF'}}>{step === 3 ? 'GUARDAR' : 'SIGUIENTE'}</Text>}
+         </Pressable>
+      </View>
     </SafeAreaView>
   );
 }
@@ -248,6 +330,10 @@ const styles = StyleSheet.create({
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, height: 48 },
   searchInput: { flex: 1, padding: spacing.sm, fontSize: 14, color: colors.onSurface },
   newBtn: { width: 48, height: 48, backgroundColor: colors.brandPrimary, alignItems: 'center', justifyContent: 'center', borderRadius: 4 },
+  filterRow: { flexDirection: 'row', paddingHorizontal: spacing.md, gap: 8, marginBottom: 5 },
+  filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface },
+  filterChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  filterChipText: { fontSize: 10, fontWeight: '900', color: colors.muted },
   row: { backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center' },
   rowTitle: { fontWeight: '900', fontSize: 16, color: colors.onSurface },
   rowSub: { color: colors.muted, fontSize: 12, marginTop: 2 },
@@ -261,4 +347,9 @@ const styles = StyleSheet.create({
   progressHeader: { backgroundColor: colors.brandPrimary, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 10 },
   empty: { alignItems: 'center', padding: spacing.xxxl },
   emptyText: { color: colors.muted, fontWeight: '700' },
+  label: { fontSize: 11, fontWeight: '900', color: colors.muted, marginBottom: 5 },
+  input: { borderWidth: 2, borderColor: colors.borderStrong, padding: 10, marginBottom: 15, backgroundColor: '#FFF' },
+  wizardFooter: { flexDirection: 'row', padding: 15, borderTopWidth: 1, borderColor: '#EEE', gap: 10 },
+  wizBtnPri: { flex: 1, backgroundColor: colors.brandPrimary, padding: 15, alignItems: 'center', borderRadius: 4 },
+  wizBtnSec: { flex: 1, backgroundColor: '#EEE', padding: 15, alignItems: 'center', borderRadius: 4 },
 });
