@@ -425,44 +425,42 @@ async def _log_activity(type: str, item_id: str, title: str, subtitle: str, user
 
 # ========== Lógica de Vinculación Robusta ==========
 async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
-    """Vínculo Maestro: Une Caseta, Inspecciones y Tickets por ID y Placas Normalizadas"""
+    """Vínculo Maestro: Une Caseta, Inspecciones y Tickets por Placas (Pasivo)"""
     if not record: return record
-    placas = record["entry"].get("placas_unidad", "").strip().upper()
+
+    # Asegurar campos requeridos por el modelo para evitar errores de validación
+    if "inspection_ids" not in record: record["inspection_ids"] = []
+    if "has_shipping_ticket" not in record: record["has_shipping_ticket"] = False
+
+    entry = record.get("entry")
+    if not entry or not isinstance(entry, dict): return record
+
+    placas = entry.get("placas_unidad", "").strip().upper()
     if not placas: return record
 
     placas_norm = re.sub(r'[^A-Z0-9]', '', placas)
     if not placas_norm: return record
-    updated = False
 
-    # 1. Vincular Inspecciones (Soporta múltiples para FULL)
-    flex_regex = ".*".join(list(placas_norm))
-    insps = await db.inspections.find({"placas_unidad": {"$regex": f".*{flex_regex}.*", "$options": "i"}}).to_list(10)
+    try:
+        flex_regex = ".*".join(list(placas_norm))
 
-    if insps:
-        current_ids = record.get("inspection_ids") or ([] if not record.get("inspection_id") else [record["inspection_id"]])
-        new_ids = [i["id"] for i in insps]
-        if any(nid not in current_ids for nid in new_ids):
-            record["inspection_ids"] = list(set(current_ids + new_ids))
-            record["inspection_id"] = new_ids[0]
-            if record["status"] == "entrada": record["status"] = "inspeccionado"
-            updated = True
+        # 1. Vincular Inspecciones (Soporta múltiples para FULL)
+        if not record.get("inspection_id") and not record.get("inspection_ids"):
+            insp = await db.inspections.find_one({"placas_unidad": {"$regex": f".*{flex_regex}.*", "$options": "i"}}, sort=[("created_at", -1)])
+            if insp:
+                record["inspection_id"] = insp["id"]
+                record["inspection_ids"] = [insp["id"]]
+                if record.get("status") == "entrada": record["status"] = "inspeccionado"
 
-    # 2. Vincular Ticket de Embarque
-    if not record.get("shipping_ticket_id"):
-        tick = await db.shipping_tickets.find_one({"placas_unidad": {"$regex": f".*{flex_regex}.*", "$options": "i"}}, sort=[("created_at", -1)])
-        if tick:
-            record["shipping_ticket_id"] = tick["id"]
-            record["has_shipping_ticket"] = True
-            updated = True
+        # 2. Vincular Ticket de Embarque
+        if not record.get("shipping_ticket_id"):
+            tick = await db.shipping_tickets.find_one({"placas_unidad": {"$regex": f".*{flex_regex}.*", "$options": "i"}}, sort=[("created_at", -1)])
+            if tick:
+                record["shipping_ticket_id"] = tick["id"]
+                record["has_shipping_ticket"] = True
+    except Exception as e:
+        logger.error(f"Error en vinculacion pasiva: {e}")
 
-    if updated:
-        await db.vehicle_records.update_one({"id": record["id"]}, {"$set": {
-            "inspection_id": record.get("inspection_id"),
-            "inspection_ids": record.get("inspection_ids", []),
-            "shipping_ticket_id": record.get("shipping_ticket_id"),
-            "has_shipping_ticket": record.get("has_shipping_ticket", True),
-            "status": record["status"]
-        }})
     return record
 
 # ========== Rutas de Autenticación ==========
@@ -697,7 +695,6 @@ async def _trigger_automatic_report(rec_id: str):
         i = await db.inspections.find_one({"id": iid})
         if i: inps.append(i)
 
-    e = r["entry"]; pl = e["placas_unidad"].upper()
     e = r["entry"]; pl = e["placas_unidad"].upper()
     tick = await db.shipping_tickets.find_one({"id": r.get("shipping_ticket_id")})
     if not tick:
