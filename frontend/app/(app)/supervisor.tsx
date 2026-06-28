@@ -76,11 +76,18 @@ export default function Supervisor() {
       const virtuals = allInspections
         .filter(i => !regPlates.has(i.placas_unidad?.toUpperCase()))
         .map(i => ({
-           id: `v-${i.id}`,
+           id: i.id,
            _is_virtual: true,
            status: 'inspeccionado',
            created_at: i.created_at,
-           entry: { placas_unidad: i.placas_unidad, chofer_nombre: i.inspector_nombre, compania_transporte: i.compania_transportista, fecha_entrada: i.created_at }
+           entry: {
+             placas_unidad: i.placas_unidad,
+             chofer_nombre: i.inspector_nombre || 'RECUPERADO',
+             compania_transporte: i.compania_transportista || 'HISTÓRICO',
+             fecha_entrada: i.created_at,
+             numero_caja: i.numero_trailer,
+             sello_entrada: i.numero_precinto
+           }
         }));
       source = [...allRecords, ...virtuals];
     } else if (activeTab === 'inspeccion') {

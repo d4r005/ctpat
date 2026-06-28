@@ -131,15 +131,16 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
 
   const refreshAll = useCallback(async () => {
     if (!token) return;
-    const isAdmin = user?.role === 'admin' || user?.role === 'supervisor' ||
-                    ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
-    if (!isAdmin) return;
-
     try {
+      // Quitamos la validación local de rol para dejar que sea el servidor quien responda
       const data = await apiCall<Inspection[]>('/inspections?scope=all&summary=true', { token });
-      setAllInspections(data);
-    } catch {}
-  }, [token, user]);
+      if (Array.isArray(data)) {
+        setAllInspections(data);
+      }
+    } catch (e) {
+      console.error("Error en refreshAll (Supervisor):", e);
+    }
+  }, [token]);
 
   const syncQueue = useCallback(async () => {
     if (!token) return;
