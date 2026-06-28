@@ -643,11 +643,21 @@ async def list_tickets(u: Dict[str, Any] = Depends(get_current_user)):
 
 @api_router.get("/shipping-tickets/{ticket_id}")
 async def get_ticket(ticket_id: str, u: Dict[str, Any] = Depends(get_current_user)):
-    # Intentar por ID exacto
+    # 1. Intentar por ID exacto de ticket
     doc = await db.shipping_tickets.find_one({"id": ticket_id}, {"_id": 0})
     if not doc:
-        # Si no lo halla por ID, intentar buscarlo como fallback por si es un ID de vinculación antiguo
+        # 2. Intentar buscarlo como fallback por record_id
         doc = await db.shipping_tickets.find_one({"record_id": ticket_id}, {"_id": 0})
+
+    if not doc:
+        # 3. Intentar por placas si ticket_id es un record_id válido
+        rec = await db.vehicle_records.find_one({"id": ticket_id})
+        if rec:
+            pl = rec["entry"]["placas_unidad"].upper()
+            pl_norm = re.sub(r'[^A-Z0-9]', '', pl)
+            if pl_norm:
+                flex_regex = ".*".join(list(pl_norm))
+                doc = await db.shipping_tickets.find_one({"placas_unidad": {"$regex": f".*{flex_regex}.*", "$options": "i"}}, {"_id": 0}, sort=[("created_at", -1)])
 
     if not doc: raise HTTPException(status_code=404, detail="Ticket no encontrado")
     return doc
@@ -684,12 +694,14 @@ async def _trigger_automatic_report(rec_id: str):
         i = await db.inspections.find_one({"id": iid})
         if i: inps.append(i)
 
+    e = r["entry"]; pl = e["placas_unidad"].upper()
     tick = await db.shipping_tickets.find_one({"id": r.get("shipping_ticket_id")})
     if not tick:
-        # Fallback por placas
-        flex_regex = ".*".join(list(pl.replace(' ', '')))
-        tick = await db.shipping_tickets.find_one({"placas_unidad": {"$regex": f".*{flex_regex}.*", "$options": "i"}}, sort=[("created_at", -1)])
-    e = r["entry"]; pl = e["placas_unidad"].upper()
+        # Fallback por placas normalizadas
+        pl_norm = re.sub(r'[^A-Z0-9]', '', pl)
+        if pl_norm:
+            flex_regex = ".*".join(list(pl_norm))
+            tick = await db.shipping_tickets.find_one({"placas_unidad": {"$regex": f".*{flex_regex}.*", "$options": "i"}}, sort=[("created_at", -1)])
 
     def ph(b64, lb):
         if not b64: return ""
