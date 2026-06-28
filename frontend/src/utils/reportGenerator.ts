@@ -37,7 +37,7 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
     subtitle: 'Registro, Inspección y Embarque / 注册、检查和运输',
     generated: 'Generado / 生成日期',
     sectionCaseta: '1. REGISTRO DE CASETA / 门卫室记录',
-    sectionInspection: `2. INSPECCIÓN C-TPAT (${numPoints} PUNTOS) / C-TPAT 检查`,
+    sectionInspection: `2. INSPECCIÓN C-TPAT (${activeInspections[0].points.length} PUNTOS) / C-TPAT 检查`,
     sectionShipping: '3. TICKET DE EMBARQUE / 运输单',
     sectionPhotos: 'EVIDENCIA FOTOGRÁFICA / 照片证据',
     plates: 'Placas / 车牌号',

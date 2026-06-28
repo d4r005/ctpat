@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { useInspections } from '../context/InspectionContext';
 import { colors, spacing } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -17,6 +18,7 @@ interface MainHeaderProps {
 
 const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack }) => {
   const { user } = useAuth();
+  const { isOnline } = useInspections();
   const { t } = useTranslation();
   const router = useRouter();
   const [showNotifs, setShowNotifs] = React.useState(false);
@@ -48,9 +50,9 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack }) =>
         <Pressable onPress={() => setShowProfile(true)} style={styles.userContainer}>
           <View style={styles.avatarCircle}>
             <Text style={styles.avatarText}>{user?.name?.charAt(0).toUpperCase() || 'D'}</Text>
-            <View style={styles.onlineIndicator} />
+            <View style={[styles.onlineIndicator, !isOnline && { backgroundColor: colors.muted }]} />
           </View>
-          <Text style={styles.onlineStatusText}>● {t('online')}</Text>
+          <Text style={[styles.onlineStatusText, !isOnline && { color: colors.muted }]}>● {isOnline ? t('online') : t('fuera_linea')}</Text>
         </Pressable>
       </View>
       <NotificationsPanel visible={showNotifs} onClose={() => setShowNotifs(false)} />

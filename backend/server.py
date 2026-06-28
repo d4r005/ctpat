@@ -595,6 +595,22 @@ async def acts(u: Dict[str, Any] = Depends(get_current_user)):
 async def anly(u: Dict[str, Any] = Depends(get_current_user)):
     c = await db.inspections.count_documents({}); return {"total": c}
 
+@api_router.post("/inspections/{inspection_id}/send-report")
+async def manual_send_report(inspection_id: str, body: Optional[Dict[str, str]] = None, u: Dict[str, Any] = Depends(get_current_user)):
+    insp = await db.inspections.find_one({"id": inspection_id})
+    if not insp: raise HTTPException(status_code=404)
+    placas = insp.get("placas_unidad", "").strip()
+    record = await db.vehicle_records.find_one({"$or": [{"inspection_id": inspection_id}, {"inspection_ids": inspection_id}, {"entry.placas_unidad": placas}]})
+    if not record: raise HTTPException(status_code=404, detail="No se encontró registro vinculado")
+    success = await _trigger_automatic_report(record["id"])
+    return {"ok": success}
+
+@api_router.post("/vehicle-records/{rec_id}/send-report")
+async def manual_send_record_report(rec_id: str, u: Dict[str, Any] = Depends(get_current_user)):
+    success = await _trigger_automatic_report(rec_id)
+    if not success: raise HTTPException(status_code=500)
+    return {"ok": True, "message": "Reporte enviado exitosamente"}
+
 # ========== Chat e Infraestructura ==========
 @api_router.post("/chat/send", response_model=ChatMessage)
 async def snd_ch(b: ChatMessageCreate, u: Dict[str, Any] = Depends(get_current_user)):
