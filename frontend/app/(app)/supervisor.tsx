@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { apiCall } from '@/src/api/client';
-import { colors, spacing, typography } from '@/src/constants/theme';
+import { colors, spacing } from '@/src/constants/theme';
 import { generateConsolidatedReportHtml } from '@/src/utils/reportGenerator';
 import ProcessTracker from '@/src/components/ProcessTracker';
 import MainHeader from '@/src/components/MainHeader';
@@ -57,7 +57,7 @@ export default function Supervisor() {
     setSyncing(true);
     try {
       const res = await apiCall<any>('/admin/repair-links', { method: 'POST', token });
-      Alert.alert("Auditoría Finalizada", `Se han recuperado ${res.reconstructed} registros y vinculado un total de ${res.total_records} folios.`);
+      Alert.alert("Auditoría Finalizada", `Se han reconstruido ${res.reconstructed} registros y vinculado un total de ${res.total_records} folios.`);
       await fetchEverything();
     } catch (e: any) {
       Alert.alert("Error", e.message);
@@ -68,10 +68,29 @@ export default function Supervisor() {
 
   const filteredData = useMemo(() => {
     const q = query.toLowerCase().trim();
-    let source = activeTab === 'caseta' ? allRecords :
-                 activeTab === 'inspeccion' ? allInspections : allTickets;
+    let source: any[] = [];
 
-    return (source || []).filter((item: any) => {
+    if (activeTab === 'caseta') {
+      // Unir registros de caseta con inspecciones que no tienen caseta aún
+      const regPlates = new Set(allRecords.map(r => r.entry?.placas_unidad?.toUpperCase()));
+      const virtuals = allInspections
+        .filter(i => !regPlates.has(i.placas_unidad?.toUpperCase()))
+        .map(i => ({
+           id: `v-${i.id}`,
+           _is_virtual: true,
+           status: 'inspeccionado',
+           created_at: i.created_at,
+           entry: { placas_unidad: i.placas_unidad, chofer_nombre: i.inspector_nombre, compania_transporte: i.compania_transportista, fecha_entrada: i.created_at }
+        }));
+      source = [...allRecords, ...virtuals];
+    } else if (activeTab === 'inspeccion') {
+      source = allInspections;
+    } else {
+      source = allTickets;
+    }
+
+    if (!q) return source;
+    return source.filter((item: any) => {
       const plates = (item.placas_unidad || item.entry?.placas_unidad || '').toLowerCase();
       const name = (item.chofer_nombre || item.entry?.chofer_nombre || item.inspector_nombre || item.cliente || '').toLowerCase();
       return plates.includes(q) || name.includes(q);
@@ -85,7 +104,7 @@ export default function Supervisor() {
       const plates = item.placas_unidad || item.entry?.placas_unidad;
       const normPlates = norm(plates);
 
-      const fullRecord = item.entry ? item : await apiCall<any>(`/vehicle-records/${item.id}`, { token }).catch(() => null);
+      const fullRecord = item.entry && !item._is_virtual ? item : await apiCall<any>(`/vehicle-records/${item.id}`, { token }).catch(() => null);
       const matchTicket = allTickets.find(tk => norm(tk.placas_unidad) === normPlates);
       const matchInsps = allInspections.filter(i => i.record_id === item.id || norm(i.placas_unidad) === normPlates);
 
@@ -143,12 +162,7 @@ export default function Supervisor() {
           </View>
           <View style={styles.searchCont}>
             <Ionicons name="search" size={20} color={colors.muted} />
-            <TextInput
-              style={styles.search}
-              placeholder="Placas, compañía, tráiler..."
-              value={query}
-              onChangeText={setQuery}
-            />
+            <TextInput style={styles.search} placeholder="Placas, compañía, tráiler..." value={query} onChangeText={setQuery} />
           </View>
         </View>
 
@@ -192,7 +206,7 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router, records, tickets,
   const subtitle = item.entry?.chofer_nombre || item.chofer_nombre || item.inspector_nombre || item.cliente || '-';
   const company = item.entry?.compania_transporte || item.compania_transportista || '-';
 
-  const relatedRecord = type === 'caseta' ? item : records.find((r: any) => normalize(r.entry?.placas_unidad) === normPlates);
+  const relatedRecord = type === 'caseta' ? (item._is_virtual ? null : item) : records.find((r: any) => normalize(r.entry?.placas_unidad) === normPlates);
   const isFull = (relatedRecord?.entry?.tipo_unidad === 'full') || (item.inspection_type === '19_puntos' && item.numero_trailer?.includes('-2'));
 
   const relatedInsps = inspections.filter((i: any) => i.record_id === relatedRecord?.id || normalize(i.placas_unidad) === normPlates);
@@ -200,13 +214,13 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router, records, tickets,
   const inspectionComplete = isFull ? relatedInsps.length >= 2 : relatedInsps.length >= 1;
 
   const steps = {
-    entry: !!relatedRecord,
+    entry: !!relatedRecord || item._is_virtual,
     inspection: inspectionComplete,
     shipping: hasTicket,
-    exit: relatedRecord?.status === 'salida'
+    exit: relatedRecord?.status?.toLowerCase() === 'salida' || relatedRecord?.status?.toLowerCase() === 'salió'
   };
 
-  const status = (relatedRecord?.status || (item.status_general === 'bueno' ? 'inspeccionado' : 'entrada')).toUpperCase();
+  const status = (relatedRecord?.status || (inspectionComplete ? 'inspeccionado' : 'entrada')).toUpperCase();
 
   return (
     <View style={styles.row}>
@@ -220,7 +234,7 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router, records, tickets,
 
         <View style={styles.rowActions}>
            <Pressable style={styles.actionLink} onPress={() => router.push(type === 'inspeccion' ? `/inspection/${item.id}` : `/caseta/${relatedRecord?.id || item.id}`)}>
-             <Ionicons name="create-outline" size={16} color="#333" />
+             <Ionicons name="create-outline" size={14} color="#333" />
              <Text style={styles.actionLinkText}>{type === 'inspeccion' ? 'EDITAR INSPECCIÓN' : 'EDITOR'}</Text>
            </Pressable>
            <Pressable style={styles.pdfBtn} onPress={onPdf} disabled={loadingPdf}>
@@ -229,17 +243,17 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router, records, tickets,
              {loadingPdf && <ActivityIndicator size="small" color="#FFF" style={{ marginLeft: 5 }} />}
            </Pressable>
            <Pressable style={styles.actionLink}>
-              <Ionicons name="mail-outline" size={16} color="#333" />
-              <Text style={styles.actionLinkText}>CORREO</Text>
+              <Ionicons name="mail-outline" size={14} color="#333" />
+              <Text style={styles.actionLinkText}>CORREO ELECTRÓNICO</Text>
            </Pressable>
         </View>
       </View>
 
       <View style={styles.statusSide}>
-         <View style={[styles.statusChip, { backgroundColor: status === 'SALIDA' || status === 'SALIÓ' ? colors.success : status === 'INSPECCIONADO' ? colors.info : colors.warning }]}>
-           <Text style={styles.statusChipText}>{status === 'INSPECCIONADO' ? 'BUENO' : status}</Text>
+         <View style={[styles.statusChip, { backgroundColor: steps.exit ? '#10B981' : status === 'INSPECCIONADO' ? '#0284C7' : '#F59E0B' }]}>
+           <Text style={styles.statusChipText}>{steps.exit ? 'SALIÓ' : status === 'INSPECCIONADO' ? 'BUENO' : status}</Text>
          </View>
-         <View style={[styles.statusChip, { backgroundColor: inspectionComplete ? colors.success : colors.warning, marginTop: 4 }]}>
+         <View style={[styles.statusChip, { backgroundColor: inspectionComplete ? '#10B981' : '#F59E0B', marginTop: 4 }]}>
            <Text style={styles.statusChipText}>{inspectionComplete ? 'APROBADO' : 'PENDIENTE'}</Text>
          </View>
          <Pressable style={styles.deleteBtn}><Ionicons name="trash-outline" size={18} color={colors.error} /></Pressable>
@@ -259,23 +273,23 @@ const styles = StyleSheet.create({
   headerFixed: { backgroundColor: '#FFF', borderBottomWidth: 2, borderBottomColor: '#000' },
   tabRow: { flexDirection: 'row' },
   tab: { flex: 1, padding: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRightWidth: 1, borderRightColor: '#EEE' },
-  tabActive: { backgroundColor: '#0A2540', borderBottomWidth: 4, borderBottomColor: colors.brandSecondary },
+  tabActive: { backgroundColor: '#0A2540', borderBottomWidth: 4, borderBottomColor: '#F59E0B' },
   tabText: { fontWeight: '900', fontSize: 11, color: '#333' },
   tabTextActive: { color: '#FFF' },
   searchCont: { padding: 10, flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: '#EEE' },
   search: { flex: 1, height: 40, fontSize: 14, fontWeight: '600' },
   row: { backgroundColor: '#FFF', padding: 15, marginBottom: 12, borderWidth: 2, borderColor: '#000', flexDirection: 'row' },
   rowTitle: { fontWeight: '900', fontSize: 15 },
-  rowSub: { color: colors.muted, fontSize: 12, marginTop: 2, fontWeight: '600' },
+  rowSub: { color: '#6B7280', fontSize: 12, marginTop: 2, fontWeight: '600' },
   rowActions: { flexDirection: 'row', gap: 10, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' },
   actionLink: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  actionLinkText: { fontWeight: '900', fontSize: 10, textDecorationLine: 'underline' },
+  actionLinkText: { fontWeight: '900', fontSize: 9, textDecorationLine: 'underline' },
   pdfBtn: { backgroundColor: '#0A2540', paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  pdfBtnText: { color: '#FFF', fontWeight: '900', fontSize: 10 },
+  pdfBtnText: { color: '#FFF', fontWeight: '900', fontSize: 9 },
   statusSide: { alignItems: 'flex-end', width: 100 },
   statusChip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 2, width: '100%', alignItems: 'center' },
   statusChipText: { color: '#FFF', fontWeight: '900', fontSize: 9 },
   dateText: { fontSize: 9, color: '#666', marginTop: 10, textAlign: 'right' },
   deleteBtn: { marginTop: 10, padding: 5 },
-  empty: { textAlign: 'center', marginTop: 50, color: colors.muted, fontWeight: '700' }
+  empty: { textAlign: 'center', marginTop: 50, color: '#6B7280', fontWeight: '700' }
 });
