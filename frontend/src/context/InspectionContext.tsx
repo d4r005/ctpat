@@ -112,7 +112,8 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     if (!token) return;
     setLoading(true);
     try {
-      const isAdmin = user?.role === 'admin' || user?.email === 'd.trujillo@brancoindustries.com' || user?.email === 'd4r005@gmail.com';
+      const userEmail = user?.email?.toLowerCase().trim() || '';
+      const isAdmin = user?.role === 'admin' || userEmail.includes('d.trujillo') || userEmail.includes('d4r005');
       const scope = (isAdmin || user?.role === 'supervisor') ? 'all' : 'mine';
 
       const data = await apiCall<Inspection[]>(`/inspections?summary=true&scope=${scope}`, { token });
@@ -126,12 +127,16 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   }, [token, user]);
 
   const refreshAll = useCallback(async () => {
-    if (!token || (user?.role !== 'supervisor' && user?.role !== 'admin')) return;
+    if (!token) return;
+    const userEmail = user?.email?.toLowerCase().trim() || '';
+    const isAdmin = user?.role === 'admin' || userEmail.includes('d.trujillo') || userEmail.includes('d4r005');
+    if (!isAdmin && user?.role !== 'supervisor') return;
+
     try {
       const data = await apiCall<Inspection[]>('/inspections?scope=all&summary=true', { token });
       setAllInspections(data);
     } catch {}
-  }, [token, user?.role]);
+  }, [token, user]);
 
   const syncQueue = useCallback(async () => {
     if (!token) return;
