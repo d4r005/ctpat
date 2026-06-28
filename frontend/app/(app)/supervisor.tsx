@@ -158,14 +158,8 @@ export default function Supervisor() {
       }, 'es');
 
       if (Platform.OS === 'web') {
-        const { uri } = await Print.printToFileAsync({ html, base64: false });
-        const res = await fetch(uri);
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `reporte_consolidado_${normPlates}.pdf`;
-        link.click();
+        // En web, Print.printAsync es mucho más fiable que printToFileAsync para evitar capturar el DOM de la app
+        await Print.printAsync({ html });
       } else {
         const { uri } = await Print.printToFileAsync({ html, base64: false });
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Reporte Consolidado' });

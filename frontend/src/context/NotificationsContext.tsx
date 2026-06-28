@@ -66,7 +66,6 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       if (data.length > 0) {
         const newest = data[0];
         if (!newest.read && newest.id !== lastIdRef.current) {
-          // It's a brand new notification
           triggerLocalAlert(newest);
           lastIdRef.current = newest.id;
         }
@@ -76,6 +75,25 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [token, triggerLocalAlert]);
 
+  const registerPushToken = useCallback(async () => {
+    if (!token || Platform.OS === 'web') return;
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      if (finalStatus !== 'granted') return;
+
+      const expoToken = (await Notifications.getExpoPushTokenAsync()).data;
+      await apiCall('/users/push-token', { method: 'POST', body: { token: expoToken }, token });
+      console.log('Push Token registrado:', expoToken);
+    } catch (err) {
+      console.error('Error registrando Push Token:', err);
+    }
+  }, [token]);
+
   useEffect(() => {
     if (!token) {
       setNotifications([]);
@@ -83,8 +101,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Initial fetch
     refresh();
+    registerPushToken();
 
     // Request permissions for local alerts if not already granted
     (async () => {
