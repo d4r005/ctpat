@@ -278,7 +278,6 @@ class VehicleExit(BaseModel):
     sello_vvtt_foto: str = ""
     sello_vvtt_foto_2: str = ""
     guardia_salida_nombre: str = ""
-    firma_guardia: str = ""
     fecha_salida: Optional[str] = None
 
 class VehicleRecord(BaseModel):
@@ -533,7 +532,6 @@ async def get_record(rec_id: str, current_user: Dict[str, Any] = Depends(get_cur
 @api_router.patch("/vehicle-records/{rec_id}/exit", response_model=VehicleRecord)
 async def exit_record(rec_id: str, body: VehicleExit, current_user: Dict[str, Any] = Depends(get_current_user)):
     x = body.dict(); x["fecha_salida"] = datetime.now(timezone.utc).isoformat()
-    if x.get("firma_guardia"): x["firma_guardia"] = ensure_clean_image(x["firma_guardia"])
     if x.get("sello_vvtt_foto"): x["sello_vvtt_foto"] = ensure_clean_image(x["sello_vvtt_foto"])
 
     await db.vehicle_records.update_one({"id": rec_id}, {"$set": {"exit": x, "status": "salida"}})
