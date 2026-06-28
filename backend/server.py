@@ -58,6 +58,7 @@ async def startup_event():
         await db.vehicle_records.create_index([("created_at", -1)])
         await db.inspections.create_index([("id", 1)], unique=True)
         await db.users.create_index([("email", 1)], unique=True)
+        await db.activities.create_index([("created_at", -1)])
         logger.info("Servidor SRIUC iniciado e índices verificados.")
     except Exception as e:
         logger.error(f"Error en startup: {e}")
@@ -227,6 +228,35 @@ class VehicleRecord(BaseModel):
     has_shipping_ticket: bool = False
     created_at: str
 
+class ShippingTicketCreate(BaseModel):
+    almacenista: str
+    fecha: Optional[str] = None
+    area: str = ""
+    sellos: str = ""
+    cliente: str = ""
+    operador: str = ""
+    linea_transporte: str = ""
+    numero_economico: str = ""
+    placas_unidad: str = ""
+    numero_caja: str = ""
+    placas_caja: str = ""
+    hora_llegada: str = ""
+    hora_apertura_cortina: str = ""
+    hora_cierre_cortina: str = ""
+    hora_salida: str = ""
+    numero_pallets: str = ""
+    numero_sello: str = ""
+    observaciones: str = ""
+    daño_caja: str = ""
+    plano_carga: str = ""
+    foto_inicio_carga: str = ""
+    foto_media_carga: str = ""
+    foto_final_carga: str = ""
+    firma_almacenista: str = ""
+    firma_guardia: str = ""
+    nombre_guardia: str = ""
+    record_id: Optional[str] = None
+
 # ========== Helpers ==========
 def add_watermark(base64_str: str) -> str:
     if not base64_str or not isinstance(base64_str, str) or not base64_str.startswith('data:image'):
@@ -234,20 +264,15 @@ def add_watermark(base64_str: str) -> str:
     try:
         header, encoded = base64_str.split(",", 1) if "," in base64_str else ("data:image/jpeg;base64", base64_str)
         img = Image.open(io.BytesIO(base64.b64decode(encoded)))
-        if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            background.paste(img, mask=img.split()[3] if img.mode == 'RGBA' else None)
-            img = background
-        elif img.mode != 'RGB': img = img.convert('RGB')
+        if img.mode != 'RGB': img = img.convert('RGB')
         max_width = 600
         if img.width > max_width:
             ratio = max_width / float(img.width)
             img = img.resize((max_width, int(float(img.height) * ratio)), Image.LANCZOS)
         draw = ImageDraw.Draw(img)
         text = f"SRIUC | {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-        width, height = img.size
-        draw.rectangle([0, height - 25, width, height], fill=(0, 0, 0))
-        draw.text((10, height - 20), text, fill=(255, 255, 255))
+        draw.rectangle([0, img.size[1] - 25, img.size[0], img.size[1]], fill=(0, 0, 0))
+        draw.text((10, img.size[1] - 20), text, fill=(255, 255, 255))
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=50, optimize=True)
         return f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode()}"
@@ -297,18 +322,47 @@ async def sync_to_google_sheets(process_type: str, data: Dict[str, Any], report_
             payload = {
                 "proceso": process_type.upper(), "id_vinculo": data.get("id"),
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "placas_carpeta": placas, "reporte_html": report_html
+                "placas_carpeta": placas, "reporte_html": report_html,
+                "id_unico_proceso": f"{process_type}_{data.get('id')}"
             }
             requests.post(webhook_url, json=payload, timeout=30)
         except: pass
     import asyncio
     asyncio.create_task(asyncio.to_thread(send))
 
-# ========== Auth ==========
+async def _log_activity(type: str, item_id: str, title: str, subtitle: str, user_name: str, status: str = ""):
+    doc = {"id": item_id, "type": type, "title": title.upper(), "subtitle": subtitle.upper(), "user_name": user_name.upper(), "status": status, "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.activities.insert_one(doc)
+
+# ========== Logic Vínculos ==========
+async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
+    placas = record["entry"].get("placas_unidad", "").strip().upper()
+    if not placas: return record
+    placas_norm = re.sub(r'[^A-Z0-9]', '', placas)
+    if not placas_norm: return record
+    updated = False
+    if not record.get("inspection_id") or not record.get("inspection_ids"):
+        flex_regex = ".*".join(list(placas_norm))
+        insp = await db.inspections.find_one({"placas_unidad": {"$regex": f".*{flex_regex}.*", "$options": "i"}}, sort=[("created_at", -1)])
+        if insp:
+            record["inspection_id"] = insp["id"]
+            if "inspection_ids" not in record or not isinstance(record["inspection_ids"], list): record["inspection_ids"] = []
+            if insp["id"] not in record["inspection_ids"]: record["inspection_ids"].append(insp["id"])
+            if record["status"] == "entrada": record["status"] = "inspeccionado"
+            updated = True
+    if not record.get("shipping_ticket_id"):
+        flex_regex = ".*".join(list(placas_norm))
+        tick = await db.shipping_tickets.find_one({"placas_unidad": {"$regex": f".*{flex_regex}.*", "$options": "i"}}, sort=[("created_at", -1)])
+        if tick: record["shipping_ticket_id"] = tick["id"]; record["has_shipping_ticket"] = True; updated = True
+    if updated:
+        await db.vehicle_records.update_one({"id": record["id"]}, {"$set": {"inspection_id": record.get("inspection_id"), "inspection_ids": record.get("inspection_ids", []), "shipping_ticket_id": record.get("shipping_ticket_id"), "has_shipping_ticket": record.get("has_shipping_ticket", True), "status": record["status"]}})
+    return record
+
+# ========== Auth Routes ==========
 @api_router.post("/auth/register", response_model=TokenResponse)
 async def register(body: UserRegister):
     existing = await db.users.find_one({"email": body.email.lower()})
-    if existing: raise HTTPException(status_code=400, detail="Ya existe")
+    if existing: raise HTTPException(status_code=400, detail="Correo ya registrado")
     user_id = str(uuid.uuid4())
     doc = {"id": user_id, "email": body.email.lower(), "name": body.name.upper(), "role": body.role, "active": True, "password_hash": hash_password(body.password), "created_at": datetime.now(timezone.utc).isoformat()}
     await db.users.insert_one(doc)
@@ -323,36 +377,7 @@ async def login(body: UserLogin):
 @api_router.get("/auth/me", response_model=UserPublic)
 async def me(current_user: Dict[str, Any] = Depends(get_current_user)): return UserPublic(**current_user)
 
-# ========== Records & Logic ==========
-async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
-    placas = record["entry"].get("placas_unidad", "").strip().upper()
-    if not placas: return record
-    placas_norm = re.sub(r'[^A-Z0-9]', '', placas)
-    if not placas_norm: return record
-
-    updated = False
-    if not record.get("inspection_id") or not record.get("inspection_ids"):
-        flex_regex = ".*".join(list(placas_norm))
-        insp = await db.inspections.find_one({"placas_unidad": {"$regex": f".*{flex_regex}.*", "$options": "i"}}, sort=[("created_at", -1)])
-        if insp:
-            record["inspection_id"] = insp["id"]
-            if "inspection_ids" not in record or not isinstance(record["inspection_ids"], list): record["inspection_ids"] = []
-            if insp["id"] not in record["inspection_ids"]: record["inspection_ids"].append(insp["id"])
-            if record["status"] == "entrada": record["status"] = "inspeccionado"
-            updated = True
-
-    if not record.get("shipping_ticket_id"):
-        flex_regex = ".*".join(list(placas_norm))
-        tick = await db.shipping_tickets.find_one({"placas_unidad": {"$regex": f".*{flex_regex}.*", "$options": "i"}}, sort=[("created_at", -1)])
-        if tick:
-            record["shipping_ticket_id"] = tick["id"]
-            record["has_shipping_ticket"] = True
-            updated = True
-
-    if updated:
-        await db.vehicle_records.update_one({"id": record["id"]}, {"$set": {"inspection_id": record.get("inspection_id"), "inspection_ids": record.get("inspection_ids", []), "shipping_ticket_id": record.get("shipping_ticket_id"), "has_shipping_ticket": record.get("has_shipping_ticket", True), "status": record["status"]}})
-    return record
-
+# ========== Vehicle Records ==========
 @api_router.get("/vehicle-records", response_model=List[VehicleRecord])
 async def list_vehicle_records(current_user: Dict[str, Any] = Depends(get_current_user), status: Optional[str] = None):
     filt = {"status": status} if status else {}
@@ -362,9 +387,10 @@ async def list_vehicle_records(current_user: Dict[str, Any] = Depends(get_curren
 @api_router.post("/vehicle-records", response_model=VehicleRecord)
 async def create_record(body: VehicleEntry, current_user: Dict[str, Any] = Depends(get_current_user)):
     rec_id = str(uuid.uuid4())
-    doc = {"id": rec_id, "user_id": current_user["id"], "status": "entrada", "entry": body.dict(), "created_at": datetime.now(timezone.utc).isoformat()}
+    doc = {"id": rec_id, "user_id": current_user["id"], "status": "entrada", "entry": body.dict(), "exit": None, "inspection_id": None, "inspection_ids": [], "shipping_ticket_id": None, "has_shipping_ticket": False, "created_at": datetime.now(timezone.utc).isoformat()}
     doc["entry"]["placas_unidad"] = doc["entry"]["placas_unidad"].upper()
     await db.vehicle_records.insert_one(doc)
+    await _log_activity("caseta", rec_id, f"Entrada: {doc['entry']['placas_unidad']}", f"Chofer: {body.chofer_nombre}", current_user["name"], "entrada")
     await sync_to_google_sheets("entrada", doc)
     return VehicleRecord(**{k: v for k, v in doc.items() if k != "_id"})
 
@@ -376,77 +402,90 @@ async def get_record(rec_id: str, current_user: Dict[str, Any] = Depends(get_cur
 
 @api_router.patch("/vehicle-records/{rec_id}/exit", response_model=VehicleRecord)
 async def exit_record(rec_id: str, body: VehicleExit, current_user: Dict[str, Any] = Depends(get_current_user)):
-    exit_data = body.dict()
-    exit_data["fecha_salida"] = datetime.now(timezone.utc).isoformat()
+    exit_data = body.dict(); exit_data["fecha_salida"] = datetime.now(timezone.utc).isoformat()
     await db.vehicle_records.update_one({"id": rec_id}, {"$set": {"exit": exit_data, "status": "salida"}})
     updated = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
-
+    await _log_activity("caseta", rec_id, f"Salida: {updated['entry']['placas_unidad']}", f"Destino: {exit_data.get('destino')}", current_user["name"], "salida")
     async def post_tasks():
-        await _trigger_automatic_report(rec_id)
-        await sync_to_google_sheets("salida", updated)
-    import asyncio
-    asyncio.create_task(post_tasks())
+        await _trigger_automatic_report(rec_id); await sync_to_google_sheets("salida", updated)
+    import asyncio; asyncio.create_task(post_tasks())
     return VehicleRecord(**updated)
+
+@api_router.delete("/vehicle-records/{rec_id}/admin-delete")
+async def admin_delete_record(rec_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    if not is_admin(current_user): raise HTTPException(status_code=403)
+    await db.vehicle_records.delete_one({"id": rec_id}); return {"ok": True}
 
 # ========== Inspections ==========
 @api_router.post("/inspections", response_model=Inspection)
 async def create_insp(body: InspectionCreate, current_user: Dict[str, Any] = Depends(get_current_user)):
-    id_insp = str(uuid.uuid4())
-    doc = body.dict()
-    doc.update({"id": id_insp, "user_id": current_user["id"], "created_at": datetime.now(timezone.utc).isoformat(), "status_general": "malo" if any(p.estado == "malo" for p in body.points) else "bueno", "placas_unidad": body.placas_unidad.upper()})
-
+    id_insp = str(uuid.uuid4()); doc = body.dict()
+    doc.update({"id": id_insp, "user_id": current_user["id"], "created_at": datetime.now(timezone.utc).isoformat(), "status_general": "malo" if any(p.estado == "malo" for p in body.points) else "bueno", "placas_unidad": body.placas_unidad.upper(), "approval_status": "pendiente"})
     doc["inspector_firma"] = ensure_clean_image(doc.get("inspector_firma", ""))
     for p in doc["points"]:
         if p.get("photo"): p["photo"] = ensure_clean_image(p["photo"])
-
     await db.inspections.insert_one(doc)
     if body.record_id:
         await db.vehicle_records.update_one({"id": body.record_id}, {"$set": {"inspection_id": id_insp, "status": "inspeccionado"}, "$addToSet": {"inspection_ids": id_insp}})
-
-    await sync_to_google_sheets("inspeccion", doc)
-    return Inspection(**{k: v for k, v in doc.items() if k != "_id"})
+    await _log_activity("inspection", id_insp, f"Inspección: {doc['placas_unidad']}", f"Por {body.inspector_nombre}", current_user["name"], doc["status_general"])
+    await sync_to_google_sheets("inspeccion", doc); return _serialize_inspection(doc)
 
 @api_router.get("/inspections", response_model=List[Inspection])
 async def list_insp(current_user: Dict[str, Any] = Depends(get_current_user), scope: str = "mine"):
-    filt = {} if scope == "all" and is_admin(current_user) else {"user_id": current_user["id"]}
+    filt = {} if scope == "all" and (current_user["role"] in ["supervisor", "admin"] or is_admin(current_user)) else {"user_id": current_user["id"]}
     docs = await db.inspections.find(filt, {"_id": 0}).sort("created_at", -1).to_list(100)
-    return [Inspection(**d) for d in docs]
+    return [_serialize_inspection(d) for d in docs]
 
 @api_router.get("/inspections/{insp_id}", response_model=Inspection)
 async def get_insp(insp_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     doc = await db.inspections.find_one({"id": insp_id}, {"_id": 0})
     if not doc: raise HTTPException(status_code=404)
+    return _serialize_inspection(doc)
+
+@api_router.delete("/inspections/{insp_id}/admin-delete")
+async def admin_delete_insp(insp_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    if not is_admin(current_user): raise HTTPException(status_code=403)
+    await db.inspections.delete_one({"id": insp_id}); return {"ok": True}
+
+def _serialize_inspection(doc: Dict[str, Any]) -> Inspection:
+    for f in ["inspector_firma", "verificador_firma", "approved_by_signature"]:
+        if doc.get(f) and not doc[f].startswith('data:image'): doc[f] = f"data:image/png;base64,{doc[f]}"
     return Inspection(**doc)
 
-# ========== Shipping ==========
-class ShippingTicket(BaseModel):
-    id: str; user_id: str; cliente: str; placas_unidad: str; created_at: str; almacenista: str; operador: str
-
+# ========== Shipping Tickets ==========
 @api_router.post("/shipping-tickets")
-async def create_tick(body: Any, current_user: Dict[str, Any] = Depends(get_current_user)):
-    tid = str(uuid.uuid4()); doc = body if isinstance(body, dict) else body.dict()
+async def create_tick(body: ShippingTicketCreate, current_user: Dict[str, Any] = Depends(get_current_user)):
+    tid = str(uuid.uuid4()); doc = body.dict()
     doc.update({"id": tid, "user_id": current_user["id"], "created_at": datetime.now(timezone.utc).isoformat(), "placas_unidad": doc.get("placas_unidad", "").upper()})
     await db.shipping_tickets.insert_one(doc)
-    if doc.get("record_id"): await db.vehicle_records.update_one({"id": doc["record_id"]}, {"$set": {"shipping_ticket_id": tid, "has_shipping_ticket": True}})
-    await sync_to_google_sheets("embarque", doc)
-    return {"id": tid}
+    if body.record_id: await db.vehicle_records.update_one({"id": body.record_id}, {"$set": {"shipping_ticket_id": tid, "has_shipping_ticket": True}})
+    await _log_activity("embarque", tid, f"Ticket: {doc['placas_unidad']}", f"Cliente: {doc['cliente']}", current_user["name"], "embarque")
+    await sync_to_google_sheets("embarque", doc); return {"id": tid}
 
-@api_router.get("/shipping-tickets", response_model=List[Dict[str, Any]])
+@api_router.get("/shipping-tickets")
 async def list_ticks(current_user: Dict[str, Any] = Depends(get_current_user)):
-    docs = await db.shipping_tickets.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
-    return docs
+    docs = await db.shipping_tickets.find({}, {"_id": 0}).sort("created_at", -1).to_list(100); return docs
 
-# ========== Admin & Report ==========
+@api_router.delete("/shipping-tickets/{tid}/admin-delete")
+async def admin_delete_ticket(tid: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    if not is_admin(current_user): raise HTTPException(status_code=403)
+    await db.shipping_tickets.delete_one({"id": tid}); return {"ok": True}
+
+# ========== Helpers Extra ==========
+@api_router.get("/activities")
+async def acts(current_user: Dict[str, Any] = Depends(get_current_user)):
+    docs = await db.activities.find().sort("created_at", -1).to_list(50); return docs
+
+@api_router.get("/analytics")
+async def analytics(current_user: Dict[str, Any] = Depends(get_current_user)):
+    if not is_admin(current_user) and current_user.get("role") != "supervisor": raise HTTPException(status_code=403)
+    count = await db.inspections.count_documents({}); return {"total": count}
+
 async def _trigger_automatic_report(rec_id: str):
-    rec = await db.vehicle_records.find_one({"id": rec_id})
-    if not rec: return False
-    rec = await _ensure_record_links(rec)
+    rec = await db.vehicle_records.find_one({"id": rec_id}); rec = await _ensure_record_links(rec)
     insp = await db.inspections.find_one({"id": rec.get("inspection_id")})
-    tick = await db.shipping_tickets.find_one({"id": rec.get("shipping_ticket_id")})
-
     subject = f"REPORTE SRIUC - {rec['entry']['placas_unidad']}"
-    html = f"<html><body><h1>Reporte Final</h1><p>Unidad: {rec['entry']['placas_unidad']}</p></body></html>"
-
+    html = f"<html><body><h1>Reporte SRIUC</h1><p>Unidad: {rec['entry']['placas_unidad']}</p></body></html>"
     h, u, p = os.environ.get("SMTP_HOST"), os.environ.get("SMTP_USER"), os.environ.get("SMTP_PASS")
     if all([h,u,p]):
         msg = MIMEMultipart(); msg["From"], msg["To"], msg["Subject"] = u, os.environ.get("REPORT_RECIPIENT", u), subject
@@ -455,15 +494,23 @@ async def _trigger_automatic_report(rec_id: str):
         except: pass
     return True
 
-@api_router.get("/activities")
-async def acts(current_user: Dict[str, Any] = Depends(get_current_user)):
-    docs = await db.activities.find().sort("created_at", -1).to_list(50)
-    return docs
+# ========== Chat ==========
+@api_router.post("/chat/send", response_model=ChatMessage)
+async def send_chat(body: ChatMessageCreate, current_user: Dict[str, Any] = Depends(get_current_user)):
+    doc = {"id": str(uuid.uuid4()), "user_id": current_user["id"], "user_name": current_user["name"], "room": body.room.upper(), "text": body.text, "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.chat_messages.insert_one(doc); return ChatMessage(**doc)
 
-@api_router.get("/analytics")
-async def analytics(current_user: Dict[str, Any] = Depends(require_admin)):
-    insps = await db.inspections.find().to_list(1000)
-    return {"total": len(insps)}
+@api_router.get("/chat/{room}", response_model=List[ChatMessage])
+async def get_chat(room: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    docs = await db.chat_messages.find({"room": room.upper()}).sort("created_at", -1).to_list(50)
+    docs.reverse(); return [ChatMessage(**d) for d in docs]
+
+# ========== Main ==========
+@api_router.get("/")
+async def root(): return {"status": "online"}
 
 app.include_router(api_router)
 app.add_middleware(GZipMiddleware); app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+@app.on_event("shutdown")
+async def shutdown_db_client(): client.close()
