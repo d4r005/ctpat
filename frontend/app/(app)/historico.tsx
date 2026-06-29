@@ -64,17 +64,29 @@ export default function Historico() {
     const relatedRecord = records.find(r =>
       (r.inspection_id === item.id) ||
       (r.inspection_ids && r.inspection_ids.includes(item.id)) ||
-      normalize(r.entry.placas_unidad) === inspPlates
+      normalize(r.entry?.placas_unidad) === inspPlates
     );
-    const hasTicket = tickets.some(t => normalize(t.placas_unidad) === inspPlates);
+    // Ticket: del record ya enriquecido por backend O búsqueda local por placas
+    const hasTicket = !!(
+      relatedRecord?.has_shipping_ticket ||
+      relatedRecord?.shipping_ticket_id ||
+      tickets.some((t: any) => normalize(t.placas_unidad) === inspPlates)
+    );
 
     const isFull = relatedRecord?.entry?.tipo_unidad === 'full';
     const isDescarga = relatedRecord?.entry?.condicion_carga === 'descarga';
     const showShipping = !isFull && !isDescarga;
 
+    // Para unidades FULL: inspección completa si hay 2+ inspecciones vinculadas
+    const inspCount = Math.max(
+      relatedRecord?.inspection_ids?.length || 0,
+      1 // esta misma inspección ya existe
+    );
+    const inspComplete = isFull ? inspCount >= 2 : true;
+
     const steps = {
       entry: !!relatedRecord,
-      inspection: true,
+      inspection: inspComplete,
       shipping: hasTicket,
       exit: relatedRecord?.status === 'salida'
     };

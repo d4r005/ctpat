@@ -252,16 +252,26 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router, records, tickets,
 
   const relatedInsps = inspections.filter((i: any) => i.record_id === relatedRecord?.id || normalize(i.placas_unidad) === normPlates);
   const matchTicket = tickets.find((tk: any) => normalize(tk.placas_unidad) === normPlates);
-  const inspectionComplete = isFull ? relatedInsps.length >= 2 : relatedInsps.length >= 1;
+
+  // Inspección completa: usar inspection_ids del record (ya enriquecidos por backend) o búsqueda local
+  const recordInspCount = (relatedRecord?.inspection_ids?.length || 0) + (relatedRecord?.inspection_id && !relatedRecord?.inspection_ids?.includes(relatedRecord.inspection_id) ? 1 : 0);
+  const localInspCount = relatedInsps.length;
+  const totalInspCount = Math.max(recordInspCount, localInspCount);
+  const inspectionComplete = isFull ? totalInspCount >= 2 : totalInspCount >= 1;
+
+  // Ticket: del record enriquecido O búsqueda local por placas
+  const hasTicket = !!(relatedRecord?.has_shipping_ticket || relatedRecord?.shipping_ticket_id || matchTicket);
 
   const steps = {
     entry: !!relatedRecord || item._is_virtual,
     inspection: inspectionComplete,
-    shipping: !!matchTicket,
-    exit: relatedRecord?.status?.toLowerCase() === 'salida' || relatedRecord?.status?.toLowerCase() === 'salió'
+    shipping: hasTicket,
+    exit: relatedRecord?.status?.toLowerCase() === 'salida'
   };
 
-  const status = (relatedRecord?.status || (inspectionComplete ? 'inspeccionado' : 'entrada')).toUpperCase();
+  // Status label: priorizar el status real del record
+  const rawStatus = relatedRecord?.status || (inspectionComplete ? 'inspeccionado' : 'entrada');
+  const status = rawStatus.toUpperCase();
 
   return (
     <View style={styles.row}>
@@ -291,11 +301,18 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router, records, tickets,
       </View>
 
       <View style={styles.statusSide}>
-         <View style={[styles.statusChip, { backgroundColor: steps.exit ? '#10B981' : status === 'INSPECCIONADO' ? '#0284C7' : '#F59E0B' }]}>
-           <Text style={styles.statusChipText}>{steps.exit ? 'SALIÓ' : status === 'INSPECCIONADO' ? 'BUENO' : status}</Text>
+         <View style={[styles.statusChip, {
+           backgroundColor: steps.exit ? '#10B981'
+             : status === 'INSPECCIONADO' ? '#0284C7'
+             : status === 'ENTRADA' ? '#F59E0B'
+             : '#6B7280'
+         }]}>
+           <Text style={styles.statusChipText}>
+             {steps.exit ? 'SALIÓ' : status === 'INSPECCIONADO' ? 'INSPECCIÓN OK' : status}
+           </Text>
          </View>
-         <View style={[styles.statusChip, { backgroundColor: inspectionComplete ? '#10B981' : '#F59E0B', marginTop: 4 }]}>
-           <Text style={styles.statusChipText}>{inspectionComplete ? 'APROBADO' : 'PENDIENTE'}</Text>
+         <View style={[styles.statusChip, { backgroundColor: inspectionComplete ? '#10B981' : '#94A3B8', marginTop: 4 }]}>
+           <Text style={styles.statusChipText}>{inspectionComplete ? 'INSP. COMPLETA' : 'SIN INSPECCIÓN'}</Text>
          </View>
          <Pressable style={styles.deleteBtn}><Ionicons name="trash-outline" size={18} color={colors.error} /></Pressable>
          <Text style={styles.dateText}>{new Date(item.created_at || item.entry?.fecha_entrada).toLocaleDateString()}</Text>
