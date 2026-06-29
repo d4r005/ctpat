@@ -106,6 +106,49 @@ export default function CasetaNuevo() {
   const [firmaOperador, setFirmaOperador] = useState('');
   const [showSig, setShowSig] = useState(false);
 
+  // AI OCR state
+  const [isScanning, setIsScanning] = useState(false);
+
+  const handleScanIA = async () => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) { Alert.alert('Permiso denegado', 'Se requiere acceso a la cámara.'); return; }
+
+      const r = await ImagePicker.launchCameraAsync({
+        mediaTypes: 'images',
+        quality: 0.4,
+        base64: true,
+      });
+
+      if (!r.canceled && r.assets[0]?.base64) {
+        setIsScanning(true);
+        const res = await apiCall('/ocr/analyze', {
+          method: 'POST',
+          token,
+          body: { image_b64: r.assets[0].base64, context: 'entry' }
+        });
+
+        if (res.error) {
+          if (res.error === 'AI_NOT_CONFIGURED') Alert.alert('IA no configurada', 'Por favor agrega la GEMINI_API_KEY al backend.');
+          else Alert.alert('Error', 'No se pudo leer el documento. Intenta de nuevo.');
+        } else {
+          if (res.placas_unidad) setPlacas(res.placas_unidad.toUpperCase());
+          if (res.chofer_nombre) setChofer(res.chofer_nombre.toUpperCase());
+          if (res.compania_transporte) setCompania(res.compania_transporte.toUpperCase());
+          if (res.numero_tractor) setTractor(res.numero_tractor.toUpperCase());
+          if (res.numero_caja) setNumeroCaja(res.numero_caja.toUpperCase());
+          if (res.sello_entrada) setSelloEntrada(res.sello_entrada.toUpperCase());
+          if (res.destino) setDestino(res.destino.toUpperCase());
+          Alert.alert('Éxito', 'Información extraída correctamente.');
+        }
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
   const progress = ((step + 1) / TOTAL_STEPS) * 100;
 
   const canNext = () => {
@@ -241,7 +284,9 @@ export default function CasetaNuevo() {
       <View style={styles.topBar}>
         <Pressable onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} /></Pressable>
         <Text style={styles.topTitle}>{t('nuevo_registro_entrada').toUpperCase()}</Text>
-        <View style={{ width: 24 }} />
+        <Pressable onPress={handleScanIA} disabled={isScanning}>
+           {isScanning ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="scan-circle" size={28} color={colors.brandSecondary} />}
+        </Pressable>
       </View>
       <View style={styles.progressBg}><View style={[styles.progressFill, { width: `${progress}%` }]} /></View>
       <Text style={styles.stepLabel}>{t('paso').toUpperCase()} {step + 1} {t('de').toUpperCase()} {TOTAL_STEPS}</Text>
