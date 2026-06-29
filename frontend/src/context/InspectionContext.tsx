@@ -41,9 +41,16 @@ export interface Inspection extends InspectionPayload {
   status_general: string;
   approval_status?: 'pendiente' | 'aprobada' | 'rechazada';
   approval_note?: string;
+  approved_by?: string;
   approved_by_name?: string;
+  approved_sig?: string;
   approved_by_signature?: string;
   approved_at?: string;
+  compania_transportista?: string;
+  numero_precinto?: string;
+  sello_alta_seguridad?: string;
+  fecha_hora?: string;
+  actividad_sospechosa?: string;
   _pending?: boolean;
 }
 

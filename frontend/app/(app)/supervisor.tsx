@@ -120,9 +120,34 @@ export default function Supervisor() {
       const plates = item.placas_unidad || item.entry?.placas_unidad;
       const normPlates = norm(plates);
 
-      const fullRecord = item.entry && !item._is_virtual ? item : await apiCall<any>(`/vehicle-records/${item.id}`, { token }).catch(() => null);
-      const matchTicket = allTickets.find(tk => norm(tk.placas_unidad) === normPlates);
-      const matchInsps = allInspections.filter(i => i.record_id === item.id || norm(i.placas_unidad) === normPlates);
+      // Intentar usar el endpoint consolidado del backend primero (trae todo vinculado)
+      let fullRecord = item.entry && !item._is_virtual ? item : null;
+      let matchTicket = allTickets.find(tk => norm(tk.placas_unidad) === normPlates);
+      let matchInsps = allInspections.filter(i => i.record_id === item.id || norm(i.placas_unidad) === normPlates);
+
+      // Si el item tiene un ID de registro real (no virtual), usar endpoint consolidado
+      if (!item._is_virtual && item.id && !item.id.startsWith('p-')) {
+        try {
+          const consolidated = await apiCall<any>(`/report/consolidated/${item.id}`, { token });
+          if (consolidated) {
+            fullRecord = consolidated.caseta || fullRecord;
+            if (consolidated.inspections && consolidated.inspections.length > 0) {
+              matchInsps = consolidated.inspections;
+            }
+            if (consolidated.embarque) {
+              matchTicket = consolidated.embarque;
+            }
+          }
+        } catch (consolidatedErr) {
+          console.warn('Consolidated endpoint failed, falling back to local data', consolidatedErr);
+          // Fallback: cargar record individual
+          if (!fullRecord) {
+            fullRecord = await apiCall<any>(`/vehicle-records/${item.id}`, { token }).catch(() => null);
+          }
+        }
+      } else if (!fullRecord) {
+        fullRecord = await apiCall<any>(`/vehicle-records/${item.id}`, { token }).catch(() => null);
+      }
 
       const html = generateConsolidatedReportHtml({
         inspection: matchInsps[0] || { points: [] } as any,

@@ -26,20 +26,41 @@ const DECLARACIONES = [
   { es: '4. Declaro que al estar en instalaciones NAF he leído, entendido y aceptado plenamente estas instrucciones.', zh: '4. 我声明在 NAF 设施内已阅读、理解并完全接受这些指令。' },
 ];
 
+const safeDate = (d: any): string => {
+  try { return new Date(d).toLocaleString('es-MX'); } catch { return '-'; }
+};
+
+const sigBox = (imgSrc: string | undefined, label: string, sublabel?: string) => `
+  <div style="text-align:center; flex:1; min-width:140px; padding:8px; border:1px solid #ddd; background:#fafafa;">
+    <div style="height:70px; display:flex; align-items:flex-end; justify-content:center; background:#FFF; border-bottom:2px solid #0A2540; margin-bottom:4px;">
+      ${imgSrc && (imgSrc.startsWith('data:image') || imgSrc.startsWith('http'))
+        ? `<img src="${imgSrc}" style="max-height:65px; max-width:100%; object-fit:contain;" />`
+        : `<div style="width:100%; height:65px; background:#f5f5f5; display:flex; align-items:center; justify-content:center; color:#aaa; font-size:8px;">Sin firma</div>`
+      }
+    </div>
+    <p style="margin:0; font-weight:bold; font-size:8px; color:#0A2540; text-transform:uppercase;">${label}</p>
+    ${sublabel ? `<p style="margin:1px 0 0 0; font-size:7px; color:#666;">${sublabel}</p>` : ''}
+  </div>
+`;
+
 export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string) => {
   const { inspection: i, inspections, caseta, embarque } = data;
 
-  // Use all provided inspections if available (for FULL units), otherwise just the primary one
-  const activeInspections = inspections && inspections.length > 0 ? inspections : [i];
+  // Usar todas las inspecciones disponibles; si la primaria no tiene puntos, no crearla
+  const activeInspections: Inspection[] = (inspections && inspections.length > 0)
+    ? inspections
+    : (i && i.points && i.points.length > 0 ? [i] : []);
+
+  const hasInspections = activeInspections.length > 0;
 
   const p = {
     title: 'REPORTE CONSOLIDADO / 综合报告',
     subtitle: 'Registro, Inspección y Embarque / 注册、检查和运输',
     generated: 'Generado / 生成日期',
     sectionCaseta: '1. REGISTRO DE CASETA / 门卫室记录',
-    sectionInspection: `2. INSPECCIÓN C-TPAT / C-TPAT 检查`,
+    sectionInspection: '2. INSPECCIÓN C-TPAT / C-TPAT 检查',
     sectionShipping: '3. TICKET DE EMBARQUE / 运输单',
-    sectionPhotos: 'EVIDENCIA FOTOGRÁFICA / 照片证据',
+    sectionSignatures: 'FIRMAS DE CONFORMIDAD / 签字确认',
     plates: 'Placas / 车牌号',
     driver: 'Nombre del Chofer / 司机姓名',
     company: 'Compañía / 运输公司',
@@ -62,11 +83,12 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
     customer: 'Cliente / 客户',
     pallets: 'Pallets / 托盘数量',
     destination: 'Destino / 目的地',
-    noData: 'No se encontró registro vinculado / 无相关记录'
+    noData: 'No se encontró registro vinculado / 无相关记录',
+    noInspection: 'No hay inspecciones digitales vinculadas a esta unidad. El proceso de inspección puede haber sido capturado en papel o estar pendiente de sincronización. / 该车辆没有关联的数字检验记录。',
   };
 
-  const getPhotoHtml = (url: string, label: string) => {
-    if (!url || !url.startsWith('data:image')) return '';
+  const getPhotoHtml = (url: string | undefined, label: string) => {
+    if (!url || (!url.startsWith('data:image') && !url.startsWith('http'))) return '';
     return `
       <div style="display:inline-block; width:30%; margin:1%; vertical-align:top; border:1px solid #eee; padding:5px; background:#FFFFFF; text-align:center;">
         <p style="margin:0 0 5px 0; font-size:7px; font-weight:bold; color:#666; text-transform:uppercase;">${label}</p>
@@ -75,223 +97,283 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
     `;
   };
 
-  const inspectionRows = i.points.map(t => {
-    // Buscar el punto original para obtener el nombre bilingüe
-    const allDefs = [...INSPECTION_POINTS_19, ...INSPECTION_POINTS_9];
-    const def = allDefs.find(d => d.number === t.number);
-    const bilingualName = def ? `${def.name_es} / ${def.name_zh}` : t.name;
+  const rulesHtml = REGLAS.map(r => `<div style="margin-bottom:3px;">${r.es}<br/><span style="color:#666;">${r.zh}</span></div>`).join('');
+  const declsHtml = DECLARACIONES.map(d => `<div style="margin-bottom:3px;">${d.es}<br/><span style="color:#666;">${d.zh}</span></div>`).join('');
 
-    return `
-    <tr>
-      <td style="padding:5px;border:1px solid #ddd;width:30px;">${t.number}</td>
-      <td style="padding:5px;border:1px solid #ddd;">${bilingualName}</td>
-      <td style="padding:5px;border:1px solid #ddd;font-weight:bold;color:${t.estado === 'bueno' ? '#16a34a' : '#dc2626'}">${t.estado === 'bueno' ? p.good : (t.estado === 'malo' ? p.bad : 'N/A')}</td>
-      <td style="padding:5px;border:1px solid #ddd;">${t.comentarios || '-'}</td>
-    </tr>
-  `}).join('');
-
-  const inspectionPhotos = i.points
-    .filter(p => p.photo)
-    .map(p => getPhotoHtml(p.photo!, `PUNTO ${p.number}`))
-    .join('');
-
-  const rulesHtml = REGLAS.map(r => `<div style="margin-bottom:2px;">${r.es} <br/><span style="color:#666;">${r.zh}</span></div>`).join('');
-  const declsHtml = DECLARACIONES.map(d => `<div style="margin-bottom:2px;">${d.es} <br/><span style="color:#666;">${d.zh}</span></div>`).join('');
-
+  // ─── SECCIÓN CASETA ──────────────────────────────────────────────────────────
   const casetaHtml = caseta ? `
     <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
-      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;width:40%;"><b>${p.plates}</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.placas_unidad}</td></tr>
-      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.driver}</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.chofer_nombre}</td></tr>
-      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.license}</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.licencia_conductor || '-'}</td></tr>
-      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.company}</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.compania_transporte}</td></tr>
-      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.tractor}</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.numero_tractor || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;width:40%;"><b>${p.plates}</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry?.placas_unidad || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.driver}</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry?.chofer_nombre || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.license}</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry?.licencia_conductor || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.company}</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry?.compania_transporte || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.tractor}</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry?.numero_tractor || '-'}</td></tr>
 
-      <tr style="background:#f1f5f9;"><td colspan="2" style="padding:5px; font-weight:bold;">CAJA 1 / 货箱 1</td></tr>
-      <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.company} 1</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.compania_caja}</td></tr>
-      <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.box} 1</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.numero_caja}</td></tr>
-      <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.seal} 1</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.sello_entrada}</td></tr>
+      <tr style="background:#e8f0fe;"><td colspan="2" style="padding:5px; font-weight:bold; color:#0A2540;">CAJA 1 / 货箱 1</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Empresa Caja / 货箱公司</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry?.compania_caja || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.box} 1</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry?.numero_caja || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.seal} Entrada 1</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry?.sello_entrada || '-'}</td></tr>
 
-      ${caseta.entry.tipo_unidad === 'full' ? `
-      <tr style="background:#f1f5f9;"><td colspan="2" style="padding:5px; font-weight:bold;">CAJA 2 / 货箱 2</td></tr>
-      <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.company} 2</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.compania_caja_2}</td></tr>
-      <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.box} 2</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.numero_caja_2}</td></tr>
-      <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.seal} 2</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry.sello_entrada_2}</td></tr>
+      ${caseta.entry?.tipo_unidad === 'full' ? `
+      <tr style="background:#e8f0fe;"><td colspan="2" style="padding:5px; font-weight:bold; color:#0A2540;">CAJA 2 / 货箱 2</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Empresa Caja 2</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry?.compania_caja_2 || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.box} 2</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry?.numero_caja_2 || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.seal} Entrada 2</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry?.sello_entrada_2 || '-'}</td></tr>
       ` : ''}
 
-      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.entryDate}</b></td><td style="padding:6px;border:1px solid #ddd;">${new Date(caseta.entry.fecha_entrada).toLocaleString()}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Guardia Caseta / 门卫警卫</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry?.guardia_caseta_nombre || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Condición Carga / 货物状态</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.entry?.condicion_carga || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.entryDate}</b></td><td style="padding:6px;border:1px solid #ddd;">${safeDate(caseta.entry?.fecha_entrada)}</td></tr>
 
       ${caseta.exit ? `
-        <tr style="background:#f1f5f9;"><td colspan="2" style="padding:5px; font-weight:bold;">DATOS DE SALIDA / 出场数据</td></tr>
-        <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.exitDate}</b></td><td style="padding:6px;border:1px solid #ddd;">${new Date(caseta.exit.fecha_salida).toLocaleString()}</td></tr>
-        <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.status} Salida</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.condicion_salida || '-'}</td></tr>
-        <tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.seal} (Salida 1)</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.sello_salida || '-'}</td></tr>
-        ${caseta.entry.tipo_unidad === 'full' ? `<tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.seal} (Salida 2)</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.sello_salida_2 || '-'}</td></tr>` : ''}
-        ${caseta.exit.numero_caja_salida ? `<tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.box} Salida 1</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.numero_caja_salida}</td></tr>` : ''}
-        ${caseta.exit.numero_caja_salida_2 ? `<tr><td style="padding:6px;border:1px solid #ddd;"><b>${p.box} Salida 2</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.numero_caja_salida_2}</td></tr>` : ''}
+        <tr style="background:#e8f0fe;"><td colspan="2" style="padding:5px; font-weight:bold; color:#0A2540;">DATOS DE SALIDA / 出场数据</td></tr>
+        <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.exitDate}</b></td><td style="padding:6px;border:1px solid #ddd;">${safeDate(caseta.exit.fecha_salida)}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Condición Salida / 出场状态</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.condicion_salida || '-'}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.seal} Salida 1 / 出场封条 1</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.sello_salida || '-'}</td></tr>
+        ${caseta.entry?.tipo_unidad === 'full' ? `<tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.seal} Salida 2</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.sello_salida_2 || '-'}</td></tr>` : ''}
+        ${caseta.exit.numero_caja_salida ? `<tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.box} Salida 1</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.numero_caja_salida}</td></tr>` : ''}
+        ${caseta.exit.numero_caja_salida_2 ? `<tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.box} Salida 2</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.numero_caja_salida_2}</td></tr>` : ''}
+        <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Guardia Salida / 出场警卫</b></td><td style="padding:6px;border:1px solid #ddd;">${caseta.exit.guardia_salida_nombre || '-'}</td></tr>
       ` : ''}
     </table>
 
-    <div style="background: #f1f5f9; padding: 10px; border: 1px solid #ddd; margin-bottom: 10px; font-size: 8px; background-color: #f1f5f9;">
-      <p style="margin: 0 0 5px 0; font-weight: bold; color: #0A2540;">REGLAMENTO Y SEGURIDAD / 安全条例:</p>
+    <!-- REGLAMENTO Y FIRMA OPERADOR -->
+    <div style="background:#f1f5f9; padding:10px; border:1px solid #ddd; margin-bottom:12px; font-size:8px;">
+      <p style="margin:0 0 5px 0; font-weight:bold; color:#0A2540;">REGLAMENTO Y SEGURIDAD / 安全条例:</p>
       ${rulesHtml}
-      <p style="margin: 10px 0 5px 0; font-weight: bold; color: #0A2540;">DECLARACIONES / 司机声明:</p>
+      <p style="margin:10px 0 5px 0; font-weight:bold; color:#0A2540;">DECLARACIONES DEL OPERADOR / 司机声明:</p>
       ${declsHtml}
-      <p style="margin-top: 10px; font-weight: bold; color: #16a34a;">ACEPTADO / 已接受 ✓</p>
-      ${caseta.entry.firma_operador ? `<div style="margin-top:5px; text-align:center;"><img src="${caseta.entry.firma_operador}" style="height:70px; border-bottom:2px solid #0A2540; background:#FFF;" /><br/><span style="font-size:7px; color:#666;">FIRMA DEL OPERADOR / 司机签字</span></div>` : ''}
+      <p style="margin-top:8px; font-weight:bold; color:#16a34a; font-size:9px;">✓ ACEPTADO / 已接受</p>
+      ${caseta.entry?.firma_operador ? `
+        <div style="margin-top:8px; text-align:center;">
+          <div style="height:70px; display:inline-flex; align-items:flex-end; justify-content:center; background:#FFF; border-bottom:2px solid #0A2540; padding:4px; min-width:180px;">
+            <img src="${caseta.entry.firma_operador}" style="max-height:65px; max-width:200px; object-fit:contain;" />
+          </div>
+          <br/><span style="font-size:7px; color:#666; font-weight:bold;">FIRMA DEL OPERADOR / 司机签字<br/>${caseta.entry.chofer_nombre || ''}</span>
+        </div>` : `
+        <div style="margin-top:8px; text-align:center; color:#999; font-size:8px; font-style:italic;">Sin firma del operador capturada / 未捕获司机签名</div>
+      `}
     </div>
 
+    <!-- FOTOS CASETA -->
     <div style="margin-bottom:15px;">
-      ${getPhotoHtml(caseta.entry.foto_frente_unidad, 'FRONTAL')}
-      ${getPhotoHtml(caseta.entry.foto_atras_caja, 'TRASERA 1')}
-      ${caseta.entry.tipo_unidad === 'full' ? getPhotoHtml(caseta.entry.foto_atras_caja_2, 'TRASERA 2') : ''}
-      ${getPhotoHtml(caseta.entry.foto_id_chofer, 'ID CHOFER')}
-      ${caseta.exit && caseta.entry.condicion_carga !== 'descarga' ? getPhotoHtml(caseta.exit.sello_vvtt_foto, 'VVTT 1') : ''}
-      ${caseta.exit && caseta.entry.condicion_carga !== 'descarga' && caseta.entry.tipo_unidad === 'full' ? getPhotoHtml(caseta.exit.sello_vvtt_foto_2, 'VVTT 2') : ''}
+      ${getPhotoHtml(caseta.entry?.foto_frente_unidad, 'FRONTAL UNIDAD')}
+      ${getPhotoHtml(caseta.entry?.foto_atras_caja, 'TRASERA CAJA 1')}
+      ${caseta.entry?.tipo_unidad === 'full' ? getPhotoHtml(caseta.entry?.foto_atras_caja_2, 'TRASERA CAJA 2') : ''}
+      ${getPhotoHtml(caseta.entry?.foto_id_chofer, 'ID CHOFER')}
+      ${caseta.exit ? getPhotoHtml(caseta.exit.sello_vvtt_foto, 'SELLO VVTT 1') : ''}
+      ${caseta.exit && caseta.entry?.tipo_unidad === 'full' ? getPhotoHtml(caseta.exit.sello_vvtt_foto_2, 'SELLO VVTT 2') : ''}
     </div>
-  ` : `<p style="color:#666;font-style:italic;">${p.noData}</p>`;
+  ` : `<p style="color:#666; font-style:italic; padding:10px; border:1px dashed #ddd;">${p.noData}</p>`;
 
+  // ─── SECCIÓN INSPECCIÓN ───────────────────────────────────────────────────────
+  const inspectionSectionHtml = !hasInspections
+    ? `<div style="padding:15px; border:2px dashed #f59e0b; background:#fffbeb; color:#92400e; border-radius:4px; margin-bottom:10px;">
+        <p style="margin:0; font-weight:bold; font-size:10px;">⚠️ ${p.noInspection}</p>
+        <p style="margin:6px 0 0 0; font-size:9px; color:#b45309;">Placas registradas: ${caseta?.entry?.placas_unidad || 'N/D'}</p>
+       </div>`
+    : activeInspections.map((insp) => {
+        const allDefs = [...INSPECTION_POINTS_19, ...INSPECTION_POINTS_9];
+        const rows = (insp.points || []).map(pt => {
+          const def = allDefs.find(d => d.number === pt.number);
+          const bilingualName = def ? `${def.name_es} / ${def.name_zh}` : pt.name;
+          return `
+          <tr>
+            <td style="padding:4px;border:1px solid #ddd;width:30px;text-align:center;">${pt.number}</td>
+            <td style="padding:4px;border:1px solid #ddd;">${bilingualName}</td>
+            <td style="padding:4px;border:1px solid #ddd;font-weight:bold;color:${pt.estado === 'bueno' ? '#16a34a' : pt.estado === 'malo' ? '#dc2626' : '#666'};">
+              ${pt.estado === 'bueno' ? p.good : pt.estado === 'malo' ? p.bad : 'N/A'}
+            </td>
+            <td style="padding:4px;border:1px solid #ddd;">${pt.comentarios || '-'}</td>
+          </tr>
+          ${pt.photo && (pt.photo.startsWith('data:image') || pt.photo.startsWith('http')) ? `
+          <tr>
+            <td colspan="4" style="padding:4px; border:1px solid #ddd; background:#f9fafb; text-align:center;">
+              <img src="${pt.photo}" style="max-height:100px; max-width:300px; object-fit:contain; border:1px solid #ddd;" />
+            </td>
+          </tr>` : ''}
+        `}).join('');
+
+        const approvalStatusLabel = insp.approval_status === 'aprobada' ? p.approved : (insp.approval_status === 'rechazada' ? p.rejected : p.pending);
+        const approvalColor = insp.approval_status === 'aprobada' ? '#16a34a' : insp.approval_status === 'rechazada' ? '#dc2626' : '#f59e0b';
+
+        // Manejar nombre de supervisor: puede estar en approved_by o approved_by_name
+        const supervisorName = (insp as any).approved_by_name || (insp as any).approved_by || '';
+        const supervisorSig = (insp as any).approved_by_signature || (insp as any).approved_sig || '';
+
+        return `
+        <div style="margin-bottom:20px; border:1px solid #0A2540; padding:10px; page-break-inside:avoid;">
+          <p style="font-weight:bold; background:#e8f0fe; padding:6px; margin:-10px -10px 10px -10px; color:#0A2540; border-bottom:2px solid #0A2540;">
+            ${insp.inspection_type === '9_puntos_contenedor' ? '9 PUNTOS / 9点检查' : '19 PUNTOS / 19点检查'} — ${insp.numero_trailer || '-'} — ${insp.placas_unidad || '-'}
+          </p>
+
+          <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
+            <tr>
+              <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;width:40%;"><b>${p.result}</b></td>
+              <td style="padding:6px;border:1px solid #ddd;">
+                <span style="background:${insp.status_general === 'bueno' ? '#16a34a' : '#dc2626'};color:#FFF;padding:2px 8px;font-weight:bold;font-size:9px;border-radius:3px;">
+                  ${insp.status_general === 'bueno' ? p.good : p.bad}
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Aprobación / 批准</b></td>
+              <td style="padding:6px;border:1px solid #ddd;">
+                <span style="background:${approvalColor};color:#FFF;padding:2px 8px;font-weight:bold;font-size:9px;border-radius:3px;">
+                  ${approvalStatusLabel}
+                </span>
+                ${(insp as any).approval_note ? `<br/><span style="font-size:8px; color:#666;">${(insp as any).approval_note}</span>` : ''}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Compañía / 运输公司</b></td>
+              <td style="padding:6px;border:1px solid #ddd;">${insp.compania_transportista || '-'}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Precinto / 铅封</b></td>
+              <td style="padding:6px;border:1px solid #ddd;">${(insp as any).numero_precinto || '-'} | Sello alta seg.: ${(insp as any).sello_alta_seguridad || '-'}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Fecha Inspección / 检查日期</b></td>
+              <td style="padding:6px;border:1px solid #ddd;">${safeDate((insp as any).fecha_hora || insp.created_at)}</td>
+            </tr>
+          </table>
+
+          <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
+            <tr style="background:#e8f0fe; font-weight:bold;">
+              <td style="padding:4px;border:1px solid #ddd;width:30px;text-align:center;">#</td>
+              <td style="padding:4px;border:1px solid #ddd;">Punto de Inspección / 检查点</td>
+              <td style="padding:4px;border:1px solid #ddd;width:100px;">Estado / 状态</td>
+              <td style="padding:4px;border:1px solid #ddd;">${p.comments}</td>
+            </tr>
+            ${rows}
+          </table>
+
+          <!-- Firmas Inspector y Supervisor por inspección -->
+          <div style="display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;">
+            ${sigBox(insp.inspector_firma, `Inspector / 检查员`, insp.inspector_nombre)}
+            ${supervisorName ? sigBox(supervisorSig, `Supervisor / 主管`, supervisorName) : ''}
+          </div>
+        </div>
+        `;
+      }).join('');
+
+  // ─── SECCIÓN EMBARQUE ─────────────────────────────────────────────────────────
   const shippingHtml = embarque ? `
     <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
-      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;width:40%;"><b>${p.customer}</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.cliente}</td></tr>
-      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Pallets / 托盘数量</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.numero_pallets}</td></tr>
-      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.seal}</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.numero_sello}</td></tr>
-      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.destination}</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.observaciones?.replace('Destino: ', '') || '-'}</td></tr>
-      <tr>
-        <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Almacenista / 仓管员</b></td>
-        <td style="padding:6px;border:1px solid #ddd;">
-          ${embarque.almacenista}<br/>
-          ${embarque.firma_almacenista ? `<img src="${embarque.firma_almacenista}" style="height:50px; margin-top:5px; border-bottom:1px solid #0A2540;" />` : ''}
-        </td>
-      </tr>
-      <tr>
-        <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Guardia / 警卫</b></td>
-        <td style="padding:6px;border:1px solid #ddd;">
-          ${embarque.nombre_guardia || '-'}<br/>
-          ${embarque.firma_guardia ? `<img src="${embarque.firma_guardia}" style="height:50px; margin-top:5px; border-bottom:1px solid #0A2540;" />` : ''}
-        </td>
-      </tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;width:40%;"><b>${p.customer}</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.cliente || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Operador / 操作员</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.operador || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Línea Transporte / 运输线路</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.linea_transporte || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.plates}</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.placas_unidad || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.box}</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.numero_caja || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.pallets}</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.numero_pallets || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.seal}</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.numero_sello || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Almacenista / 仓管员</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.almacenista || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Guardia Embarque / 出货警卫</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.nombre_guardia || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Observaciones / 备注</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.observaciones || '-'}</td></tr>
     </table>
 
-    <div style="margin-bottom:15px;">
+    <!-- Fotos embarque -->
+    <div style="margin-bottom:12px;">
       ${getPhotoHtml(embarque.foto_inicio_carga, 'INICIO CARGA')}
       ${getPhotoHtml(embarque.foto_media_carga, 'MEDIA CARGA')}
       ${getPhotoHtml(embarque.foto_final_carga, 'FINAL CARGA')}
     </div>
-  ` : `<p style="color:#666;font-style:italic;">${p.noData}</p>`;
 
-  const approvalStatusLabel = i.approval_status === 'aprobada' ? p.approved : (i.approval_status === 'rechazada' ? p.rejected : p.pending);
+    <!-- Firmas embarque -->
+    <div style="display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;">
+      ${sigBox(embarque.firma_almacenista, 'Almacenista / 仓管员', embarque.almacenista)}
+      ${sigBox(embarque.firma_guardia, 'Guardia / 警卫', embarque.nombre_guardia)}
+    </div>
+  ` : `<p style="color:#666; font-style:italic; padding:10px; border:1px dashed #ddd;">${p.noData}</p>`;
+
+  // ─── SECCIÓN FIRMAS FINALES CONSOLIDADAS ─────────────────────────────────────
+  const firstInsp = activeInspections[0];
+  const supervisorNameFinal = firstInsp ? ((firstInsp as any).approved_by_name || (firstInsp as any).approved_by || '') : '';
+  const supervisorSigFinal = firstInsp ? ((firstInsp as any).approved_by_signature || (firstInsp as any).approved_sig || '') : '';
+
+  const signaturesHtml = `
+    <div style="display:flex; gap:10px; margin-top:15px; flex-wrap:wrap; justify-content:space-between;">
+      ${sigBox(caseta?.entry?.firma_operador, 'Operador / 司机', caseta?.entry?.chofer_nombre)}
+      ${firstInsp ? sigBox(firstInsp.inspector_firma, 'Inspector / 检查员', firstInsp.inspector_nombre) : ''}
+      ${supervisorNameFinal ? sigBox(supervisorSigFinal, 'Supervisor / 主管', supervisorNameFinal) : sigBox('', 'Supervisor / 主管', '___________________')}
+      ${embarque?.firma_almacenista ? sigBox(embarque.firma_almacenista, 'Almacenista / 仓管员', embarque.almacenista) : sigBox('', 'Almacenista / 仓管员', '___________________')}
+      ${caseta?.exit?.firma_guardia ? sigBox(caseta.exit.firma_guardia, 'Guardia Salida / 出场警卫', caseta.exit.guardia_salida_nombre) : 
+        embarque?.firma_guardia ? sigBox(embarque.firma_guardia, 'Guardia Embarque / 出货警卫', embarque.nombre_guardia) :
+        sigBox('', 'Guardia / 警卫', '___________________')}
+    </div>
+  `;
+
+  const isCarga = caseta?.entry?.condicion_carga !== 'descarga';
 
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reporte Consolidado NAF</title>
   <style>
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1a1a1a; padding: 20px; font-size: 10px; line-height: 1.3; background-color: #FFFFFF; }
-    .header { border-bottom: 3px solid #0A2540; padding-bottom: 10px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: flex-end; background-color: #FFFFFF; }
-    .section-title { background: #0A2540; color: #fff; padding: 6px 10px; margin-top: 15px; margin-bottom: 8px; font-size: 12px; font-weight: bold; }
-    table { width: 100%; border-collapse: collapse; background-color: #FFFFFF; }
-    td { background-color: #FFFFFF; }
-    b { color: #0A2540; }
-    img { background-color: #FFFFFF; }
-    .status-badge { display: inline-block; padding: 3px 6px; font-weight: bold; color: white; border-radius: 3px; font-size: 9px; }
-    .bg-success { background-color: #16a34a; }
-    .bg-error { background-color: #dc2626; }
-    .bg-warning { background-color: #f59e0b; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; padding: 20px; font-size: 10px; line-height: 1.4; background: #FFF; margin: 0; }
+    .header { border-bottom: 3px solid #0A2540; padding-bottom: 12px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: flex-end; }
+    .section-title { background: #0A2540; color: #fff; padding: 7px 12px; margin-top: 18px; margin-bottom: 10px; font-size: 11px; font-weight: bold; letter-spacing: 0.5px; }
+    table { width: 100%; border-collapse: collapse; }
+    td { vertical-align: top; }
+    .status-badge { display: inline-block; padding: 2px 7px; font-weight: bold; color: white; border-radius: 3px; font-size: 9px; }
+    .bg-success { background: #16a34a; }
+    .bg-error { background: #dc2626; }
+    .bg-warning { background: #f59e0b; }
+    @media print {
+      body { padding: 10px; font-size: 9px; }
+      .section-title { margin-top: 12px; }
+    }
   </style>
 </head>
-<body style="background-color: #FFFFFF;">
+<body>
+  <!-- HEADER -->
   <div class="header">
     <div>
-      <div style="background:#0A2540; color:white; padding:8px 15px; font-size:20px; font-weight:900; display:inline-block;">NAF</div>
-      <div style="font-weight:bold; margin-top:3px; font-size:10px;">North America Flooring</div>
+      <div style="background:#0A2540; color:white; padding:8px 18px; font-size:22px; font-weight:900; display:inline-block; letter-spacing:2px;">NAF</div>
+      <div style="font-weight:bold; margin-top:4px; font-size:9px; color:#555; letter-spacing:1px;">NORTH AMERICA FLOORING</div>
     </div>
     <div style="text-align:right">
-      <h1 style="margin:0; font-size:16px; color:#0A2540;">${p.title}</h1>
-      <p style="margin:0; color:#666;">${p.generated}: ${new Date().toLocaleString()}</p>
+      <h1 style="margin:0; font-size:15px; color:#0A2540; font-weight:900;">${p.title}</h1>
+      <p style="margin:3px 0 0 0; color:#666; font-size:9px;">${p.generated}: ${new Date().toLocaleString('es-MX')}</p>
+      ${caseta ? `<p style="margin:2px 0 0 0; color:#0A2540; font-size:9px; font-weight:bold;">Placas: ${caseta.entry?.placas_unidad || '-'} | Chofer: ${caseta.entry?.chofer_nombre || '-'}</p>` : ''}
     </div>
   </div>
 
+  <!-- STATUS BANNER -->
+  ${hasInspections && firstInsp ? `
+  <div style="padding:8px; text-align:center; font-weight:bold; font-size:12px; margin-bottom:15px; border-radius:3px;
+    background:${firstInsp.approval_status === 'aprobada' ? '#16a34a' : firstInsp.approval_status === 'rechazada' ? '#dc2626' : firstInsp.status_general === 'bueno' ? '#2563eb' : '#f59e0b'};
+    color:#FFF;">
+    ${firstInsp.approval_status === 'aprobada' ? '✓ INSPECCIÓN APROBADA / 检查已批准' : firstInsp.approval_status === 'rechazada' ? '✗ INSPECCIÓN RECHAZADA / 检查已拒绝' : firstInsp.status_general === 'bueno' ? '◉ INSPECCIÓN OK / 检查正常 — PENDIENTE APROBACIÓN' : '⚠ INSPECCIÓN CON FALLAS / 检查有故障'}
+  </div>
+  ` : `<div style="padding:8px; text-align:center; font-weight:bold; font-size:11px; margin-bottom:15px; border-radius:3px; background:#f59e0b; color:#FFF;">⚠ SIN INSPECCIÓN DIGITAL VINCULADA / 无数字检验记录</div>`}
+
+  <!-- SECCIÓN 1: CASETA -->
   <div class="section-title">${p.sectionCaseta}</div>
   ${casetaHtml}
 
+  <!-- SECCIÓN 2: INSPECCIÓN -->
   <div class="section-title">${p.sectionInspection}</div>
-  ${activeInspections.map((insp, idx) => {
-    const rows = insp.points.map(t => {
-      const allDefs = [...INSPECTION_POINTS_19, ...INSPECTION_POINTS_9];
-      const def = allDefs.find(d => d.number === t.number);
-      const bilingualName = def ? `${def.name_es} / ${def.name_zh}` : t.name;
+  ${inspectionSectionHtml}
 
-      return `
-      <tr>
-        <td style="padding:4px;border:1px solid #ddd;width:30px;">${t.number}</td>
-        <td style="padding:4px;border:1px solid #ddd;">${bilingualName}</td>
-        <td style="padding:4px;border:1px solid #ddd;font-weight:bold;color:${t.estado === 'bueno' ? '#16a34a' : '#dc2626'}">${t.estado === 'bueno' ? p.good : (t.estado === 'malo' ? p.bad : 'N/A')}</td>
-        <td style="padding:4px;border:1px solid #ddd;">${t.comentarios || '-'}</td>
-      </tr>
-    `}).join('');
+  <!-- SECCIÓN 3: EMBARQUE (solo si no es descarga) -->
+  ${isCarga ? `
+  <div class="section-title">${p.sectionShipping}</div>
+  ${shippingHtml}
+  ` : `<div style="padding:8px; background:#f1f5f9; border:1px solid #ddd; color:#666; font-size:9px; margin-top:15px;">Unidad de descarga — no aplica ticket de embarque. / 卸货车辆 — 不适用运输单。</div>`}
 
-    const currentAppStatus = insp.approval_status === 'aprobada' ? p.approved : (insp.approval_status === 'rechazada' ? p.rejected : p.pending);
+  <!-- FIRMAS CONSOLIDADAS FINALES -->
+  <div class="section-title">${p.sectionSignatures}</div>
+  ${signaturesHtml}
 
-    return `
-      <div style="margin-bottom:20px; border:1px solid #0A2540; padding:10px;">
-        <p style="font-weight:bold; background:#eee; padding:5px; margin-top:0;">
-          ${insp.inspection_type === '9_puntos_contenedor' ? '9 PUNTOS' : '19 PUNTOS'} - ${insp.numero_trailer}
-        </p>
-        <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
-          <tr>
-            <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;width:40%;"><b>${p.result}</b></td>
-            <td style="padding:6px;border:1px solid #ddd;">
-              <span class="status-badge ${insp.status_general === 'bueno' ? 'bg-success' : 'bg-error'}">${insp.status_general === 'bueno' ? p.good : p.bad}</span>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.status}</b></td>
-            <td style="padding:6px;border:1px solid #ddd;">
-              <span class="status-badge ${insp.approval_status === 'aprobada' ? 'bg-success' : insp.approval_status === 'rechazada' ? 'bg-error' : 'bg-warning'}">${currentAppStatus}</span>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.inspector}</b></td>
-            <td style="padding:6px;border:1px solid #ddd;">
-              ${insp.inspector_nombre}<br/>
-              ${insp.inspector_firma ? `<img src="${insp.inspector_firma}" style="height:40px; margin-top:5px; border-bottom:1px solid #0A2540;" />` : ''}
-            </td>
-          </tr>
-          ${insp.approved_by_name ? `
-          <tr>
-            <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${p.supervisor}</b></td>
-            <td style="padding:6px;border:1px solid #ddd;">
-              ${insp.approved_by_name}<br/>
-              ${insp.approved_by_signature ? `<img src="${insp.approved_by_signature}" style="height:40px; margin-top:5px; border-bottom:1px solid #0A2540;" />` : ''}
-            </td>
-          </tr>` : ''}
-        </table>
-
-        <table style="width:100%;border-collapse:collapse;margin-bottom:10px;">
-          <tr style="background:#f1f5f9; font-weight:bold;">
-            <td style="padding:4px;border:1px solid #ddd;width:30px;">#</td>
-            <td style="padding:4px;border:1px solid #ddd;">Punto / 检查点</td>
-            <td style="padding:4px;border:1px solid #ddd;width:100px;">${p.status}</td>
-            <td style="padding:4px;border:1px solid #ddd;">${p.comments}</td>
-          </tr>
-          ${rows}
-        </table>
-
-        <div style="margin-top:10px;">
-          ${insp.points.filter(p => p.photo).map(p => getPhotoHtml(p.photo!, `PUNTO ${p.number}`)).join('')}
-        </div>
-      </div>
-    `;
-  }).join('')}
-
-  ${caseta.entry.condicion_carga !== 'descarga' ? `
-    <div class="section-title">${p.sectionShipping}</div>
-    ${shippingHtml}
-  ` : ''}
-
-  <div style="margin-top:30px; border-top:1px solid #eee; padding-top:10px; text-align:center; color:#999; font-size:9px;">
-    &copy; ${new Date().getFullYear()} Branco Industries - SRIUC System / 版权所有
+  <!-- FOOTER -->
+  <div style="margin-top:30px; border-top:1px solid #eee; padding-top:10px; text-align:center; color:#aaa; font-size:8px;">
+    © ${new Date().getFullYear()} Branco Industries — Sistema SRIUC / SRIUC 系统 — Documento generado el ${new Date().toLocaleString('es-MX')}
   </div>
 </body>
 </html>

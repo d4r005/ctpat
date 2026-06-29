@@ -11,38 +11,104 @@ interface ProcessTrackerProps {
     exit: boolean;
   };
   compact?: boolean;
+  showShipping?: boolean;
+  showLabels?: boolean;
 }
 
-export default function ProcessTracker({ steps, compact = false }: ProcessTrackerProps) {
-  const Step = ({ icon, completed, last = false }: any) => (
-    <View style={styles.stepContainer}>
-      <View style={[styles.node, completed && styles.nodeCompleted]}>
-        <Ionicons
-          name={completed ? 'checkmark' : icon}
-          size={compact ? 14 : 18}
-          color={completed ? '#FFF' : colors.muted}
-        />
+export default function ProcessTracker({ steps, compact = false, showShipping = true, showLabels = false }: ProcessTrackerProps) {
+  const Step = ({ icon, completed, label, last = false }: any) => (
+    <View style={[styles.stepWrapper, compact && styles.stepWrapperCompact]}>
+      <View style={styles.stepContainer}>
+        <View style={[styles.node, completed && styles.nodeCompleted, compact && styles.nodeCompact]}>
+          <Ionicons
+            name={completed ? 'checkmark' : icon}
+            size={compact ? 12 : 16}
+            color={completed ? '#FFF' : colors.muted}
+          />
+        </View>
+        {!last && <View style={[styles.line, completed && styles.lineCompleted, compact && styles.lineCompact]} />}
       </View>
-      {!last && <View style={[styles.line, completed && styles.lineCompleted]} />}
+      {showLabels && label ? (
+        <Text style={[styles.label, compact && styles.labelCompact, completed && styles.labelCompleted]}>
+          {label}
+        </Text>
+      ) : null}
     </View>
   );
 
   return (
     <View style={[styles.container, compact && styles.containerCompact]}>
-      <Step icon="checkmark-outline" completed={steps.entry} />
-      <Step icon="checkmark-outline" completed={steps.inspection} />
-      <Step icon="cube-outline" completed={steps.shipping} />
-      <Step icon="videocam-outline" completed={steps.exit} last />
+      <Step icon="car-outline" completed={steps.entry} label="Entrada" />
+      <Step icon="clipboard-outline" completed={steps.inspection} label="Inspección" />
+      {showShipping && <Step icon="cube-outline" completed={steps.shipping} label="Embarque" />}
+      <Step icon="exit-outline" completed={steps.exit} label="Salida" last />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm },
-  containerCompact: { paddingVertical: 0, gap: 0 },
-  stepContainer: { flexDirection: 'row', alignItems: 'center' },
-  node: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: '#D1D5DB', backgroundColor: '#FFF', alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-  nodeCompleted: { backgroundColor: '#10B981', borderColor: '#10B981' },
-  line: { width: 25, height: 3, backgroundColor: '#E5E7EB', marginHorizontal: -1 },
-  lineCompleted: { backgroundColor: '#10B981' },
+  container: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: spacing.sm,
+  },
+  containerCompact: {
+    paddingVertical: 0,
+    gap: 0,
+  },
+  stepWrapper: {
+    alignItems: 'center',
+  },
+  stepWrapperCompact: {},
+  stepContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  node: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  nodeCompact: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+  },
+  nodeCompleted: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+  },
+  line: {
+    width: 25,
+    height: 3,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: -1,
+  },
+  lineCompact: {
+    width: 18,
+  },
+  lineCompleted: {
+    backgroundColor: '#10B981',
+  },
+  label: {
+    fontSize: 7,
+    color: colors.muted,
+    marginTop: 2,
+    textAlign: 'center',
+    maxWidth: 50,
+  },
+  labelCompact: {
+    fontSize: 6,
+    maxWidth: 40,
+  },
+  labelCompleted: {
+    color: '#10B981',
+    fontWeight: '600',
+  },
 });
