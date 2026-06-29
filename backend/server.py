@@ -528,14 +528,30 @@ async def update_ticket(id: str, body: Dict[str, Any], u: Dict[str, Any] = Depen
 
 SHEET_ID = "1o1l0iH74CykHu4p7Ybaa08HSNeRaesy_OOG4DpkGoPE"
 
+async def _get_drive_token():
+    """Recupera el token inyectado en el entorno."""
+    return os.environ.get("GOOGLEDRIVE_ACCESS_TOKEN", "")
+
 def _sheets_headers(token: str) -> dict:
     return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+async def _sheet_get_col_a(token: str, hoja: str) -> List[str]:
+    """Obtiene la columna A de una hoja para deduplicación."""
+    try:
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}/values/'{hoja}'!A2:A5000"
+        r = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=10)
+        )
+        vals = r.json().get("values", [])
+        return [v[0] for v in vals if v]
+    except Exception as e:
+        logger.error(f"Error obteniendo Col A de {hoja}: {e}")
+        return []
 
 async def _sheet_append_via_api(hoja: str, row: list, unique_id: str):
     """
     Agrega una fila al Sheet directamente via Sheets API.
-    Usa el token almacenado en GOOGLEDRIVE_ACCESS_TOKEN (inyectado vía env o endpoint refresh).
-    Verifica deduplicación por col A (unique_id) antes de insertar.
+    Usa el token almacenado en GOOGLEDRIVE_ACCESS_TOKEN.
     """
     token = os.environ.get("GOOGLEDRIVE_ACCESS_TOKEN", "")
     if not token:
@@ -543,13 +559,6 @@ async def _sheet_append_via_api(hoja: str, row: list, unique_id: str):
         return
 
     loop = asyncio.get_event_loop()
-
-    def _check_existing():
-        r = requests.get(
-            f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}/values/'{hoja}'!A2:A2000",
-            headers={"Authorization": f"Bearer {token}"}, timeout=10)
-        vals = r.json().get("values", [])
-        return [v[0] for v in vals if v]
 
     def _append():
         return requests.post(
@@ -560,7 +569,7 @@ async def _sheet_append_via_api(hoja: str, row: list, unique_id: str):
             timeout=10).json()
 
     try:
-        existing = await loop.run_in_executor(None, _check_existing)
+        existing = await _sheet_get_col_a(token, hoja)
         if unique_id and unique_id in existing:
             logger.info(f"Sheets [{hoja}] ya existe ID {unique_id}, omitiendo")
             return
