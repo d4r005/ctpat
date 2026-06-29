@@ -3,8 +3,11 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { apiCall } from '../api/client';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 const TOKEN_KEY = 'naf_jwt_token';
 const USER_KEY = 'naf_user';
+const BACK_TOKEN = 'userToken'; // Key used by background task
 
 export interface User {
   id: string;
@@ -71,6 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     await storeSet(TOKEN_KEY, data.access_token);
     await storeSet(USER_KEY, JSON.stringify(data.user));
+    if (Platform.OS !== 'web') await AsyncStorage.setItem(BACK_TOKEN, data.access_token);
     setToken(data.access_token);
     setUser(data.user);
   };
@@ -82,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     await storeSet(TOKEN_KEY, data.access_token);
     await storeSet(USER_KEY, JSON.stringify(data.user));
+    if (Platform.OS !== 'web') await AsyncStorage.setItem(BACK_TOKEN, data.access_token);
     setToken(data.access_token);
     setUser(data.user);
   };
@@ -89,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     await storeSet(TOKEN_KEY, null);
     await storeSet(USER_KEY, null);
+    if (Platform.OS !== 'web') await AsyncStorage.removeItem(BACK_TOKEN);
     setToken(null);
     setUser(null);
   };

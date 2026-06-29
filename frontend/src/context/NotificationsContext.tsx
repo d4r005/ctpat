@@ -1,8 +1,13 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback, useRef } from 'react';
 import { Platform, Vibration } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import * as TaskManager from 'expo-task-manager';
+import * as BackgroundFetch from 'expo-background-fetch';
 import { apiCall } from '../api/client';
 import { useAuth } from './AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const BACKGROUND_NOTIFICATION_TASK = 'BACKGROUND_NOTIFICATION_TASK';
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -13,6 +18,40 @@ Notifications.setNotificationHandler({
     shouldShowBanner: true,
     shouldShowList: true,
   }),
+});
+
+// Task Manager definition (Top level)
+TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async () => {
+  try {
+    const token = await AsyncStorage.getItem('userToken'); // Need to ensure token is here
+    if (!token) return BackgroundFetch.BackgroundFetchResult.NoData;
+
+    const res = await fetch(`https://d4r005-sriuc.hf.space/api/notifications`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await res.json();
+    const lastNotifId = await AsyncStorage.getItem('last_notif_id');
+
+    if (data && data.length > 0) {
+      const newest = data[0];
+      if (!newest.read && newest.id !== lastNotifId) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: `🚨 ${newest.title}`,
+            body: newest.message,
+            data: { inspection_id: newest.inspection_id },
+            sound: true,
+          },
+          trigger: null,
+        });
+        await AsyncStorage.setItem('last_notif_id', newest.id);
+        return BackgroundFetch.BackgroundFetchResult.NewData;
+      }
+    }
+    return BackgroundFetch.BackgroundFetchResult.NoData;
+  } catch (error) {
+    return BackgroundFetch.BackgroundFetchResult.Failed;
+  }
 });
 
 export interface Notification {
@@ -94,6 +133,22 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     }
   }, [token]);
 
+  const registerBackgroundFetch = useCallback(async () => {
+    if (Platform.OS === 'web') return;
+    try {
+      const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_NOTIFICATION_TASK);
+      if (!isRegistered) {
+        await BackgroundFetch.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK, {
+          minimumInterval: 60 * 15, // 15 minutes (OS minimum)
+          stopOnTerminate: false,
+          startOnBoot: true,
+        });
+      }
+    } catch (err) {
+      console.error("Error registering background fetch:", err);
+    }
+  }, []);
+
   useEffect(() => {
     if (!token) {
       setNotifications([]);
@@ -103,6 +158,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
     refresh();
     registerPushToken();
+    registerBackgroundFetch();
 
     // Request permissions for local alerts if not already granted
     (async () => {
