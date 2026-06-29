@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import { useTranslation } from 'react-i18next';
@@ -199,7 +199,7 @@ export default function Supervisor() {
           <View style={styles.tabRow}>
             <TabBtn label="CASETA" icon="business" active={activeTab === 'caseta'} on={() => setActiveTab('caseta')} />
             <TabBtn label="INSPECCIÓN" icon="clipboard" active={activeTab === 'inspeccion'} on={() => setActiveTab('inspeccion')} />
-            <TabBtn label="EMBARQUE" icon="cube" active={activeTab === 'embarque'} on={() => setActiveTab('embarque')} />
+            <TabBtn label="EMBARQUE" icon="bus" active={activeTab === 'embarque'} on={() => setActiveTab('embarque')} />
           </View>
           <View style={styles.searchCont}>
             <Ionicons name="search" size={20} color={colors.muted} />
@@ -234,7 +234,11 @@ export default function Supervisor() {
 function TabBtn({ label, icon, active, on }: any) {
   return (
     <Pressable onPress={on} style={[styles.tab, active && styles.tabActive]}>
-      <Ionicons name={icon} size={18} color={active ? '#FFF' : '#333'} />
+      {icon === 'bus' ? (
+        <MaterialCommunityIcons name="truck-trailer" size={18} color={active ? '#FFF' : '#333'} />
+      ) : (
+        <Ionicons name={icon} size={18} color={active ? '#FFF' : '#333'} />
+      )}
       <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
     </Pressable>
   );

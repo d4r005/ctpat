@@ -1,0 +1,9 @@
+/*.ttf
+  Content-Type: font/ttf
+  Access-Control-Allow-Origin: *
+/*.woff
+  Content-Type: font/woff
+  Access-Control-Allow-Origin: *
+/*.woff2
+  Content-Type: font/woff2
+  Access-Control-Allow-Origin: *

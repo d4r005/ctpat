@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl, Platform, FlatList, Image, Vibration } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/context/AuthContext';
 import { useInspections } from '@/src/context/InspectionContext';
@@ -87,10 +87,10 @@ export default function Inicio() {
 
   const getActivityIcon = (type: string): any => {
     switch (type) {
-      case 'inspection': return 'clipboard';
-      case 'caseta': return 'car-sport';
-      case 'embarque': return 'cube';
-      default: return 'radio-button-on';
+      case 'inspection': return { name: 'clipboard', family: 'ionicons' };
+      case 'caseta': return { name: 'car-sport', family: 'ionicons' };
+      case 'embarque': return { name: 'truck-trailer', family: 'mci' };
+      default: return { name: 'radio-button-on', family: 'ionicons' };
     }
   };
 
@@ -106,11 +106,17 @@ export default function Inicio() {
     if (routes[activity.type]) router.push(routes[activity.type]);
   };
 
-  const renderActivity = ({ item: a }: { item: any }) => (
-    <Pressable style={styles.activityCard} onPress={() => navigateToActivity(a)}>
-      <View style={[styles.iconCircle, { backgroundColor: a.status === 'malo' || a.type === 'rechazada' ? colors.error : (a.type === 'caseta' ? colors.success : colors.info) }]}>
-        <Ionicons name={getActivityIcon(a.type)} size={20} color="#FFF" />
-      </View>
+  const renderActivity = ({ item: a }: { item: any }) => {
+    const icon = getActivityIcon(a.type);
+    return (
+      <Pressable style={styles.activityCard} onPress={() => navigateToActivity(a)}>
+        <View style={[styles.iconCircle, { backgroundColor: a.status === 'malo' || a.type === 'rechazada' ? colors.error : (a.type === 'caseta' ? colors.success : colors.info) }]}>
+          {icon.family === 'mci' ? (
+            <MaterialCommunityIcons name={icon.name} size={24} color="#FFF" />
+          ) : (
+            <Ionicons name={icon.name} size={20} color="#FFF" />
+          )}
+        </View>
       <View style={{ flex: 1, marginLeft: spacing.md }}>
         <Text style={styles.cardTitleText}>{a.title}</Text>
         <Text style={styles.cardSubText}>{a.subtitle}</Text>

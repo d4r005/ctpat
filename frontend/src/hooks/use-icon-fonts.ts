@@ -10,7 +10,7 @@ import Constants, { ExecutionEnvironment } from "expo-constants";
 import { useFonts } from "expo-font";
 import { Platform } from "react-native";
 
-const ICON_VECTOR_VERSION = "15.0.3";
+const ICON_VECTOR_VERSION = "14.0.2";
 
 // short internal fontName (what the library queries) -> CDN .ttf file name
 const ICON_FAMILIES: Record<string, string> = {
@@ -22,6 +22,7 @@ const ICON_FAMILIES: Record<string, string> = {
   Fontisto: "Fontisto",
   foundation: "Foundation",
   ionicons: "Ionicons",
+  MaterialCommunityIcons: "MaterialCommunityIcons",
   "material-community": "MaterialCommunityIcons",
   material: "MaterialIcons",
   octicons: "Octicons",

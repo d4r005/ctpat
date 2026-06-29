@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors } from '@/src/constants/theme';
 import { View, ActivityIndicator } from 'react-native';
@@ -78,7 +78,7 @@ export default function AppLayout() {
         name="embarque/index"
         options={{
           title: t('embarque'),
-          tabBarIcon: ({ color }) => <Ionicons name="cube-sharp" size={22} color={color} />,
+          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="truck-trailer" size={24} color={color} />,
         }}
       />
       <Tabs.Screen

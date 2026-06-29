@@ -69,7 +69,7 @@ export default function EmbarqueList() {
 
           <View style={styles.detailRow}>
             <View style={styles.detailItem}>
-              <Ionicons name="cube-outline" size={12} color={colors.muted} />
+              <Ionicons name="bus-outline" size={12} color={colors.muted} />
               <Text style={styles.detailText}>Caja: {tk.numero_caja || '-'}</Text>
             </View>
             <View style={styles.detailItem}>
@@ -169,7 +169,7 @@ export default function EmbarqueList() {
         ListEmptyComponent={
           !loading ? (
             <View style={styles.empty}>
-              <Ionicons name="cube-outline" size={48} color={colors.muted} />
+              <Ionicons name="bus-outline" size={48} color={colors.muted} />
               <Text style={styles.emptyText}>Sin tickets de embarque</Text>
             </View>
           ) : null
