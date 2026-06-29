@@ -286,6 +286,63 @@ async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(securit
 
 app = FastAPI(); api_router = APIRouter(prefix="/api")
 
+import google.generativeai as genai
+
+# Configuración AI
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
+if GEMINI_KEY:
+    genai.configure(api_key=GEMINI_KEY)
+    ai_model = genai.GenerativeModel('gemini-1.5-flash')
+else:
+    ai_model = None
+
+# ========== Modelos de Datos ==========
+class OCRRequest(BaseModel):
+    image_b64: str
+    context: str # 'entry', 'inspection', 'ticket'
+
+# ========== Ayudantes y Utilidades ==========
+async def analyze_document_ai(image_b64: str, context: str) -> Dict[str, Any]:
+    if not ai_model:
+        return {"error": "AI_NOT_CONFIGURED"}
+
+    # Extraer pura data de la imagen
+    if "," in image_b64:
+        image_b64 = image_b64.split(",")[1]
+
+    img_data = base64.b64decode(image_b64)
+
+    prompts = {
+        "entry": "Extract data from this vehicle entry log. Return JSON: {placas_unidad, chofer_nombre, compania_transporte, numero_tractor, numero_caja, sello_entrada, destino}",
+        "inspection": "Extract data from this C-TPAT inspection sheet. Return JSON: {placas_unidad, status_general (bueno/malo), points (list of {number, name, estado (bueno/malo), comentarios})}",
+        "ticket": "Extract data from this shipping ticket. Return JSON: {placas_unidad, cliente, operador, numero_caja, numero_pallets, numero_sello}"
+    }
+
+    prompt = prompts.get(context, "Extract all readable fields into JSON.")
+
+    try:
+        response = ai_model.generate_content([
+            prompt,
+            {"mime_type": "image/jpeg", "data": img_data}
+        ])
+
+        # Extraer el JSON del texto de respuesta (Gemini suele ponerlo entre ```json ... ```)
+        text = response.text
+        json_match = re.search(r'\{.*\}', text, re.DOTALL)
+        if json_match:
+            import json
+            return json.loads(json_match.group())
+        return {"error": "JSON_NOT_FOUND", "raw": text}
+    except Exception as e:
+        logger.error(f"Error en AI OCR: {e}")
+        return {"error": str(e)}
+
+@api_router.post("/ocr/analyze")
+async def ocr_analyze(body: OCRRequest, u: Dict[str, Any] = Depends(get_current_user)):
+    """Analiza una foto de un documento físico y devuelve los campos rellenos"""
+    data = await analyze_document_ai(body.image_b64, body.context)
+    return data
+
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(body: UserLogin):
     u = await db.users.find_one({"email": body.email.lower()})
