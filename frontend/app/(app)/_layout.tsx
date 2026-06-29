@@ -98,7 +98,7 @@ export default function AppLayout() {
       <Tabs.Screen name="usuarios"   options={{ href: null }} />
       <Tabs.Screen name="analitica"  options={{ href: null }} />
       <Tabs.Screen name="perfil"     options={{ href: null }} />
-      <Tabs.Screen name="inspection" options={{ href: null }} />
+      <Tabs.Screen name="inspection/[id]" options={{ href: null }} />
     </Tabs>
   );
 }
