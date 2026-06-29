@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, TextInput,
-  ActivityIndicator, KeyboardAvoidingView, Platform, Image, Alert
+  ActivityIndicator, KeyboardAvoidingView, Platform, Image, Alert, TouchableOpacity
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -19,15 +19,19 @@ export default function CasetaDetail() {
   const router = useRouter();
   const { t } = useTranslation();
   const { token, user } = useAuth();
-  const { patchVehicleExit, updateVehicleRecord } = useInspections();
+  const { patchVehicleExit } = useInspections();
 
   const [rec, setRec] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showExit, setShowExit] = useState(false);
+  const [editEntry, setEditEntry] = useState(false);
   const [showSig, setShowSig] = useState(false);
   const sigRef = React.useRef<any>(null);
 
+  const isAdmin = user?.role === 'admin' || user?.role === 'supervisor' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+
+  const [entryForm, setEntryForm] = useState<any>(null);
   const [exitData, setExitData] = useState<any>({
     hora_apertura_cortina: '',
     hora_cierre_cortina: '',
@@ -57,6 +61,7 @@ export default function CasetaDetail() {
       const data = await apiCall<any>(`/vehicle-records/${id}`, { token });
       if (data) {
         setRec(data);
+        setEntryForm(JSON.parse(JSON.stringify(data.entry)));
         if (data.exit) {
           setExitData({ ...exitData, ...data.exit });
           setShowExit(true);
@@ -71,6 +76,20 @@ export default function CasetaDetail() {
 
   useEffect(() => { load(); }, [id, token]);
 
+  const handleUpdateEntry = async () => {
+    setSaving(true);
+    try {
+      await apiCall(`/vehicle-records/${id}`, { method: 'PUT', body: { entry: entryForm }, token });
+      setEditEntry(false);
+      load();
+      Alert.alert(t('exito'), t('registro_actualizado'));
+    } catch (e: any) {
+      Alert.alert(t('error'), e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSaveExit = async () => {
     if (!exitData.guardia_salida_nombre || !exitData.condicion_salida) {
       Alert.alert(t('error'), t('completar_datos_salida'));
@@ -80,7 +99,7 @@ export default function CasetaDetail() {
     try {
       const payload = {
         ...exitData,
-        fecha_salida: new Date().toISOString(),
+        fecha_salida: exitData.fecha_salida || new Date().toISOString(),
       };
       await patchVehicleExit(id as string, payload);
       Alert.alert(t('exito'), t('salida_registrada'));
@@ -92,14 +111,27 @@ export default function CasetaDetail() {
     }
   };
 
-  const pickPhoto = async (field: string) => {
+  const pickPhoto = async (section: 'entry' | 'exit', field: string) => {
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: 'images',
       quality: 0.3,
       base64: true,
     });
     if (!result.canceled && result.assets[0].base64) {
-      setExitData({ ...exitData, [field]: `data:image/jpeg;base64,${result.assets[0].base64}` });
+      const b64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
+      if (section === 'entry') {
+        setEntryForm({ ...entryForm, [field]: b64 });
+      } else {
+        setExitData({ ...exitData, [field]: b64 });
+      }
+    }
+  };
+
+  const removePhoto = (section: 'entry' | 'exit', field: string) => {
+    if (section === 'entry') {
+      setEntryForm({ ...entryForm, [field]: '' });
+    } else {
+      setExitData({ ...exitData, [field]: '' });
     }
   };
 
@@ -134,20 +166,25 @@ export default function CasetaDetail() {
             <View style={styles.sectionHeader}>
               <Ionicons name="log-in" size={20} color="#FFF" />
               <Text style={styles.sectionTitle}>{t('entrada_datos_unidad').toUpperCase()}</Text>
+              {isAdmin && (
+                <TouchableOpacity onPress={() => editEntry ? handleUpdateEntry() : setEditEntry(true)} style={styles.headerAction}>
+                  <Text style={styles.headerActionText}>{editEntry ? t('guardar').toUpperCase() : t('editar').toUpperCase()}</Text>
+                </TouchableOpacity>
+              )}
             </View>
             <View style={styles.sectionBody}>
               <View style={styles.grid}>
-                <InfoItem label={t('placas')} value={rec.entry.placas_unidad} />
-                <InfoItem label={t('chofer')} value={rec.entry.chofer_nombre} />
-                <InfoItem label={t('compania')} value={rec.entry.compania_transporte} />
-                <InfoItem label={t('tractor')} value={rec.entry.numero_tractor} />
+                <EditableItem label={t('placas')} value={entryForm.placas_unidad} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, placas_unidad: v}) : null} />
+                <EditableItem label={t('chofer')} value={entryForm.chofer_nombre} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, chofer_nombre: v}) : null} />
+                <EditableItem label={t('compania')} value={entryForm.compania_transporte} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, compania_transporte: v}) : null} />
+                <EditableItem label={t('tractor')} value={entryForm.numero_tractor} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_tractor: v}) : null} />
               </View>
 
               <View style={styles.subSection}>
                 <Text style={styles.subTitle}>{t('caja_1_caps')}</Text>
                 <View style={styles.grid}>
-                  <InfoItem label={t('numero_caja_caps')} value={rec.entry.numero_caja} />
-                  <InfoItem label={t('sello')} value={rec.entry.sello_entrada} />
+                  <EditableItem label={t('numero_caja_caps')} value={entryForm.numero_caja} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_caja: v}) : null} />
+                  <EditableItem label={t('sello')} value={entryForm.sello_entrada} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, sello_entrada: v}) : null} />
                 </View>
               </View>
 
@@ -155,14 +192,24 @@ export default function CasetaDetail() {
                 <View style={styles.subSection}>
                   <Text style={styles.subTitle}>{t('caja_2_caps')}</Text>
                   <View style={styles.grid}>
-                    <InfoItem label={t('numero_caja_caps')} value={rec.entry.numero_caja_2} />
-                    <InfoItem label={t('sello')} value={rec.entry.sello_entrada_2} />
+                    <EditableItem label={t('numero_caja_caps')} value={entryForm.numero_caja_2} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_caja_2: v}) : null} />
+                    <EditableItem label={t('sello')} value={entryForm.sello_entrada_2} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, sello_entrada_2: v}) : null} />
                   </View>
                 </View>
               )}
 
+              {/* FOTOS ENTRADA */}
+              <View style={styles.subSection}>
+                <Text style={styles.subTitle}>{t('evidencia_fotografica').toUpperCase()}</Text>
+                <View style={styles.photoGrid}>
+                   <PhotoThumbnail label={t('frente')} uri={entryForm.foto_frente_unidad} onPick={editEntry ? ()=>pickPhoto('entry', 'foto_frente_unidad') : null} onRemove={editEntry ? ()=>removePhoto('entry', 'foto_frente_unidad') : null} />
+                   <PhotoThumbnail label={t('atras')} uri={entryForm.foto_atras_caja} onPick={editEntry ? ()=>pickPhoto('entry', 'foto_atras_caja') : null} onRemove={editEntry ? ()=>removePhoto('entry', 'foto_atras_caja') : null} />
+                   <PhotoThumbnail label={t('id_chofer')} uri={entryForm.foto_id_chofer} onPick={editEntry ? ()=>pickPhoto('entry', 'foto_id_chofer') : null} onRemove={editEntry ? ()=>removePhoto('entry', 'foto_id_chofer') : null} />
+                </View>
+              </View>
+
               <View style={styles.metaRow}>
-                <Text style={styles.metaText}>{t('fecha')}: {new Date(rec.entry.fecha_entrada).toLocaleString()}</Text>
+                <Text style={styles.metaText}>{t('fecha')}: {new Date(rec.entry.fecha_entrada || rec.created_at).toLocaleString()}</Text>
                 <Text style={styles.metaText}>{t('guardia')}: {rec.entry.guardia_caseta_nombre}</Text>
               </View>
             </View>
@@ -178,6 +225,18 @@ export default function CasetaDetail() {
               <Text style={styles.infoText}>
                 {isFull ? t('unidad_full_inspecciones_msg', { count: inspectionsDone }) : t('inspecciones_realizadas', { count: inspectionsDone })}
               </Text>
+
+              {rec.inspection_ids?.length > 0 && (
+                <View style={{ marginBottom: 15 }}>
+                  {rec.inspection_ids.map((iid: string, idx: number) => (
+                    <Pressable key={iid} style={styles.inspectionLink} onPress={() => router.push(`/inspection/${iid}`)}>
+                      <Ionicons name="document-text" size={16} color={colors.info} />
+                      <Text style={styles.inspectionLinkText}>{t('ver_inspeccion')} {idx + 1}</Text>
+                      <Ionicons name="chevron-forward" size={16} color={colors.muted} style={{ marginLeft: 'auto' }} />
+                    </Pressable>
+                  ))}
+                </View>
+              )}
 
               <View style={styles.btnRow}>
                 <Pressable
@@ -256,25 +315,11 @@ export default function CasetaDetail() {
                    )}
                 </View>
 
-                <Text style={styles.fieldLabel}>{t('inspeccion_sellos_vvtt')} (1)</Text>
-                <PhotoBox
-                  value={exitData.sello_vvtt_foto}
-                  onPress={() => pickPhoto('sello_vvtt_foto')}
-                  label={t('foto_sello_vvtt')}
-                  t={t}
-                />
-
-                {isFull && (
-                  <>
-                    <Text style={styles.fieldLabel}>{t('inspeccion_sellos_vvtt')} (2)</Text>
-                    <PhotoBox
-                      value={exitData.sello_vvtt_foto_2}
-                      onPress={() => pickPhoto('sello_vvtt_foto_2')}
-                      label={t('foto_sello_vvtt')}
-                      t={t}
-                    />
-                  </>
-                )}
+                <Text style={styles.fieldLabel}>{t('inspeccion_sellos_vvtt')}</Text>
+                <View style={styles.photoGrid}>
+                  <PhotoThumbnail label={t('foto_sello_vvtt')+" 1"} uri={exitData.sello_vvtt_foto} onPick={()=>pickPhoto('exit', 'sello_vvtt_foto')} onRemove={()=>removePhoto('exit', 'sello_vvtt_foto')} />
+                  {isFull && <PhotoThumbnail label={t('foto_sello_vvtt')+" 2"} uri={exitData.sello_vvtt_foto_2} onPick={()=>pickPhoto('exit', 'sello_vvtt_foto_2')} onRemove={()=>removePhoto('exit', 'sello_vvtt_foto_2')} />}
+                </View>
 
                 <Text style={styles.fieldLabel}>{t('firma_operador')}</Text>
                 <Pressable style={styles.sigBox} onPress={() => setShowSig(true)}>
@@ -286,9 +331,9 @@ export default function CasetaDetail() {
                 </Pressable>
 
                 <Pressable
-                  style={[styles.saveBtn, saving && { opacity: 0.7 }]}
+                  style={[styles.saveBtn, (saving || (rec.status === 'salida' && !isAdmin)) && { opacity: 0.5 }]}
                   onPress={handleSaveExit}
-                  disabled={saving || rec.status === 'salida' && !isAdmin}
+                  disabled={saving || (rec.status === 'salida' && !isAdmin)}
                 >
                   {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>{t('guardar_salida').toUpperCase()}</Text>}
                 </Pressable>
@@ -325,27 +370,41 @@ export default function CasetaDetail() {
   );
 }
 
-function InfoItem({ label, value }: any) {
+function EditableItem({ label, value, onEdit }: any) {
   return (
     <View style={styles.infoItem}>
       <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value || '-'}</Text>
+      {onEdit ? (
+        <TextInput style={styles.editInput} value={value} onChangeText={onEdit} />
+      ) : (
+        <Text style={styles.infoValue}>{value || '-'}</Text>
+      )}
     </View>
   );
 }
 
-function PhotoBox({ value, onPress, label, t }: any) {
+function PhotoThumbnail({ label, uri, onPick, onRemove }: any) {
   return (
-    <Pressable style={styles.photoBox} onPress={onPress}>
-      {value ? (
-        <Image source={{ uri: value }} style={styles.photo} />
-      ) : (
-        <View style={styles.photoPlaceholder}>
-          <Ionicons name="camera" size={32} color={colors.muted} />
-          <Text style={styles.photoText}>{label}</Text>
-        </View>
-      )}
-    </Pressable>
+    <View style={styles.thumbWrapper}>
+      <Text style={styles.thumbLabel}>{label}</Text>
+      <Pressable style={styles.thumbBox} onPress={onPick} disabled={!onPick}>
+        {uri ? (
+          <>
+            <Image source={{ uri }} style={styles.thumbImg} />
+            {onRemove && (
+              <Pressable style={styles.removeBtn} onPress={onRemove}>
+                <Ionicons name="close-circle" size={24} color={colors.error} />
+              </Pressable>
+            )}
+          </>
+        ) : (
+          <View style={styles.thumbPlaceholder}>
+            <Ionicons name="camera" size={24} color={colors.muted} />
+            <Text style={styles.thumbPlaceholderText}>N/A</Text>
+          </View>
+        )}
+      </Pressable>
+    </View>
   );
 }
 
@@ -358,17 +417,30 @@ const styles = StyleSheet.create({
   scroll: { padding: spacing.md, gap: spacing.md, paddingBottom: 100 },
   section: { backgroundColor: '#FFF', borderWidth: 2, borderColor: colors.borderStrong, overflow: 'hidden' },
   sectionHeader: { backgroundColor: colors.brandPrimary, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  sectionTitle: { color: '#FFF', fontWeight: '900', fontSize: 12, letterSpacing: 1 },
+  sectionTitle: { color: '#FFF', fontWeight: '900', fontSize: 12, letterSpacing: 1, flex: 1 },
   sectionBody: { padding: spacing.md },
+  headerAction: { backgroundColor: colors.brandSecondary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 2 },
+  headerActionText: { color: '#FFF', fontSize: 10, fontWeight: '900' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 10 },
   infoItem: { flex: 1, minWidth: '45%' },
   infoLabel: { fontSize: 10, color: colors.muted, fontWeight: '700' },
   infoValue: { fontSize: 13, fontWeight: '900', color: colors.onSurface },
+  editInput: { borderWidth: 1, borderColor: '#DDD', padding: 5, fontSize: 12, backgroundColor: '#F9F9F9', marginTop: 2 },
   subSection: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#EEE' },
-  subTitle: { fontSize: 11, fontWeight: '900', color: colors.brandPrimary, marginBottom: 5 },
+  subTitle: { fontSize: 11, fontWeight: '900', color: colors.brandPrimary, marginBottom: 10 },
+  photoGrid: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  thumbWrapper: { width: '30%', minWidth: 90 },
+  thumbLabel: { fontSize: 8, fontWeight: '900', color: colors.muted, marginBottom: 4, textAlign: 'center' },
+  thumbBox: { height: 90, borderWidth: 1, borderColor: '#DDD', borderRadius: 4, overflow: 'hidden', backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center' },
+  thumbImg: { width: '100%', height: '100%', resizeMode: 'cover' },
+  thumbPlaceholder: { alignItems: 'center' },
+  thumbPlaceholderText: { fontSize: 9, color: colors.muted, fontWeight: '900', marginTop: 2 },
+  removeBtn: { position: 'absolute', top: -5, right: -5, backgroundColor: '#FFF', borderRadius: 12 },
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, borderTopWidth: 1, borderTopColor: '#EEE', paddingTop: 10 },
   metaText: { fontSize: 10, color: colors.muted },
   infoText: { fontSize: 12, color: colors.onSurface, marginBottom: 15, fontWeight: '700' },
+  inspectionLink: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, backgroundColor: '#F0F9FF', borderWidth: 1, borderColor: '#BAE6FD', marginBottom: 5 },
+  inspectionLinkText: { fontSize: 12, fontWeight: '900', color: colors.info },
   btnRow: { flexDirection: 'row', gap: 10 },
   actionBtn: { flex: 1, padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 4 },
   actionBtnText: { color: '#FFF', fontWeight: '900', fontSize: 12 },
@@ -379,11 +451,7 @@ const styles = StyleSheet.create({
   optionChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   optionText: { fontWeight: '900', fontSize: 11, color: colors.muted },
   optionTextActive: { color: '#FFF' },
-  photoBox: { width: '100%', height: 180, borderWidth: 2, borderColor: colors.borderStrong, borderStyle: 'dashed', marginTop: 5, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' },
-  photo: { width: '100%', height: '100%', resizeMode: 'cover' },
-  photoPlaceholder: { alignItems: 'center' },
-  photoText: { fontSize: 10, color: colors.muted, marginTop: 5, fontWeight: '900' },
-  sigBox: { height: 120, borderWidth: 2, borderColor: colors.borderStrong, marginTop: 5, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF' },
+  sigBox: { height: 100, borderWidth: 2, borderColor: colors.borderStrong, marginTop: 5, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF' },
   sigPlaceholder: { color: colors.muted, fontWeight: '700' },
   saveBtn: { backgroundColor: colors.success, padding: 15, alignItems: 'center', marginTop: 25, borderRadius: 4 },
   saveBtnText: { color: '#FFF', fontWeight: '900', letterSpacing: 1 },
