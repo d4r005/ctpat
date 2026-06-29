@@ -386,6 +386,29 @@ async def get_record(rec_id: str, u: Dict[str, Any] = Depends(get_current_user))
     if not d: raise HTTPException(404)
     return VehicleRecord(**(await _ensure_record_links(d)))
 
+@api_router.put("/vehicle-records/{rec_id}")
+async def update_record(rec_id: str, body: Dict[str, Any], u: Dict[str, Any] = Depends(get_current_user)):
+    for k in ["_id", "id", "user_id", "created_at"]:
+        if k in body: del body[k]
+    # Limpiar fotos
+    if "entry" in body:
+        for f in ["foto_frente_unidad", "foto_atras_caja", "foto_atras_caja_2", "foto_id_chofer", "firma_operador"]:
+            if body["entry"].get(f) and body["entry"][f].startswith("data:image"):
+                body["entry"][f] = ensure_clean_image(body["entry"][f])
+    if "exit" in body and body["exit"]:
+        for f in ["sello_vvtt_foto", "sello_vvtt_foto_2", "firma_guardia"]:
+            if body["exit"].get(f) and body["exit"][f].startswith("data:image"):
+                body["exit"][f] = ensure_clean_image(body["exit"][f])
+
+    await db.vehicle_records.update_one({"id": rec_id}, {"$set": body})
+    return {"ok": True}
+
+@api_router.delete("/vehicle-records/{rec_id}")
+async def delete_record(rec_id: str, u: Dict[str, Any] = Depends(get_current_user)):
+    if not is_admin(u): raise HTTPException(403)
+    await db.vehicle_records.delete_one({"id": rec_id})
+    return {"ok": True}
+
 @api_router.patch("/vehicle-records/{rec_id}/exit", response_model=VehicleRecord)
 async def exit_record(rec_id: str, body: VehicleExit, u: Dict[str, Any] = Depends(get_current_user)):
     x = body.dict(); x["fecha_salida"] = datetime.now(timezone.utc).isoformat()
@@ -455,6 +478,29 @@ async def get_insp(insp_id: str, u: Dict[str, Any] = Depends(get_current_user)):
     d = await db.inspections.find_one({"id": insp_id}, {"_id": 0})
     if not d: raise HTTPException(404)
     return Inspection(**d)
+
+@api_router.put("/inspections/{insp_id}")
+async def update_inspection(insp_id: str, body: Dict[str, Any], u: Dict[str, Any] = Depends(get_current_user)):
+    for k in ["_id", "id", "user_id", "created_at"]:
+        if k in body: del body[k]
+    # Limpiar fotos
+    if body.get("inspector_firma") and body["inspector_firma"].startswith("data:image"):
+        body["inspector_firma"] = ensure_clean_image(body["inspector_firma"])
+    if body.get("approved_by_signature") and body["approved_by_signature"].startswith("data:image"):
+        body["approved_by_signature"] = ensure_clean_image(body["approved_by_signature"])
+    if "points" in body:
+        for p in body["points"]:
+            if p.get("photo") and p["photo"].startswith("data:image"):
+                p["photo"] = ensure_clean_image(p["photo"])
+
+    await db.inspections.update_one({"id": insp_id}, {"$set": body})
+    return {"ok": True}
+
+@api_router.delete("/inspections/{insp_id}")
+async def delete_inspection(insp_id: str, u: Dict[str, Any] = Depends(get_current_user)):
+    if not is_admin(u): raise HTTPException(403)
+    await db.inspections.delete_one({"id": insp_id})
+    return {"ok": True}
 
 @api_router.post("/inspections/{insp_id}/approve", response_model=Inspection)
 async def approve_insp(insp_id: str, body: ApprovalBody, u: Dict[str, Any] = Depends(get_current_user)):
