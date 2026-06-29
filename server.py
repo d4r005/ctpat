@@ -298,10 +298,70 @@ async def me(u: Dict[str, Any] = Depends(get_current_user)): return UserPublic(*
 
 # --- Caseta ---
 @api_router.get("/vehicle-records", response_model=List[VehicleRecord])
-async def list_records(u: Dict[str, Any] = Depends(get_current_user)):
-    # OPTIMIZACIÓN: Solo obtenemos los registros. La vinculación pesada se hace en el Panel Maestro.
-    docs = await db.vehicle_records.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
-    return [VehicleRecord(**d) for d in docs]
+async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Optional[str] = None):
+    # Filtro opcional por status (entrada, inspeccionado, salida)
+    filt: Dict[str, Any] = {}
+    if status:
+        filt["status"] = status
+    docs = await db.vehicle_records.find(filt, {"_id": 0}).sort("created_at", -1).to_list(2000)
+
+    # Enriquecer con vínculos (inspection_ids, shipping_ticket_id) en batch
+    # para que el ProcessTracker del frontend sea preciso sin llamadas adicionales
+    all_insps = await db.inspections.find({}, {"_id": 0, "id": 1, "placas_unidad": 1, "record_id": 1}).to_list(5000)
+    all_tickets = await db.shipping_tickets.find({}, {"_id": 0, "id": 1, "placas_unidad": 1, "record_id": 1}).to_list(5000)
+
+    # Índice por placas normalizadas
+    def norm(s): return re.sub(r"[^A-Z0-9]", "", (s or "").upper())
+
+    insp_by_plates: Dict[str, List[str]] = {}
+    insp_by_record: Dict[str, List[str]] = {}
+    for insp in all_insps:
+        p = norm(insp.get("placas_unidad", ""))
+        if p:
+            insp_by_plates.setdefault(p, [])
+            if insp["id"] not in insp_by_plates[p]:
+                insp_by_plates[p].append(insp["id"])
+        rid = insp.get("record_id")
+        if rid:
+            insp_by_record.setdefault(rid, [])
+            if insp["id"] not in insp_by_record[rid]:
+                insp_by_record[rid].append(insp["id"])
+
+    ticket_by_plates: Dict[str, str] = {}
+    ticket_by_record: Dict[str, str] = {}
+    for tk in all_tickets:
+        p = norm(tk.get("placas_unidad", ""))
+        if p: ticket_by_plates[p] = tk["id"]
+        rid = tk.get("record_id")
+        if rid: ticket_by_record[rid] = tk["id"]
+
+    enriched = []
+    for doc in docs:
+        p = norm(doc.get("entry", {}).get("placas_unidad", ""))
+        rid = doc.get("id", "")
+
+        # Merge inspection_ids: los que ya estaban + los de record_id + los de placas
+        existing = set(doc.get("inspection_ids", []))
+        if doc.get("inspection_id"): existing.add(doc["inspection_id"])
+        by_rec = set(insp_by_record.get(rid, []))
+        by_plates = set(insp_by_plates.get(p, []))
+        merged_ids = list(existing | by_rec | by_plates)
+
+        doc["inspection_ids"] = merged_ids
+        if merged_ids:
+            doc["inspection_id"] = merged_ids[-1]
+            if doc["status"] == "entrada":
+                doc["status"] = "inspeccionado"
+
+        # Ticket
+        ticket_id = doc.get("shipping_ticket_id") or ticket_by_record.get(rid) or ticket_by_plates.get(p)
+        if ticket_id:
+            doc["shipping_ticket_id"] = ticket_id
+            doc["has_shipping_ticket"] = True
+
+        enriched.append(VehicleRecord(**doc))
+
+    return enriched
 
 @api_router.post("/vehicle-records", response_model=VehicleRecord)
 async def create_record(body: VehicleEntry, u: Dict[str, Any] = Depends(get_current_user)):
@@ -346,7 +406,26 @@ async def create_inspection(body: InspectionCreate, u: Dict[str, Any] = Depends(
         if p.get("photo"): p["photo"] = ensure_clean_image(p["photo"])
     await db.inspections.insert_one(doc)
     if body.record_id:
-        await db.vehicle_records.update_one({"id": body.record_id}, {"$set": {"status": "inspeccionado"}, "$addToSet": {"inspection_ids": iid}})
+        await db.vehicle_records.update_one(
+            {"id": body.record_id},
+            {"$set": {"status": "inspeccionado", "inspection_id": iid},
+             "$addToSet": {"inspection_ids": iid}}
+        )
+    else:
+        # Auto-vincular por placas si no viene record_id
+        pl = re.sub(r"[^A-Z0-9]", "", (body.placas_unidad or "").upper())
+        if pl:
+            rec_by_plates = await db.vehicle_records.find_one(
+                {"entry.placas_unidad": {"$regex": pl, "$options": "i"}, "status": {"$ne": "salida"}},
+                sort=[("created_at", -1)]
+            )
+            if rec_by_plates:
+                await db.vehicle_records.update_one(
+                    {"id": rec_by_plates["id"]},
+                    {"$set": {"status": "inspeccionado", "inspection_id": iid},
+                     "$addToSet": {"inspection_ids": iid}}
+                )
+                doc["record_id"] = rec_by_plates["id"]
     return Inspection(**doc)
 
 @api_router.get("/inspections", response_model=List[Inspection])
@@ -378,7 +457,23 @@ async def create_ticket(body: ShippingTicketCreate, u: Dict[str, Any] = Depends(
         if doc.get(f): doc[f] = ensure_clean_image(doc[f])
     await db.shipping_tickets.insert_one(doc)
     if body.record_id:
-        await db.vehicle_records.update_one({"id": body.record_id}, {"$set": {"shipping_ticket_id": tid, "has_shipping_ticket": True}})
+        await db.vehicle_records.update_one(
+            {"id": body.record_id},
+            {"$set": {"shipping_ticket_id": tid, "has_shipping_ticket": True}}
+        )
+    else:
+        # Auto-vincular por placas si no viene record_id
+        pl = re.sub(r"[^A-Z0-9]", "", (body.placas_unidad or "").upper())
+        if pl:
+            rec_by_plates = await db.vehicle_records.find_one(
+                {"entry.placas_unidad": {"$regex": pl, "$options": "i"}, "status": {"$ne": "salida"}},
+                sort=[("created_at", -1)]
+            )
+            if rec_by_plates:
+                await db.vehicle_records.update_one(
+                    {"id": rec_by_plates["id"]},
+                    {"$set": {"shipping_ticket_id": tid, "has_shipping_ticket": True}}
+                )
     return {"id": tid}
 
 @api_router.get("/shipping-tickets", response_model=List[Dict[str, Any]])
@@ -573,7 +668,61 @@ async def repair_links(u: Dict[str, Any] = Depends(get_current_user)):
 # --- Actividades ---
 @api_router.get("/activities")
 async def acts(u: Dict[str, Any] = Depends(get_current_user)):
-    return await db.activities.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    """Genera una lista de actividades recientes en tiempo real desde los registros reales."""
+    activities = []
+
+    # Inspecciones recientes
+    insps = await db.inspections.find({}, {"_id": 0,
+        "id": 1, "placas_unidad": 1, "inspector_nombre": 1,
+        "status_general": 1, "approval_status": 1, "created_at": 1
+    }).sort("created_at", -1).to_list(200)
+    for insp in insps:
+        activities.append({
+            "id": insp["id"],
+            "type": "inspection",
+            "title": f"Inspección: {insp.get('placas_unidad', '-')}",
+            "subtitle": insp.get("inspector_nombre", "-"),
+            "status": insp.get("status_general", "bueno"),
+            "user_name": insp.get("inspector_nombre", "-"),
+            "created_at": insp.get("created_at", ""),
+        })
+
+    # Casetas recientes
+    recs = await db.vehicle_records.find({}, {"_id": 0,
+        "id": 1, "status": 1, "created_at": 1,
+        "entry.placas_unidad": 1, "entry.chofer_nombre": 1,
+        "entry.guardia_caseta_nombre": 1
+    }).sort("created_at", -1).to_list(200)
+    for rec in recs:
+        entry = rec.get("entry", {})
+        activities.append({
+            "id": rec["id"],
+            "type": "caseta",
+            "title": f"Caseta: {entry.get('placas_unidad', '-')}",
+            "subtitle": entry.get("chofer_nombre", "-"),
+            "status": "bueno",
+            "user_name": entry.get("guardia_caseta_nombre", "-"),
+            "created_at": rec.get("created_at", ""),
+        })
+
+    # Tickets de embarque recientes
+    tickets = await db.shipping_tickets.find({}, {"_id": 0,
+        "id": 1, "placas_unidad": 1, "almacenista": 1, "created_at": 1
+    }).sort("created_at", -1).to_list(200)
+    for tk in tickets:
+        activities.append({
+            "id": tk["id"],
+            "type": "embarque",
+            "title": f"Embarque: {tk.get('placas_unidad', '-')}",
+            "subtitle": tk.get("almacenista", "-"),
+            "status": "bueno",
+            "user_name": tk.get("almacenista", "-"),
+            "created_at": tk.get("created_at", ""),
+        })
+
+    # Ordenar por fecha desc y limitar a 100
+    activities.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    return activities[:100]
 
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
