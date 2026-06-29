@@ -41,6 +41,56 @@ export default function InspeccionDashboard() {
   const [showForm, setShowForm] = useState(false);
   const [unitFilter, setUnitFilter] = useState<'todos' | 'sencillo' | 'full'>('todos');
 
+  // AI OCR state
+  const [isScanning, setIsScanning] = useState(false);
+
+  const handleScanIA = async () => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) { Alert.alert(t('error'), 'Se requiere acceso a la cámara.'); return; }
+
+      const r = await ImagePicker.launchCameraAsync({
+        mediaTypes: 'images',
+        quality: 0.4,
+        base64: true,
+      });
+
+      if (!r.canceled && r.assets[0]?.base64) {
+        setIsScanning(true);
+        const res = await apiCall('/ocr/analyze', {
+          method: 'POST',
+          token,
+          body: { image_b64: r.assets[0].base64, context: 'inspection' }
+        });
+
+        if (res.error) {
+          Alert.alert('Error', 'No se pudo procesar el documento físico.');
+        } else {
+          // Iniciar inspección con los datos extraídos
+          setFormData({
+            ...formData,
+            placas: (res.placas_unidad || '').toUpperCase(),
+            compania: (res.compania_transportista || '').toUpperCase(),
+            status_general: res.status_general || 'bueno',
+          });
+
+          if (res.points && Array.isArray(res.points)) {
+            // Guardamos los puntos extraídos temporalmente para que el Wizard los use
+            setFormData(prev => ({ ...prev, _ai_points: res.points }));
+          }
+
+          setSelectedType('19_puntos'); // Por defecto para escaneo
+          setShowForm(true);
+          Alert.alert('Escaneo Exitoso', 'Datos de inspección recuperados.');
+        }
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
   // Estados del Formulario
   const [selectedType, setSelectedType] = useState<'19_puntos' | '9_puntos_contenedor' | null>(null);
   const [formData, setFormData] = useState<any>({
@@ -153,7 +203,16 @@ export default function InspeccionDashboard() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <MainHeader title="NAF" subtitle={t('inspeccion').toUpperCase()} />
+      <View style={styles.topHeader}>
+        <MainHeader title="NAF" subtitle={t('inspeccion').toUpperCase()} />
+        <Pressable
+          onPress={handleScanIA}
+          disabled={isScanning}
+          style={{ position: 'absolute', right: 20, top: 25 }}
+        >
+           {isScanning ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="scan-circle" size={32} color={colors.brandSecondary} />}
+        </Pressable>
+      </View>
 
       <View style={styles.headerActions}>
         <View style={styles.searchBox}>
@@ -258,9 +317,24 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
   React.useEffect(() => {
     if (selectedType) {
       const def = getInspectionPoints(selectedType);
-      setPoints(def.map(p => ({ number: p.number, name: p.name, estado: '', comentarios: '', photo: '' })));
+
+      // Si venimos de un escaneo de IA, intentar mapear los resultados
+      if (data._ai_points) {
+        setPoints(def.map(p => {
+          const aiMatch = data._ai_points.find((ap: any) => ap.number === p.number);
+          return {
+            number: p.number,
+            name: p.name,
+            estado: aiMatch?.estado || 'bueno',
+            comentarios: aiMatch?.comentarios || '',
+            photo: ''
+          };
+        }));
+      } else {
+        setPoints(def.map(p => ({ number: p.number, name: p.name, estado: '', comentarios: '', photo: '' })));
+      }
     }
-  }, [selectedType]);
+  }, [selectedType, data._ai_points]);
 
   const canNext = () => {
     if (step === 0) return data.placas && data.trailer;

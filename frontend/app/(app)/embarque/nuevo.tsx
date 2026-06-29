@@ -48,6 +48,51 @@ export default function EmbarqueNuevo() {
 
   const set = (k: string, v: any) => setForm({ ...form, [k]: v });
 
+  // AI OCR state
+  const [isScanning, setIsScanning] = useState(false);
+
+  const handleScanIA = async () => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) { Alert.alert('Error', 'Se requiere acceso a la cámara.'); return; }
+
+      const r = await ImagePicker.launchCameraAsync({
+        mediaTypes: 'images',
+        quality: 0.4,
+        base64: true,
+      });
+
+      if (!r.canceled && r.assets[0]?.base64) {
+        setIsScanning(true);
+        const { apiCall } = await import('@/src/api/client');
+        const res = await apiCall('/ocr/analyze', {
+          method: 'POST',
+          token,
+          body: { image_b64: r.assets[0].base64, context: 'ticket' }
+        });
+
+        if (res.error) {
+          Alert.alert('Error', 'No se pudo procesar el ticket físico.');
+        } else {
+          setForm(prev => ({
+            ...prev,
+            placas_unidad: (res.placas_unidad || prev.placas_unidad).toUpperCase(),
+            cliente: (res.cliente || prev.cliente).toUpperCase(),
+            operador: (res.operador || prev.operador).toUpperCase(),
+            numero_caja: (res.numero_caja || prev.numero_caja).toUpperCase(),
+            numero_pallets: (res.numero_pallets || prev.numero_pallets).toString(),
+            numero_sello: (res.numero_sello || prev.numero_sello).toUpperCase(),
+          }));
+          Alert.alert('Éxito', 'Datos del ticket recuperados.');
+        }
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
   const pickPhoto = async (field: string, fromCamera: boolean) => {
     try {
       if (fromCamera) {
@@ -131,7 +176,9 @@ export default function EmbarqueNuevo() {
       <View style={styles.topBar}>
         <Pressable onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} /></Pressable>
         <Text style={styles.topTitle}>{t('nuevo_ticket_embarque')}</Text>
-        <View style={{ width: 24 }} />
+        <Pressable onPress={handleScanIA} disabled={isScanning}>
+           {isScanning ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="scan-circle" size={28} color={colors.brandSecondary} />}
+        </Pressable>
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
