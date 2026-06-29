@@ -1,4 +1,4 @@
-// URL del servidor (Backend)
+// URL del servidor (Backend) - Sincronizado con HuggingFace Prod
 let BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://d4r005-sriuc.hf.space';
 
 // Asegurar que la URL sea limpia
