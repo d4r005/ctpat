@@ -40,26 +40,16 @@ export default function Inicio() {
         apiCall<any[]>('/vehicle-records?status=inspeccionado', { token })
       ]);
 
-      const newActivities = Array.isArray(actData) ? actData : [];
-      setActivities(newActivities);
+      setActivities(Array.isArray(actData) ? actData : []);
 
-      // Combinar unidades activas en patio
-      const active = [
-        ...(Array.isArray(recordsEntrada) ? recordsEntrada : []),
-        ...(Array.isArray(recordsInsp) ? recordsInsp : [])
-      ];
-      setInProcessUnits(active);
+      const combined = [...(Array.isArray(recordsEntrada) ? recordsEntrada : []), ...(Array.isArray(recordsInsp) ? recordsInsp : [])];
+      setInProcessUnits(combined.sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
 
-      if (!isInitial && newActivities.length > 0) {
-        const latest = newActivities[0];
-        if (latest.id !== lastActivityId) {
-          setLastActivityId(latest.id);
-          // Vibración fuerte para nuevas actividades
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          Vibration.vibrate([0, 500, 100, 500]);
-        }
-      } else if (isInitial && newActivities.length > 0) {
-        setLastActivityId(newActivities[0].id);
+      if (!isInitial && actData.length > 0 && actData[0].id !== lastActivityId) {
+        setLastActivityId(actData[0].id);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else if (isInitial && actData.length > 0) {
+        setLastActivityId(actData[0].id);
       }
     } catch (e) {
       setActivities([]);
@@ -74,7 +64,7 @@ export default function Inicio() {
 
   useEffect(() => {
     loadActivities(true);
-    const interval = setInterval(() => loadActivities(false), 15000);
+    const interval = setInterval(() => loadActivities(false), 10000);
     return () => clearInterval(interval);
   }, [loadActivities]);
 
@@ -117,15 +107,16 @@ export default function Inicio() {
             <Ionicons name={icon.name} size={20} color="#FFF" />
           )}
         </View>
-      <View style={{ flex: 1, marginLeft: spacing.md }}>
-        <Text style={styles.cardTitleText}>{a.title}</Text>
-        <Text style={styles.cardSubText}>{a.subtitle}</Text>
-        <Text style={styles.cardMetaText}>{formatTime(a.created_at)} • {a.user_name}</Text>
-      </View>
-      {a.status === 'malo' && <View style={styles.miniStatusBadgeError}><Text style={styles.miniStatusText}>{t('con_falla').toUpperCase()}</Text></View>}
-      {a.status === 'bueno' && a.type === 'inspection' && <View style={styles.miniStatusBadgeSuccess}><Text style={styles.miniStatusText}>{t('bueno').toUpperCase()}</Text></View>}
-    </Pressable>
-  );
+        <View style={{ flex: 1, marginLeft: spacing.md }}>
+          <Text style={styles.cardTitleText}>{a.title}</Text>
+          <Text style={styles.cardSubText}>{a.subtitle}</Text>
+          <Text style={styles.cardMetaText}>{formatTime(a.created_at)} • {a.user_name}</Text>
+        </View>
+        {a.status === 'malo' && <View style={styles.miniStatusBadgeError}><Text style={styles.miniStatusText}>{t('con_falla').toUpperCase()}</Text></View>}
+        {a.status === 'bueno' && a.type === 'inspection' && <View style={styles.miniStatusBadgeSuccess}><Text style={styles.miniStatusText}>{t('bueno').toUpperCase()}</Text></View>}
+      </Pressable>
+    );
+  };
 
   const ListHeader = () => (
     <>
@@ -164,117 +155,82 @@ export default function Inicio() {
 
     const steps = {
       entry: true,
-      inspection: (r.inspection_ids?.length || (r.inspection_id ? 1 : 0)) > 0,
+      inspection: !!r.inspection_id || r.status === 'inspeccionado',
       shipping: !!r.has_shipping_ticket,
       exit: r.status === 'salida'
     };
 
-    // Determine the primary status label
-    let statusLabel = t('registrado').toUpperCase();
-    let statusColor = colors.info;
-
-    if (r.status === 'inspeccionado') {
-      statusLabel = t('inspeccionado').toUpperCase();
-      statusColor = colors.success;
-    } else if (r.has_shipping_ticket) {
-      statusLabel = t('en_embarque').toUpperCase();
-      statusColor = colors.brandSecondary;
-    }
-
     return (
-      <Pressable
-        key={`track-${r.id}`}
-        style={styles.trackingCard}
-        onPress={() => router.push(`/caseta/${r.id}`)}
-      >
+      <Pressable style={styles.activeUnitCard} onPress={() => router.push(`/caseta/${r.id}`)}>
         <View style={styles.activeUnitLeft}>
-          <View style={[styles.statusIndicator, { backgroundColor: statusColor }]} />
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={styles.trackingTitle}>{r.entry.placas_unidad} {isFull ? '(FULL)' : ''}</Text>
-              <Text style={[styles.miniStatusText, { color: statusColor, fontWeight: '900' }]}>{statusLabel}</Text>
-            </View>
-            <Text style={styles.trackingSub}>{r.entry.chofer_nombre} • {r.entry.compania_transporte}</Text>
-            <View style={{ marginTop: spacing.sm }}>
-               <ProcessTracker steps={steps} compact showShipping={showShipping} />
-            </View>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.border} />
+           <View style={[styles.statusIndicator, { backgroundColor: r.status === 'entrada' ? colors.warning : colors.info }]} />
+           <View>
+              <Text style={styles.trackingTitle}>{r.entry?.placas_unidad} {isFull ? '(FULL)' : ''}</Text>
+              <Text style={styles.trackingSub}>{r.entry?.chofer_nombre} · {r.entry?.compania_transporte}</Text>
+           </View>
         </View>
+        <ProcessTracker steps={steps} compact showShipping={showShipping} />
       </Pressable>
     );
   };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <MainHeader />
+      <MainHeader title="NAF" subtitle={t('inicio').toUpperCase()} />
+
       <FlatList
         data={inProcessUnits}
         renderItem={renderActiveUnit}
-        keyExtractor={(item) => `unit-${item.id}`}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={styles.container}
-        ListHeaderComponent={ListHeader}
-        ListEmptyComponent={ListEmpty}
-        ListFooterComponent={() => (
-           <>
-             <Text style={[styles.sectionTitle, { marginTop: spacing.xl }]}>{t('actividad_reciente_log')}</Text>
-             {activities.slice(0, 5).map((a) => (
-                <Pressable key={`act-${a.id}-${a.type}`} style={[styles.activityCard, { opacity: 0.8 }]} onPress={() => navigateToActivity(a)}>
-                  <View style={[styles.iconCircleSmall, { backgroundColor: a.status === 'malo' ? colors.error : colors.borderStrong }]}>
-                    <Ionicons name={getActivityIcon(a.type)} size={14} color="#FFF" />
-                  </View>
-                  <View style={{ flex: 1, marginLeft: spacing.sm }}>
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: colors.onSurface }}>{a.title}</Text>
-                    <Text style={{ fontSize: 10, color: colors.muted }}>{formatTime(a.created_at)} • {a.user_name}</Text>
-                  </View>
-                </Pressable>
-             ))}
-             <View style={{ height: 100 }} />
-           </>
-        )}
-        refreshControl={
-          <RefreshControl
-            refreshing={inspectionsLoading || loadingActivities}
-            onRefresh={refreshAll}
-            tintColor={colors.brandPrimary}
-          />
+        refreshControl={<RefreshControl refreshing={loadingActivities} onRefresh={refreshAll} tintColor={colors.brandPrimary} />}
+        ListHeaderComponent={<ListHeader />}
+        ListEmptyComponent={<ListEmpty />}
+        ListFooterComponent={
+          <>
+            <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>{t('actividad_reciente').toUpperCase()} (TIEMPO REAL)</Text>
+            {activities.slice(0, 10).map((a) => (
+              <View key={`${a.type}-${a.id}`}>{renderActivity({ item: a })}</View>
+            ))}
+          </>
         }
       />
+
       <NotificationsPanel visible={showNotifs} onClose={() => setShowNotifs(false)} />
     </SafeAreaView>
   );
 }
 
-
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.surface },
-  container: { padding: spacing.md },
-  statsRow: { flexDirection: 'row', backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, marginBottom: spacing.lg },
+  safe: { flex: 1, backgroundColor: '#F8F9FA' },
+  container: { padding: spacing.md, paddingBottom: spacing.xxxl },
+  statsRow: { flexDirection: 'row', backgroundColor: '#FFF', borderRadius: 12, padding: spacing.md, marginBottom: spacing.lg, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
   statCard: { flex: 1, alignItems: 'center' },
   statValue: { fontSize: 24, fontWeight: '900', color: colors.onSurface },
   statLabel: { fontSize: 9, fontWeight: '700', color: colors.muted, marginTop: 4 },
-  sectionTitle: { fontSize: 11, fontWeight: '900', color: colors.onSurfaceTertiary, letterSpacing: 1.5, marginBottom: spacing.md, marginLeft: 4, textTransform: 'uppercase' },
-  activityCard: { backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, padding: spacing.sm, marginBottom: 4, flexDirection: 'row', alignItems: 'center' },
-  iconCircle: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  iconCircleSmall: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center', borderRadius: 12 },
+  sectionTitle: { fontSize: 11, fontWeight: '900', color: colors.onSurface, letterSpacing: 1, marginBottom: spacing.md, marginLeft: 4 },
+  activityCard: { backgroundColor: '#FFF', borderRadius: 12, padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', elevation: 1 },
+  iconCircle: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   cardTitleText: { fontSize: 14, fontWeight: '900', color: colors.onSurface },
   cardSubText: { fontSize: 12, color: colors.muted, marginTop: 2 },
   cardMetaText: { fontSize: 10, color: colors.muted, marginTop: 4 },
-  miniStatusBadgeError: { backgroundColor: colors.error, paddingHorizontal: 6, paddingVertical: 2 },
-  miniStatusBadgeSuccess: { backgroundColor: colors.success, paddingHorizontal: 6, paddingVertical: 2 },
-  miniStatusText: { color: '#FFF', fontSize: 10, fontWeight: '900' },
+  miniStatusBadgeError: { backgroundColor: colors.error, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  miniStatusBadgeSuccess: { backgroundColor: colors.success, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  miniStatusText: { color: '#FFF', fontSize: 8, fontWeight: '900' },
   processHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md, paddingHorizontal: 4 },
-  processTitle: { fontSize: 13, fontWeight: '900', color: colors.onSurfaceTertiary, letterSpacing: 1.5 },
-  timelineContainer: { paddingLeft: 10, marginBottom: spacing.xxl },
-  trackingCard: {
+  processTitle: { fontSize: 16, fontWeight: '900', color: colors.onSurface },
+  activeUnitCard: {
     backgroundColor: colors.surfaceSecondary,
     borderWidth: 2,
     borderColor: colors.borderStrong,
     padding: spacing.md,
     marginBottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
   },
   activeUnitLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  statusIndicator: { width: 4, height: '100%', borderRadius: 2 },
+  statusIndicator: { width: 4, height: 40, borderRadius: 2 },
   trackingTitle: { fontWeight: '900', fontSize: 16, color: colors.onSurface, letterSpacing: 0.5 },
   trackingSub: { fontSize: 11, color: colors.muted, marginTop: 2, fontWeight: '600' },
   emptyInline: { alignItems: 'center', padding: spacing.xl, borderStyle: 'dashed', borderWidth: 2, borderColor: colors.border, marginTop: spacing.md },
