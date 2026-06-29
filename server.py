@@ -165,12 +165,24 @@ class Inspection(BaseModel):
     user_id: str
     created_at: str
     inspection_type: str
+    compania_transportista: str = ""
     placas_unidad: str
     numero_trailer: str
+    numero_precinto: str = ""
+    sello_alta_seguridad: str = ""
+    sello_verificado: bool = False
     status_general: str
     approval_status: str = "pendiente"
+    approval_note: str = ""
+    approved_by: str = ""
+    approved_by_name: str = ""
+    approved_by_signature: str = ""
+    approved_sig: str = ""
+    approved_at: str = ""
     inspector_nombre: str
     inspector_firma: str
+    fecha_hora: str = ""
+    actividad_sospechosa: str = ""
     points: List[InspectionPoint]
     record_id: Optional[str] = None
 
@@ -351,7 +363,8 @@ async def get_insp(insp_id: str, u: Dict[str, Any] = Depends(get_current_user)):
 
 @api_router.post("/inspections/{insp_id}/approve", response_model=Inspection)
 async def approve_insp(insp_id: str, body: ApprovalBody, u: Dict[str, Any] = Depends(get_current_user)):
-    update = {"approval_status": "aprobada", "approval_note": body.note, "approved_by": body.name, "approved_sig": ensure_clean_image(body.signature)}
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"approval_status": "aprobada", "approval_note": body.note, "approved_by": body.name, "approved_by_name": body.name, "approved_sig": ensure_clean_image(body.signature), "approved_by_signature": ensure_clean_image(body.signature), "approved_at": now}
     await db.inspections.update_one({"id": insp_id}, {"$set": update})
     d = await db.inspections.find_one({"id": insp_id}, {"_id": 0})
     return Inspection(**d)
@@ -436,6 +449,64 @@ async def _trigger_automatic_report(record_id: str):
         await loop.run_in_executor(None, lambda: requests.post(url, json=payload, timeout=15))
     except Exception as e:
         logger.error(f"Error triggering automatic report: {e}")
+
+# --- Reporte Consolidado ---
+@api_router.get("/report/consolidated/{record_id}")
+async def get_consolidated_report(record_id: str, u: Dict[str, Any] = Depends(get_current_user)):
+    """Devuelve todos los datos consolidados de un registro: caseta + inspecciones + ticket de embarque"""
+    rec = await db.vehicle_records.find_one({"id": record_id}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "Registro no encontrado")
+
+    # Asegurar vínculos antes de consultar
+    rec = await _ensure_record_links(rec)
+
+    # Obtener todas las inspecciones vinculadas
+    insp_ids = list(set(rec.get("inspection_ids", [])))
+    if rec.get("inspection_id") and rec["inspection_id"] not in insp_ids:
+        insp_ids.append(rec["inspection_id"])
+
+    inspections = []
+    for iid in insp_ids:
+        insp = await db.inspections.find_one({"id": iid}, {"_id": 0})
+        if insp:
+            inspections.append(insp)
+
+    # Si aún no hay inspecciones vinculadas por ID, buscar por placas
+    if not inspections:
+        plates = rec.get("entry", {}).get("placas_unidad", "").strip().upper()
+        if plates:
+            pl_norm = re.sub(r"[^A-Z0-9]", "", plates)
+            regex = ".*".join(list(pl_norm))
+            found = await db.inspections.find(
+                {"placas_unidad": {"": f".*{regex}.*", "": "i"}},
+                {"_id": 0}
+            ).sort("created_at", -1).to_list(10)
+            inspections = found
+
+    # Obtener ticket de embarque
+    ticket = None
+    if rec.get("shipping_ticket_id"):
+        ticket = await db.shipping_tickets.find_one({"id": rec["shipping_ticket_id"]}, {"_id": 0})
+    if not ticket:
+        plates = rec.get("entry", {}).get("placas_unidad", "").strip().upper()
+        if plates:
+            pl_norm = re.sub(r"[^A-Z0-9]", "", plates)
+            regex = ".*".join(list(pl_norm))
+            ticket = await db.shipping_tickets.find_one(
+                {"placas_unidad": {"": f".*{regex}.*", "": "i"}},
+                sort=[("created_at", -1)]
+            )
+            if ticket and "_id" in ticket:
+                del ticket["_id"]
+
+    return {
+        "caseta": rec,
+        "inspections": inspections,
+        "embarque": ticket,
+        "has_inspections": len(inspections) > 0,
+        "has_shipping": ticket is not None
+    }
 
 # --- Admin / Reparación ---
 @api_router.post("/admin/repair-links")
