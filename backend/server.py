@@ -500,6 +500,7 @@ async def create_ticket(body: ShippingTicketCreate, u: Dict[str, Any] = Depends(
                     {"id": rec_by_plates["id"]},
                     {"$set": {"shipping_ticket_id": tid, "has_shipping_ticket": True}}
                 )
+                doc["record_id"] = rec_by_plates["id"]
     # Sincronizar automáticamente al sheet
     asyncio.create_task(sync_to_google_sheets("embarque", doc))
     return {"id": tid}
@@ -606,9 +607,11 @@ async def sync_to_google_sheets(tipo: str, payload: Any):
 
             if tipo == "entrada" and key_entrada not in existing:
                 row = [
-                    key_entrada,
-                    data.get("created_at", ""),
-                    "ENTRADA",
+                    key_entrada,                        # Col A: ID Registro / Unique Key
+                    data.get("inspection_id", ""),      # Col B: ID Inspección
+                    data.get("shipping_ticket_id", ""), # Col C: ID Embarque
+                    data.get("created_at", ""),         # Col D: Fecha
+                    "ENTRADA",                          # Col E: Proceso
                     entry.get("placas_unidad", ""),
                     entry.get("chofer_nombre", ""),
                     entry.get("compania_transporte", ""),
@@ -626,9 +629,11 @@ async def sync_to_google_sheets(tipo: str, payload: Any):
 
             elif tipo == "salida" and ex and key_salida not in existing:
                 row = [
-                    key_salida,
-                    ex.get("fecha_salida", data.get("created_at", "")),
-                    "SALIDA",
+                    key_salida,                         # Col A: ID Registro / Unique Key
+                    data.get("inspection_id", ""),      # Col B: ID Inspección
+                    data.get("shipping_ticket_id", ""), # Col C: ID Embarque
+                    ex.get("fecha_salida", data.get("created_at", "")), # Col D: Fecha
+                    "SALIDA",                           # Col E: Proceso
                     entry.get("placas_unidad", ""),
                     entry.get("chofer_nombre", ""),
                     "",
@@ -659,18 +664,36 @@ async def sync_to_google_sheets(tipo: str, payload: Any):
             def pt(n): return pts.get(n, {}).get("estado", "-")
 
             if is_19:
-                row = [insp_id, data.get("created_at",""), data.get("placas_unidad",""),
-                       data.get("inspector_nombre",""), data.get("status_general",""),
-                       str(sum(1 for p in pts.values() if p.get("estado")=="malo")),
-                       data.get("approval_status",""), data.get("approved_by_name",""),
-                       pt(1),pt(2),pt(3),pt(4),pt(5),pt(6),pt(7),pt(8),pt(9),
-                       pt(10),pt(11),pt(12),pt(13),pt(14),pt(15),pt(16),pt(17),pt(18),pt(19)]
+                row = [
+                    insp_id,                            # Col A: ID Inspección / Unique Key
+                    data.get("record_id", ""),          # Col B: ID Registro
+                    data.get("shipping_ticket_id", ""), # Col C: ID Embarque
+                    data.get("created_at", ""),         # Col D: Fecha
+                    "INSPECCION_19",                    # Col E: Proceso
+                    data.get("placas_unidad", ""),
+                    data.get("inspector_nombre", ""),
+                    data.get("status_general", ""),
+                    str(sum(1 for p in pts.values() if p.get("estado") == "malo")),
+                    data.get("approval_status", ""),
+                    data.get("approved_by_name", ""),
+                    pt(1), pt(2), pt(3), pt(4), pt(5), pt(6), pt(7), pt(8), pt(9),
+                    pt(10), pt(11), pt(12), pt(13), pt(14), pt(15), pt(16), pt(17), pt(18), pt(19)
+                ]
             else:
-                row = [insp_id, data.get("created_at",""), data.get("placas_unidad",""),
-                       data.get("inspector_nombre",""), data.get("status_general",""),
-                       str(sum(1 for p in pts.values() if p.get("estado")=="malo")),
-                       data.get("approval_status",""), data.get("approved_by_name",""),
-                       pt(1),pt(2),pt(3),pt(4),pt(5),pt(6),pt(7),pt(8),pt(9)]
+                row = [
+                    insp_id,                            # Col A: ID Inspección / Unique Key
+                    data.get("record_id", ""),          # Col B: ID Registro
+                    data.get("shipping_ticket_id", ""), # Col C: ID Embarque
+                    data.get("created_at", ""),         # Col D: Fecha
+                    "INSPECCION_9",                     # Col E: Proceso
+                    data.get("placas_unidad", ""),
+                    data.get("inspector_nombre", ""),
+                    data.get("status_general", ""),
+                    str(sum(1 for p in pts.values() if p.get("estado") == "malo")),
+                    data.get("approval_status", ""),
+                    data.get("approved_by_name", ""),
+                    pt(1), pt(2), pt(3), pt(4), pt(5), pt(6), pt(7), pt(8), pt(9)
+                ]
 
             await _sheet_append_via_api(hoja, row, insp_id)
             logger.info(f"Sheets inspeccion registrada: {data.get('placas_unidad')} ({hoja})")
@@ -684,19 +707,22 @@ async def sync_to_google_sheets(tipo: str, payload: Any):
                 return
 
             row = [
-                tid,
-                data.get("created_at",""),
-                data.get("placas_unidad",""),
-                data.get("cliente",""),
-                data.get("almacenista",""),
-                data.get("operador",""),
-                data.get("linea_transporte",""),
-                data.get("numero_caja",""),
-                data.get("numero_pallets",""),
-                data.get("numero_sello",""),
-                data.get("nombre_guardia",""),
-                data.get("observaciones",""),
-                data.get("area",""),
+                tid,                                # Col A: ID Embarque / Unique Key
+                data.get("record_id", ""),          # Col B: ID Registro
+                data.get("inspection_id", ""),      # Col C: ID Inspección
+                data.get("created_at", ""),         # Col D: Fecha
+                "EMBARQUE",                         # Col E: Proceso
+                data.get("placas_unidad", ""),
+                data.get("cliente", ""),
+                data.get("almacenista", ""),
+                data.get("operador", ""),
+                data.get("linea_transporte", ""),
+                data.get("numero_caja", ""),
+                data.get("numero_pallets", ""),
+                data.get("numero_sello", ""),
+                data.get("nombre_guardia", ""),
+                data.get("observaciones", ""),
+                data.get("area", ""),
             ]
             await _sheet_append_via_api(hoja, row, tid)
             logger.info(f"Sheets embarque registrado: {data.get('placas_unidad')}")
