@@ -432,6 +432,16 @@ async def create_inspection(body: InspectionCreate, u: Dict[str, Any] = Depends(
                 doc["record_id"] = rec_by_plates["id"]
     # Sincronizar automáticamente al sheet
     asyncio.create_task(sync_to_google_sheets("inspeccion", doc))
+
+    # Notificar si hay fallas (alerta global para supervisores)
+    if doc["status_general"] == "malo":
+        await db.notifications.insert_one({
+            "id": str(uuid.uuid4()), "user_id": u["id"], "global": True, "read": False,
+            "title": f"FALLA: {body.placas_unidad}",
+            "message": f"Inspección con fallas reportada por {u['name']}.",
+            "inspection_id": iid, "created_at": datetime.now(timezone.utc).isoformat()
+        })
+
     return Inspection(**doc)
 
 @api_router.get("/inspections", response_model=List[Inspection])
@@ -452,6 +462,16 @@ async def approve_insp(insp_id: str, body: ApprovalBody, u: Dict[str, Any] = Dep
     update = {"approval_status": "aprobada", "approval_note": body.note, "approved_by": body.name, "approved_by_name": body.name, "approved_sig": ensure_clean_image(body.signature), "approved_by_signature": ensure_clean_image(body.signature), "approved_at": now}
     await db.inspections.update_one({"id": insp_id}, {"$set": update})
     d = await db.inspections.find_one({"id": insp_id}, {"_id": 0})
+
+    # Notificar al inspector que su inspección fue aprobada
+    if d:
+        await db.notifications.insert_one({
+            "id": str(uuid.uuid4()), "user_id": d["user_id"], "global": False, "read": False,
+            "title": "Inspección Aprobada",
+            "message": f"Tu inspección de la unidad {d.get('placas_unidad')} ha sido aprobada por {u['name']}.",
+            "inspection_id": insp_id, "created_at": datetime.now(timezone.utc).isoformat()
+        })
+
     return Inspection(**d)
 
 # --- Embarque ---
@@ -829,6 +849,113 @@ async def repair_links(u: Dict[str, Any] = Depends(get_current_user)):
         await _ensure_record_links(r)
 
     return {"status": "success", "reconstructed": created_count, "total_records": len(records)}
+
+@api_router.get("/analytics")
+async def get_analytics(u: Dict[str, Any] = Depends(get_current_user), date_from: Optional[str] = None, date_to: Optional[str] = None):
+    if u["role"] not in ["supervisor", "admin"] and not is_admin(u):
+        raise HTTPException(403, "Acceso restringido a supervisores")
+
+    filt = {}
+    if date_from or date_to:
+        date_filt = {}
+        if date_from: date_filt["$gte"] = date_from
+        if date_to: date_filt["$lte"] = date_to
+        filt["created_at"] = date_filt
+
+    insps = await db.inspections.find(filt).to_list(10000)
+    total = len(insps)
+    if total == 0:
+        return {
+            "total": 0, "approval_rate_pct": 0,
+            "approval_breakdown": {"pendiente": 0, "aprobada": 0, "rechazada": 0},
+            "status_breakdown": {"bueno": 0, "malo": 0},
+            "by_inspector": [], "top_failed_points": []
+        }
+
+    appr = {"pendiente": 0, "aprobada": 0, "rechazada": 0}
+    stat = {"bueno": 0, "malo": 0}
+    inspectors = {} # name -> {total, fallas, aprobadas, rechazadas}
+    failed_points = {} # point_name -> count
+
+    for i in insps:
+        a_status = i.get("approval_status", "pendiente")
+        appr[a_status] = appr.get(a_status, 0) + 1
+
+        s_gen = i.get("status_general", "bueno")
+        stat[s_gen] = stat.get(s_gen, 0) + 1
+
+        name = i.get("inspector_nombre", "Desconocido")
+        if name not in inspectors:
+            inspectors[name] = {"name": name, "total": 0, "fallas": 0, "aprobadas": 0, "rechazadas": 0}
+
+        inspectors[name]["total"] += 1
+        if s_gen == "malo": inspectors[name]["fallas"] += 1
+        if a_status == "aprobada": inspectors[name]["aprobadas"] += 1
+        if a_status == "rechazada": inspectors[name]["rechazadas"] += 1
+
+        for p in i.get("points", []):
+            if p.get("estado") == "malo":
+                p_name = p.get("name", f"Punto {p.get('number')}")
+                failed_points[p_name] = failed_points.get(p_name, 0) + 1
+
+    appr_rate = round((appr["aprobada"] / total) * 100) if total > 0 else 0
+
+    top_failed = [{"name": k, "count": v} for k, v in failed_points.items()]
+    top_failed.sort(key=lambda x: x["count"], reverse=True)
+
+    return {
+        "total": total,
+        "approval_rate_pct": appr_rate,
+        "approval_breakdown": appr,
+        "status_breakdown": stat,
+        "by_inspector": list(inspectors.values()),
+        "top_failed_points": top_failed[:10]
+    }
+
+# --- Notificaciones ---
+@api_router.get("/notifications")
+async def list_notifications(u: Dict[str, Any] = Depends(get_current_user)):
+    # Los supervisores ven alertas críticas globales, inspectores solo las suyas
+    filt = {"$or": [{"user_id": u["id"]}, {"global": True}]}
+    notifs = await db.notifications.find(filt).sort("created_at", -1).to_list(100)
+    return [{**n, "id": str(n.get("id", n.get("_id")))} for n in notifs]
+
+@api_router.post("/notifications/{id}/read")
+async def mark_read(id: str, u: Dict[str, Any] = Depends(get_current_user)):
+    await db.notifications.update_one({"id": id}, {"$set": {"read": True}})
+    return {"ok": True}
+
+@api_router.post("/notifications/read-all")
+async def read_all(u: Dict[str, Any] = Depends(get_current_user)):
+    await db.notifications.update_many({"user_id": u["id"]}, {"$set": {"read": True}})
+    return {"ok": True}
+
+@api_router.post("/users/push-token")
+async def save_push_token(body: Dict[str, str], u: Dict[str, Any] = Depends(get_current_user)):
+    token = body.get("token")
+    if token:
+        await db.users.update_one({"id": u["id"]}, {"$set": {"push_token": token}})
+    return {"ok": True}
+
+# --- Chat (Interno Team Chat) ---
+@api_router.get("/chat/{room}")
+async def get_chat(room: str, u: Dict[str, Any] = Depends(get_current_user)):
+    msgs = await db.chat_messages.find({"room": room}).sort("created_at", 1).to_list(200)
+    return [{**m, "id": str(m.get("_id"))} for m in msgs]
+
+@api_router.post("/chat/send")
+async def send_chat(body: Dict[str, Any], u: Dict[str, Any] = Depends(get_current_user)):
+    msg = {
+        "id": str(uuid.uuid4()),
+        "room": body.get("room", "GENERAL"),
+        "user_id": u["id"],
+        "user_name": u["name"],
+        "text": body.get("text", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.chat_messages.insert_one(msg)
+    if "_id" in msg: del msg["_id"]
+    return msg
 
 # --- Actividades ---
 @api_router.get("/activities")
