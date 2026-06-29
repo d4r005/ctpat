@@ -14,7 +14,7 @@ export default function AppLayout() {
   const insets = useSafeAreaInsets();
 
   const isAdminOrSup = user?.role === 'admin' || user?.role === 'supervisor' ||
-                        ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+    ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
 
   useEffect(() => {
     if (!loading && !token) router.replace('/login');
@@ -45,6 +45,7 @@ export default function AppLayout() {
         tabBarLabelStyle: { fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
       }}
     >
+      {/* ── TABS VISIBLES ── */}
       <Tabs.Screen
         name="inicio"
         options={{
@@ -88,13 +89,11 @@ export default function AppLayout() {
         }}
       />
 
-      {/* Ocultar explícitamente rutas que no deben estar en la barra */}
-      <Tabs.Screen name="chat" options={{ href: null }} />
-      <Tabs.Screen name="usuarios" options={{ href: null }} />
-      <Tabs.Screen name="analitica" options={{ href: null }} />
-      <Tabs.Screen name="perfil" options={{ href: null }} />
-      <Tabs.Screen name="caseta/[id]" options={{ href: null }} />
-      <Tabs.Screen name="embarque/[id]" options={{ href: null }} />
+      {/* ── RUTAS INTERNAS — ocultas del tab bar ── */}
+      <Tabs.Screen name="chat"       options={{ href: null }} />
+      <Tabs.Screen name="usuarios"   options={{ href: null }} />
+      <Tabs.Screen name="analitica"  options={{ href: null }} />
+      <Tabs.Screen name="perfil"     options={{ href: null }} />
     </Tabs>
   );
 }

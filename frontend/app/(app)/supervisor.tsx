@@ -284,9 +284,15 @@ function MasterRow({ item, type, t, onPdf, loadingPdf, router, records, tickets,
         </View>
 
         <View style={styles.rowActions}>
-           <Pressable style={styles.actionLink} onPress={() => router.push(type === 'inspeccion' ? `/inspection/${item.id}` : `/caseta/${relatedRecord?.id || item.id}`)}>
+           <Pressable style={styles.actionLink} onPress={() => {
+             if (type === 'inspeccion') router.push(`/inspection/${item.id}`);
+             else if (type === 'embarque') router.push(`/embarque/${item.id}`);
+             else router.push(`/caseta/${relatedRecord?.id || item.id}`);
+           }}>
              <Ionicons name="create-outline" size={14} color="#333" />
-             <Text style={styles.actionLinkText}>{type === 'inspeccion' ? 'EDITAR INSPECCIÓN' : 'EDITOR'}</Text>
+             <Text style={styles.actionLinkText}>
+               {type === 'inspeccion' ? 'EDITAR INSPECCIÓN' : type === 'embarque' ? 'EDITAR TICKET' : 'EDITOR CASETA'}
+             </Text>
            </Pressable>
            <Pressable style={styles.pdfBtn} onPress={onPdf} disabled={loadingPdf}>
              <Ionicons name="eye-outline" size={16} color="#FFF" />
