@@ -4,10 +4,10 @@ import {
   ActivityIndicator, ScrollView, Platform, Alert, Image, KeyboardAvoidingView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { useInspections, Inspection } from '@/src/context/InspectionContext';
+import { useInspections, InspectionPayload } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { apiCall } from '@/src/api/client';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -22,6 +22,14 @@ const TOTAL_STEPS = 4;
 
 export default function InspeccionDashboard() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    record_id?: string;
+    compania?: string;
+    placas?: string;
+    trailer?: string;
+    sello?: string;
+    chofer?: string;
+  }>();
   const { token, user } = useAuth();
   const { t } = useTranslation();
   const { inspections, refresh: refreshInsps, loading: loadingInsps, saveInspection } = useInspections();
@@ -35,8 +43,6 @@ export default function InspeccionDashboard() {
 
   // Estados del Formulario
   const [selectedType, setSelectedType] = useState<'19_puntos' | '9_puntos_contenedor' | null>(null);
-  const [step, setStep] = useState(0);
-  const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<any>({
     compania: '', placas: '', trailer: '', precinto: '', precintoNA: false, selloAlta: '', selloVerificado: false,
     points: [], actSospechosa: '', inspectorNombre: user?.name || '', inspectorFirma: '', record_id: ''
@@ -60,7 +66,23 @@ export default function InspeccionDashboard() {
     }
   }, [token, refreshInsps]);
 
-  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+  useFocusEffect(useCallback(() => {
+    loadData();
+    // Si viene de parámetros (ej. desde caseta), abrir formulario directamente
+    if (params.record_id && !showForm) {
+      handleStartInspection({
+        id: params.record_id,
+        entry: {
+          placas_unidad: params.placas,
+          numero_caja: params.trailer,
+          sello_entrada: params.sello,
+          compania_transporte: params.compania,
+          chofer_nombre: params.chofer,
+          tipo_unidad: params.trailer?.includes('-2') ? 'full' : 'sencillo' // Heurística básica
+        }
+      });
+    }
+  }, [loadData, params.record_id]));
 
   const pendingRecords = useMemo(() => {
     return records.filter(r => {
@@ -116,7 +138,6 @@ export default function InspeccionDashboard() {
     }
     if (typeOverride) setSelectedType(typeOverride);
     setShowForm(true);
-    setStep(0);
   };
 
   if (showForm) {
@@ -223,7 +244,7 @@ export default function InspeccionDashboard() {
   );
 }
 
-// Implementación del Wizard de Inspección integrada
+// Implementación COMPLETA del Wizard de Inspección
 function InspectionWizard({ type, onClose, initialData, t, saveInspection, user }: any) {
   const [selectedType, setSelectedType] = useState(type);
   const [step, setStep] = useState(0);
@@ -231,6 +252,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
   const [points, setPoints] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [showSig, setShowSig] = useState(false);
+  const [scanner, setScanner] = useState<{ visible: boolean, field: string }>({ visible: false, field: '' });
   const sigRef = React.useRef<any>(null);
 
   React.useEffect(() => {
@@ -242,7 +264,8 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
 
   const canNext = () => {
     if (step === 0) return data.placas && data.trailer;
-    if (step === 1) return points.every(p => p.estado !== '' && (p.estado !== 'malo' || p.photo));
+    if (step === 1) return points.every(p => p.estado !== '');
+    if (step === 2) return points.filter(p => p.estado === 'malo').every(p => p.comentarios && p.photo);
     if (step === 3) return data.inspectorFirma;
     return true;
   };
@@ -251,11 +274,21 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
     setSaving(true);
     try {
       const res = await saveInspection({
-        ...data,
         inspection_type: selectedType,
-        points,
+        compania_transportista: data.compania,
+        placas_unidad: data.placas,
+        numero_trailer: data.trailer,
+        numero_precinto: data.precintoNA ? 'N/A' : data.precinto,
+        sello_alta_seguridad: data.selloAlta,
+        sello_verificado: data.selloVerificado,
+        points: points,
+        actividad_sospechosa: data.actSospechosa,
+        inspector_nombre: data.inspectorNombre,
+        inspector_firma: data.inspectorFirma,
         fecha_hora: new Date().toISOString(),
-      });
+        client_uuid: '', // context takes care if empty
+        record_id: data.record_id
+      } as InspectionPayload);
 
       if (data.isFull && data.inspectionsDone === 0) {
         Alert.alert(
@@ -266,7 +299,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
             {
               text: t('si_continuar') || "Sí, continuar",
               onPress: () => {
-                // Reset for second box
+                // Reset para la segunda caja
                 setData({
                   ...data,
                   trailer: data.numero_caja_2 || '',
@@ -284,6 +317,21 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
       }
     } catch (e: any) { alert(e.message); }
     finally { setSaving(false); }
+  };
+
+  const pickPointPhoto = async (idx: number) => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) { alert(t('acceso_restringido')); return; }
+    const r = await ImagePicker.launchCameraAsync({
+      mediaTypes: 'images',
+      quality: 0.2,
+      base64: true
+    });
+    if (!r.canceled && r.assets[0]?.base64) {
+      const n = [...points];
+      n[idx].photo = `data:image/jpeg;base64,${r.assets[0].base64}`;
+      setPoints(n);
+    }
   };
 
   if (!selectedType) {
@@ -313,42 +361,150 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
       <ScrollView contentContainerStyle={{ padding: 20 }}>
           {step === 0 && (
             <View>
+              <Text style={styles.label}>{t('compañia').toUpperCase()}</Text>
+              <TextInput style={styles.input} value={data.compania} onChangeText={v => setData({...data, compania: v.toUpperCase()})} />
+
               <Text style={styles.label}>{t('placas').toUpperCase()}</Text>
-              <TextInput style={styles.input} value={data.placas} onChangeText={v => setData({...data, placas: v.toUpperCase()})} autoCapitalize="characters" />
+              <View style={styles.inputRow}>
+                <TextInput style={[styles.input, { flex: 1 }]} value={data.placas} onChangeText={v => setData({...data, placas: v.toUpperCase()})} />
+                <Pressable style={styles.scanBtn} onPress={() => setScanner({ visible: true, field: 'placas' })}><Ionicons name="barcode" size={24} color="#FFF" /></Pressable>
+              </View>
+
               <Text style={styles.label}>{t('trailer').toUpperCase()}</Text>
-              <TextInput style={styles.input} value={data.trailer} onChangeText={v => setData({...data, trailer: v.toUpperCase()})} autoCapitalize="characters" />
+              <View style={styles.inputRow}>
+                <TextInput style={[styles.input, { flex: 1 }]} value={data.trailer} onChangeText={v => setData({...data, trailer: v.toUpperCase()})} />
+                <Pressable style={styles.scanBtn} onPress={() => setScanner({ visible: true, field: 'trailer' })}><Ionicons name="barcode" size={24} color="#FFF" /></Pressable>
+              </View>
+
+              <Text style={styles.label}>{t('sello_alta_seguridad').toUpperCase()}</Text>
+              <View style={styles.inputRow}>
+                <TextInput style={[styles.input, { flex: 1 }]} value={data.selloAlta} onChangeText={v => setData({...data, selloAlta: v.toUpperCase()})} />
+                <Pressable style={styles.scanBtn} onPress={() => setScanner({ visible: true, field: 'selloAlta' })}><Ionicons name="barcode" size={24} color="#FFF" /></Pressable>
+              </View>
+
+              <Pressable style={styles.checkRow} onPress={() => setData({...data, selloVerificado: !data.selloVerificado})}>
+                <View style={[styles.checkbox, data.selloVerificado && styles.checkboxOn]}>
+                  {data.selloVerificado && <Ionicons name="checkmark" size={18} color="#FFF" />}
+                </View>
+                <Text style={styles.checkLabel}>SELLO VERIFICADO (VER, TIRAR, TORCER)</Text>
+              </Pressable>
             </View>
           )}
+
           {step === 1 && (
             <View>
-              <Text style={{ fontWeight: '900', marginBottom: 10 }}>PUNTOS DE INSPECCIÓN ({points.filter(p=>p.estado!=='').length}/{points.length})</Text>
+              <Text style={{ fontWeight: '900', marginBottom: 10, letterSpacing: 1 }}>{t('puntos_inspeccion').toUpperCase()} ({points.filter(p=>p.estado!=='').length}/{points.length})</Text>
               {points.map((p, idx) => (
-                <View key={p.number} style={{ marginBottom: 15, padding: 10, backgroundColor: '#F5F5F5', borderWidth: 1, borderColor: '#DDD' }}>
-                  <Text style={{ fontWeight: '700' }}>{p.number}. {p.name}</Text>
-                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 5 }}>
-                    <Pressable onPress={() => { const n = [...points]; n[idx].estado = 'bueno'; setPoints(n); }} style={{ flex: 1, padding: 8, backgroundColor: p.estado === 'bueno' ? colors.success : '#FFF', borderWidth: 1 }}>
-                      <Text style={{ textAlign: 'center', fontWeight: '900', color: p.estado === 'bueno' ? '#FFF' : '#333' }}>BUENO</Text>
+                <View key={p.number} style={styles.pointRow}>
+                  <Text style={styles.pointName}>{p.number}. {p.name}</Text>
+                  <View style={styles.toggleRow}>
+                    <Pressable onPress={() => { const n = [...points]; n[idx].estado = 'bueno'; setPoints(n); }} style={[styles.toggleBtn, p.estado === 'bueno' && { backgroundColor: colors.success }]}>
+                      <Text style={[styles.toggleText, p.estado === 'bueno' && { color: '#FFF' }]}>{t('bueno').toUpperCase()}</Text>
                     </Pressable>
-                    <Pressable onPress={() => { const n = [...points]; n[idx].estado = 'malo'; setPoints(n); }} style={{ flex: 1, padding: 8, backgroundColor: p.estado === 'malo' ? colors.error : '#FFF', borderWidth: 1 }}>
-                      <Text style={{ textAlign: 'center', fontWeight: '900', color: p.estado === 'malo' ? '#FFF' : '#333' }}>FALLA</Text>
+                    <Pressable onPress={() => { const n = [...points]; n[idx].estado = 'malo'; setPoints(n); }} style={[styles.toggleBtn, p.estado === 'malo' && { backgroundColor: colors.error }]}>
+                      <Text style={[styles.toggleText, p.estado === 'malo' && { color: '#FFF' }]}>{t('falla').toUpperCase()}</Text>
                     </Pressable>
                   </View>
                 </View>
               ))}
             </View>
           )}
-          {/* ... Resto de pasos (Firma, etc) ... */}
+
+          {step === 2 && (
+            <View>
+              <Text style={{ fontWeight: '900', marginBottom: 15, letterSpacing: 1 }}>{t('detalles_fallas').toUpperCase()}</Text>
+              {points.filter(p => p.estado === 'malo').map((p, idx) => {
+                const originalIdx = points.findIndex(orig => orig.number === p.number);
+                return (
+                  <View key={p.number} style={styles.failCard}>
+                    <Text style={styles.failTitle}>{p.number}. {p.name}</Text>
+                    <TextInput
+                      style={styles.failInput}
+                      placeholder={t('comentarios_falla')}
+                      value={p.comentarios}
+                      onChangeText={v => { const n = [...points]; n[originalIdx].comentarios = v; setPoints(n); }}
+                    />
+                    <Pressable style={styles.photoBtn} onPress={() => pickPointPhoto(originalIdx)}>
+                      {p.photo ? (
+                        <Image source={{ uri: p.photo }} style={styles.photoPreview} />
+                      ) : (
+                        <View style={styles.photoCta}>
+                          <Ionicons name="camera" size={24} color={colors.brandPrimary} />
+                          <Text style={styles.photoText}>{t('tomar_foto_evidencia')}</Text>
+                        </View>
+                      )}
+                    </Pressable>
+                  </View>
+                );
+              })}
+              {points.filter(p => p.estado === 'malo').length === 0 && (
+                <View style={styles.center}><Text style={{ color: colors.muted }}>{t('no_hay_fallas')}</Text></View>
+              )}
+            </View>
+          )}
+
+          {step === 3 && (
+            <View>
+              <Text style={styles.label}>{t('actividad_sospechosa').toUpperCase()}</Text>
+              <TextInput
+                style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
+                multiline
+                placeholder={t('describa_actividad_sospechosa')}
+                value={data.actSospechosa}
+                onChangeText={v => setData({...data, actSospechosa: v})}
+              />
+
+              <Text style={styles.label}>{t('nombre_inspector').toUpperCase()}</Text>
+              <TextInput style={styles.input} value={data.inspectorNombre} onChangeText={v => setData({...data, inspectorNombre: v})} />
+
+              <Text style={styles.label}>{t('firma_inspector').toUpperCase()}</Text>
+              <Pressable style={styles.sigArea} onPress={() => setShowSig(true)}>
+                {data.inspectorFirma ? (
+                  <Image source={{ uri: data.inspectorFirma }} style={{ width: '100%', height: '100%', resizeMode: 'contain' }} />
+                ) : (
+                  <Text style={{ color: colors.muted, fontWeight: '700' }}>{t('toca_para_firmar')}</Text>
+                )}
+              </Pressable>
+            </View>
+          )}
       </ScrollView>
+
       <View style={styles.wizardFooter}>
-         {step > 0 && <Pressable style={styles.wizBtnSec} onPress={() => setStep(step-1)}><Text style={{fontWeight:'900'}}>ATRÁS</Text></Pressable>}
+         {step > 0 && <Pressable style={styles.wizBtnSec} onPress={() => setStep(step-1)}><Text style={styles.wizBtnText}>{t('atras').toUpperCase()}</Text></Pressable>}
          <Pressable
            style={[styles.wizBtnPri, !canNext() && { opacity: 0.5 }]}
            onPress={() => step < 3 ? setStep(step+1) : handleFinish()}
            disabled={!canNext() || saving}
          >
-           {saving ? <ActivityIndicator color="#FFF" /> : <Text style={{fontWeight:'900', color:'#FFF'}}>{step === 3 ? 'GUARDAR' : 'SIGUIENTE'}</Text>}
+           {saving ? <ActivityIndicator color="#FFF" /> : <Text style={[styles.wizBtnText, { color: '#FFF' }]}>{step === 3 ? t('finalizar').toUpperCase() : t('siguiente').toUpperCase()}</Text>}
          </Pressable>
       </View>
+
+      <BarcodeScanner
+        visible={scanner.visible}
+        title={`ESCANEAR ${scanner.field.toUpperCase()}`}
+        onClose={() => setScanner({ visible: false, field: '' })}
+        onScan={(val) => { setData({...data, [scanner.field]: val}); setScanner({ visible: false, field: '' }); }}
+      />
+
+      {showSig && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{t('firma_inspector').toUpperCase()}</Text>
+            <View style={styles.sigCanvasCont}>
+              <Signature
+                ref={sigRef}
+                onOK={(sig) => { setData({...data, inspectorFirma: sig}); setShowSig(false); }}
+                webStyle={`.m-signature-pad--footer{display:none;}`}
+              />
+            </View>
+            <View style={styles.modalActions}>
+              <Pressable style={styles.wizBtnSec} onPress={() => setShowSig(false)}><Text>{t('cancelar').toUpperCase()}</Text></Pressable>
+              <Pressable style={styles.wizBtnPri} onPress={() => sigRef.current?.readSignature()}><Text style={{ color: '#FFF' }}>{t('guardar_firma').toUpperCase()}</Text></Pressable>
+            </View>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -377,9 +533,34 @@ const styles = StyleSheet.create({
   progressHeader: { backgroundColor: colors.brandPrimary, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 10 },
   empty: { alignItems: 'center', padding: spacing.xxxl },
   emptyText: { color: colors.muted, fontWeight: '700' },
-  label: { fontSize: 11, fontWeight: '900', color: colors.muted, marginBottom: 5 },
-  input: { borderWidth: 2, borderColor: colors.borderStrong, padding: 10, marginBottom: 15, backgroundColor: '#FFF' },
-  wizardFooter: { flexDirection: 'row', padding: 15, borderTopWidth: 1, borderColor: '#EEE', gap: 10 },
-  wizBtnPri: { flex: 1, backgroundColor: colors.brandPrimary, padding: 15, alignItems: 'center', borderRadius: 4 },
-  wizBtnSec: { flex: 1, backgroundColor: '#EEE', padding: 15, alignItems: 'center', borderRadius: 4 },
+  label: { fontSize: 11, fontWeight: '900', color: colors.onSurfaceTertiary, marginBottom: 5, letterSpacing: 1 },
+  input: { borderWidth: 2, borderColor: colors.borderStrong, padding: 10, marginBottom: 15, backgroundColor: '#FFF', fontSize: 16 },
+  inputRow: { flexDirection: 'row', marginBottom: 15, gap: 10 },
+  scanBtn: { width: 50, height: 50, backgroundColor: colors.brandPrimary, alignItems: 'center', justifyContent: 'center' },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 5, marginBottom: 20 },
+  checkbox: { width: 24, height: 24, borderWidth: 2, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  checkboxOn: { backgroundColor: colors.success, borderColor: colors.success },
+  checkLabel: { fontWeight: '900', fontSize: 10, color: colors.onSurface },
+  pointRow: { padding: 10, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, marginBottom: 10 },
+  pointName: { fontWeight: '700', fontSize: 14, marginBottom: 8 },
+  toggleRow: { flexDirection: 'row', gap: 10 },
+  toggleBtn: { flex: 1, padding: 10, borderWidth: 1, borderColor: colors.border, alignItems: 'center', backgroundColor: '#FFF' },
+  toggleText: { fontWeight: '900', fontSize: 11, color: colors.onSurface },
+  failCard: { padding: 15, backgroundColor: '#FFF', borderWidth: 2, borderColor: colors.error, marginBottom: 15 },
+  failTitle: { fontWeight: '900', fontSize: 14, color: colors.error, marginBottom: 10 },
+  failInput: { borderWidth: 1, borderColor: colors.border, padding: 10, marginBottom: 10 },
+  photoBtn: { height: 150, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed', backgroundColor: '#F9F9F9', justifyContent: 'center', alignItems: 'center' },
+  photoPreview: { width: '100%', height: '100%', resizeMode: 'cover' },
+  photoCta: { alignItems: 'center' },
+  photoText: { fontWeight: '700', fontSize: 10, color: colors.brandPrimary, marginTop: 5 },
+  sigArea: { height: 120, borderWidth: 2, borderColor: colors.borderStrong, backgroundColor: '#FFF', alignItems: 'center', justifyContent: 'center', marginTop: 5 },
+  wizardFooter: { flexDirection: 'row', padding: 15, borderTopWidth: 2, borderColor: colors.borderStrong, gap: 10, backgroundColor: colors.surfaceSecondary },
+  wizBtnPri: { flex: 1, backgroundColor: colors.brandPrimary, padding: 15, alignItems: 'center', justifyContent: 'center' },
+  wizBtnSec: { flex: 1, backgroundColor: '#FFF', borderWidth: 2, borderColor: colors.borderStrong, padding: 15, alignItems: 'center', justifyContent: 'center' },
+  wizBtnText: { fontWeight: '900', fontSize: 12 },
+  modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 20, zIndex: 100 },
+  modalCard: { backgroundColor: '#FFF', padding: 20, borderWidth: 2, borderColor: colors.borderStrong },
+  modalTitle: { fontWeight: '900', marginBottom: 15 },
+  sigCanvasCont: { height: 300, borderWidth: 1, borderColor: '#EEE', marginBottom: 20 },
+  modalActions: { flexDirection: 'row', gap: 10 }
 });
