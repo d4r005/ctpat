@@ -376,6 +376,8 @@ async def create_record(body: VehicleEntry, u: Dict[str, Any] = Depends(get_curr
     for f in ["foto_frente_unidad", "foto_atras_caja", "foto_atras_caja_2", "foto_id_chofer", "firma_operador"]:
         if full_doc["entry"].get(f): full_doc["entry"][f] = ensure_clean_image(full_doc["entry"][f])
     await db.vehicle_records.insert_one(full_doc)
+    # Sincronizar automáticamente al sheet
+    asyncio.create_task(sync_to_google_sheets("entrada", full_doc))
     return VehicleRecord(**full_doc)
 
 @api_router.get("/vehicle-records/{rec_id}", response_model=VehicleRecord)
@@ -390,6 +392,8 @@ async def exit_record(rec_id: str, body: VehicleExit, u: Dict[str, Any] = Depend
     if x.get("firma_guardia"): x["firma_guardia"] = ensure_clean_image(x["firma_guardia"])
     await db.vehicle_records.update_one({"id": rec_id}, {"$set": {"exit": x, "status": "salida"}})
     up = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
+    # Sincronizar salida automáticamente al sheet
+    if up: asyncio.create_task(sync_to_google_sheets("salida", up))
     return VehicleRecord(**up)
 
 # --- Inspecciones ---
@@ -426,6 +430,8 @@ async def create_inspection(body: InspectionCreate, u: Dict[str, Any] = Depends(
                      "$addToSet": {"inspection_ids": iid}}
                 )
                 doc["record_id"] = rec_by_plates["id"]
+    # Sincronizar automáticamente al sheet
+    asyncio.create_task(sync_to_google_sheets("inspeccion", doc))
     return Inspection(**doc)
 
 @api_router.get("/inspections", response_model=List[Inspection])
@@ -474,6 +480,8 @@ async def create_ticket(body: ShippingTicketCreate, u: Dict[str, Any] = Depends(
                     {"id": rec_by_plates["id"]},
                     {"$set": {"shipping_ticket_id": tid, "has_shipping_ticket": True}}
                 )
+    # Sincronizar automáticamente al sheet
+    asyncio.create_task(sync_to_google_sheets("embarque", doc))
     return {"id": tid}
 
 @api_router.get("/shipping-tickets", response_model=List[Dict[str, Any]])
@@ -496,19 +504,176 @@ async def update_ticket(id: str, body: Dict[str, Any], u: Dict[str, Any] = Depen
     await db.shipping_tickets.update_one({"id": id}, {"$set": body})
     return {"ok": True}
 
-# ========== Sincronización Externa (Google Sheets / Drive) ==========
+# ========== Sincronización Google Sheets (directo, sin webhook) ==========
+
+SHEET_ID = "1o1l0iH74CykHu4p7Ybaa08HSNeRaesy_OOG4DpkGoPE"
+
+def _sheets_headers(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+async def _sheet_append_via_api(hoja: str, row: list, unique_id: str):
+    """
+    Agrega una fila al Sheet directamente via Sheets API.
+    Usa el token almacenado en GOOGLEDRIVE_ACCESS_TOKEN (inyectado vía env o endpoint refresh).
+    Verifica deduplicación por col A (unique_id) antes de insertar.
+    """
+    token = os.environ.get("GOOGLEDRIVE_ACCESS_TOKEN", "")
+    if not token:
+        logger.warning(f"Sheets append [{hoja}]: sin token de acceso")
+        return
+
+    loop = asyncio.get_event_loop()
+
+    def _check_existing():
+        r = requests.get(
+            f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}/values/'{hoja}'!A2:A2000",
+            headers={"Authorization": f"Bearer {token}"}, timeout=10)
+        vals = r.json().get("values", [])
+        return [v[0] for v in vals if v]
+
+    def _append():
+        return requests.post(
+            f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}/values/'{hoja}'!A1:append",
+            params={"valueInputOption": "RAW", "insertDataOption": "INSERT_ROWS"},
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={"majorDimension": "ROWS", "values": [row]},
+            timeout=10).json()
+
+    try:
+        existing = await loop.run_in_executor(None, _check_existing)
+        if unique_id and unique_id in existing:
+            logger.info(f"Sheets [{hoja}] ya existe ID {unique_id}, omitiendo")
+            return
+        result = await loop.run_in_executor(None, _append)
+        logger.info(f"Sheets [{hoja}] fila agregada para ID {unique_id}: {result.get('updates',{}).get('updatedRows','?')} filas")
+    except Exception as e:
+        logger.error(f"Sheets append [{hoja}] error: {e}")
 
 async def sync_to_google_sheets(tipo: str, payload: Any):
-    url = os.environ.get("GOOGLE_SHEET_WEBHOOK_URL")
-    if not url: return
+    """
+    Sincroniza un registro a la hoja correcta del Google Sheet.
+    - tipo: 'entrada', 'salida', 'inspeccion', 'embarque'
+    - Usa el ID del registro como clave de deduplicación (col A de cada hoja)
+    - Nunca inserta duplicados: si el ID ya existe, omite silenciosamente
+    """
+    token = await _get_drive_token()
+    if not token:
+        logger.warning("sync_sheets: GOOGLEDRIVE_ACCESS_TOKEN no configurado")
+        return
+
+    data = payload if isinstance(payload, dict) else payload.dict()
+
     try:
-        data = payload if isinstance(payload, dict) else payload.dict()
-        data["webhook_type"] = tipo
-        # Enviar de forma asíncrona usando executor para requests
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, lambda: requests.post(url, json=data, timeout=10))
+        if tipo in ("entrada", "salida"):
+            rec_id = data.get("id", "")
+            entry  = data.get("entry", {})
+            ex     = data.get("exit", {}) or {}
+            hoja   = "Entradas_Salidas"
+
+            existing = await _sheet_get_col_a(token, hoja)
+            # Para ENTRADA y SALIDA usamos rec_id + tipo como clave única
+            key_entrada = f"{rec_id}:entrada"
+            key_salida  = f"{rec_id}:salida"
+
+            if tipo == "entrada" and key_entrada not in existing:
+                row = [
+                    key_entrada,
+                    data.get("created_at", ""),
+                    "ENTRADA",
+                    entry.get("placas_unidad", ""),
+                    entry.get("chofer_nombre", ""),
+                    entry.get("compania_transporte", ""),
+                    entry.get("numero_tractor", ""),
+                    entry.get("numero_caja", ""),
+                    entry.get("sello_entrada", ""),
+                    entry.get("destino", ""),
+                    entry.get("guardia_caseta_nombre", ""),
+                    entry.get("cortina_asignada", ""),
+                    entry.get("licencia_conductor", ""),
+                    entry.get("condicion_carga", ""),
+                ]
+                await _sheet_append_via_api(hoja, row, insp_id)
+                logger.info(f"Sheets ENTRADA registrada: {entry.get('placas_unidad')}")
+
+            elif tipo == "salida" and ex and key_salida not in existing:
+                row = [
+                    key_salida,
+                    ex.get("fecha_salida", data.get("created_at", "")),
+                    "SALIDA",
+                    entry.get("placas_unidad", ""),
+                    entry.get("chofer_nombre", ""),
+                    "",
+                    "",
+                    ex.get("numero_caja_salida", entry.get("numero_caja", "")),
+                    ex.get("sello_salida", ""),
+                    ex.get("destino", entry.get("destino", "")),
+                    ex.get("guardia_salida_nombre", ""),
+                    ex.get("cortina_salida", ""),
+                    "",
+                    ex.get("condicion_salida", ""),
+                ]
+                await _sheet_append_via_api(hoja, row, insp_id)
+                logger.info(f"Sheets SALIDA registrada: {entry.get('placas_unidad')}")
+
+        elif tipo == "inspeccion":
+            insp_id = data.get("id", "")
+            pts     = {p["number"]: p for p in data.get("points", [])}
+            itype   = data.get("inspection_type", "")
+            is_19   = "19" in itype or itype == "19_puntos"
+            hoja    = "Inspecciones_19_Puntos" if is_19 else "Inspecciones_9_Puntos"
+
+            existing = await _sheet_get_col_a(token, hoja)
+            if insp_id in existing:
+                logger.info(f"Sheets inspeccion ya existe, omitiendo: {insp_id}")
+                return
+
+            def pt(n): return pts.get(n, {}).get("estado", "-")
+
+            if is_19:
+                row = [insp_id, data.get("created_at",""), data.get("placas_unidad",""),
+                       data.get("inspector_nombre",""), data.get("status_general",""),
+                       str(sum(1 for p in pts.values() if p.get("estado")=="malo")),
+                       data.get("approval_status",""), data.get("approved_by_name",""),
+                       pt(1),pt(2),pt(3),pt(4),pt(5),pt(6),pt(7),pt(8),pt(9),
+                       pt(10),pt(11),pt(12),pt(13),pt(14),pt(15),pt(16),pt(17),pt(18),pt(19)]
+            else:
+                row = [insp_id, data.get("created_at",""), data.get("placas_unidad",""),
+                       data.get("inspector_nombre",""), data.get("status_general",""),
+                       str(sum(1 for p in pts.values() if p.get("estado")=="malo")),
+                       data.get("approval_status",""), data.get("approved_by_name",""),
+                       pt(1),pt(2),pt(3),pt(4),pt(5),pt(6),pt(7),pt(8),pt(9)]
+
+            await _sheet_append_via_api(hoja, row, insp_id)
+            logger.info(f"Sheets inspeccion registrada: {data.get('placas_unidad')} ({hoja})")
+
+        elif tipo == "embarque":
+            tid = data.get("id", "")
+            hoja = "Tickets_Embarque"
+            existing = await _sheet_get_col_a(token, hoja)
+            if tid in existing:
+                logger.info(f"Sheets embarque ya existe, omitiendo: {tid}")
+                return
+
+            row = [
+                tid,
+                data.get("created_at",""),
+                data.get("placas_unidad",""),
+                data.get("cliente",""),
+                data.get("almacenista",""),
+                data.get("operador",""),
+                data.get("linea_transporte",""),
+                data.get("numero_caja",""),
+                data.get("numero_pallets",""),
+                data.get("numero_sello",""),
+                data.get("nombre_guardia",""),
+                data.get("observaciones",""),
+                data.get("area",""),
+            ]
+            await _sheet_append_via_api(hoja, row, insp_id)
+            logger.info(f"Sheets embarque registrado: {data.get('placas_unidad')}")
+
     except Exception as e:
-        logger.error(f"Error syncing to Google Sheets: {e}")
+        logger.error(f"sync_to_google_sheets [{tipo}] error: {e}")
 
 async def _trigger_automatic_report(record_id: str):
     url = os.environ.get("GOOGLE_SHEET_WEBHOOK_URL")
@@ -723,6 +888,21 @@ async def acts(u: Dict[str, Any] = Depends(get_current_user)):
     # Ordenar por fecha desc y limitar a 100
     activities.sort(key=lambda x: x.get("created_at", ""), reverse=True)
     return activities[:100]
+
+
+@api_router.post("/admin/refresh-sheets-token")
+async def refresh_sheets_token(body: Dict[str, Any], u: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Permite inyectar el access token de Google Drive/Sheets al entorno del servidor.
+    Se llama desde el sandbox (que sí tiene el token OAuth fresco) para mantener
+    la sincronización con Google Sheets activa.
+    """
+    if not is_admin(u): raise HTTPException(403)
+    token = body.get("token", "").strip()
+    if not token: raise HTTPException(400, "Token requerido")
+    os.environ["GOOGLEDRIVE_ACCESS_TOKEN"] = token
+    logger.info("GOOGLEDRIVE_ACCESS_TOKEN actualizado correctamente")
+    return {"ok": True, "message": "Token inyectado correctamente"}
 
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
