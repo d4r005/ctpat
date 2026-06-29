@@ -167,7 +167,7 @@ class Inspection(BaseModel):
     inspection_type: str
     compania_transportista: str = ""
     placas_unidad: str
-    numero_trailer: str
+    numero_trailer: str = ""
     numero_precinto: str = ""
     sello_alta_seguridad: str = ""
     sello_verificado: bool = False
@@ -179,11 +179,11 @@ class Inspection(BaseModel):
     approved_by_signature: str = ""
     approved_sig: str = ""
     approved_at: str = ""
-    inspector_nombre: str
-    inspector_firma: str
+    inspector_nombre: str = "Admin"
+    inspector_firma: str = ""
     fecha_hora: str = ""
     actividad_sospechosa: str = ""
-    points: List[InspectionPoint]
+    points: List[InspectionPoint] = []
     record_id: Optional[str] = None
 
 class ShippingTicketCreate(BaseModel):
