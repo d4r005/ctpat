@@ -592,7 +592,7 @@ async def sync_to_google_sheets(tipo: str, payload: Any):
                     entry.get("licencia_conductor", ""),
                     entry.get("condicion_carga", ""),
                 ]
-                await _sheet_append_via_api(hoja, row, insp_id)
+                await _sheet_append_via_api(hoja, row, key_entrada)
                 logger.info(f"Sheets ENTRADA registrada: {entry.get('placas_unidad')}")
 
             elif tipo == "salida" and ex and key_salida not in existing:
@@ -612,7 +612,7 @@ async def sync_to_google_sheets(tipo: str, payload: Any):
                     "",
                     ex.get("condicion_salida", ""),
                 ]
-                await _sheet_append_via_api(hoja, row, insp_id)
+                await _sheet_append_via_api(hoja, row, key_salida)
                 logger.info(f"Sheets SALIDA registrada: {entry.get('placas_unidad')}")
 
         elif tipo == "inspeccion":
@@ -669,7 +669,7 @@ async def sync_to_google_sheets(tipo: str, payload: Any):
                 data.get("observaciones",""),
                 data.get("area",""),
             ]
-            await _sheet_append_via_api(hoja, row, insp_id)
+            await _sheet_append_via_api(hoja, row, tid)
             logger.info(f"Sheets embarque registrado: {data.get('placas_unidad')}")
 
     except Exception as e:
@@ -739,7 +739,7 @@ async def get_consolidated_report(record_id: str, u: Dict[str, Any] = Depends(ge
             pl_norm = re.sub(r"[^A-Z0-9]", "", plates)
             regex = ".*".join(list(pl_norm))
             found = await db.inspections.find(
-                {"placas_unidad": {"": f".*{regex}.*", "": "i"}},
+                {"placas_unidad": {"$regex": f".*{regex}.*", "$options": "i"}},
                 {"_id": 0}
             ).sort("created_at", -1).to_list(10)
             inspections = found
@@ -754,7 +754,7 @@ async def get_consolidated_report(record_id: str, u: Dict[str, Any] = Depends(ge
             pl_norm = re.sub(r"[^A-Z0-9]", "", plates)
             regex = ".*".join(list(pl_norm))
             ticket = await db.shipping_tickets.find_one(
-                {"placas_unidad": {"": f".*{regex}.*", "": "i"}},
+                {"placas_unidad": {"$regex": f".*{regex}.*", "$options": "i"}},
                 sort=[("created_at", -1)]
             )
             if ticket and "_id" in ticket:
