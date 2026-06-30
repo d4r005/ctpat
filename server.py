@@ -291,11 +291,16 @@ async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(securit
 
 app = FastAPI(); api_router = APIRouter(prefix="/api")
 
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+    HAS_GOOGLE_AI = True
+except ImportError:
+    HAS_GOOGLE_AI = False
+    genai = None
 
 # Configuración AI
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
-if GEMINI_KEY:
+if HAS_GOOGLE_AI and GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
     ai_model = genai.GenerativeModel('gemini-1.5-flash')
 else:
@@ -1649,6 +1654,29 @@ async def refresh_sheets_token(body: Dict[str, Any], u: Dict[str, Any] = Depends
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.add_middleware(GZipMiddleware)
+
+@app.on_event("startup")
+async def startup_event():
+    logger.info("SRIUC Backend Iniciando...")
+    # Prueba de vida: Enviar un mini-correo al admin indicando que el servidor reinició
+    try:
+        from email.mime.text import MIMEText
+        import smtplib
+        user = os.environ.get("SMTP_USER")
+        passw = os.environ.get("SMTP_PASS")
+        dest = os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com")
+        if user and passw:
+            msg = MIMEText(f"El servidor SRIUC en Hugging Face ha reiniciado correctamente a las {datetime.now().isoformat()}. Las tareas de background están activas.")
+            msg["Subject"] = "SISTEMA ONLINE - SRIUC"
+            msg["From"] = user
+            msg["To"] = dest
+            with smtplib.SMTP(os.environ.get("SMTP_HOST", "smtp.gmail.com"), 587) as s:
+                s.starttls()
+                s.login(user, passw)
+                s.sendmail(user, [dest], msg.as_string())
+            logger.info("Correo de notificación de inicio enviado.")
+    except Exception as e:
+        logger.error(f"Error enviando notificación de inicio: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client(): client.close()
