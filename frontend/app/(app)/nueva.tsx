@@ -95,7 +95,11 @@ export default function InspeccionDashboard() {
   const [selectedType, setSelectedType] = useState<'19_puntos' | '9_puntos_contenedor' | null>(null);
   const [formData, setFormData] = useState<any>({
     compania: '', placas: '', trailer: '', precinto: '', precintoNA: false, selloAlta: '', selloVerificado: false,
-    points: [], actSospechosa: '', inspectorNombre: user?.name || '', inspectorFirma: '', record_id: ''
+    points: [], actSospechosa: '', inspectorNombre: user?.name || '', inspectorFirma: '', record_id: '',
+    box_type: '',
+    measures: { alto: '', ancho: '', largo: '', capacidad: '' },
+    guard_name: '',
+    guard_signature: ''
   });
 
   const loadData = useCallback(async () => {
@@ -183,7 +187,11 @@ export default function InspeccionDashboard() {
       setFormData({
         compania: '', placas: '', trailer: '', precinto: '', precintoNA: false, selloAlta: '', selloVerificado: false,
         points: [], actSospechosa: '', inspectorNombre: user?.name || '', inspectorFirma: '', record_id: '',
-        isFull: false, inspectionsDone: 0
+        isFull: false, inspectionsDone: 0,
+        box_type: '',
+        measures: { alto: '', ancho: '', largo: '', capacidad: '' },
+        guard_name: '',
+        guard_signature: ''
       });
     }
     if (typeOverride) setSelectedType(typeOverride);
@@ -312,6 +320,14 @@ export default function InspeccionDashboard() {
   );
 }
 
+const BOX_TYPES = [
+  { id: '53', label: '53" (Largo)', alto: '2.82', ancho: '2.54', largo: '15.9', capacidad: '113' },
+  { id: '48', label: '48" (Corto)', alto: '2.82', ancho: '2.54', largo: '14.48', capacidad: '103' },
+  { id: '28', label: '28" (Torton)', alto: '2.82', ancho: '2.54', largo: '8.33', capacidad: '59' },
+  { id: '15', label: '15" (3 ton)', alto: '2.12', ancho: '2.25', largo: '2.5', capacidad: '11' },
+  { id: '8', label: '8" (Nissan)', alto: '1.44', ancho: '1.6', largo: '2.5', capacidad: '5' },
+];
+
 // Implementación COMPLETA del Wizard de Inspección
 function InspectionWizard({ type, onClose, initialData, t, saveInspection, user }: any) {
   const [selectedType, setSelectedType] = useState(type);
@@ -320,6 +336,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
   const [points, setPoints] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [showSig, setShowSig] = useState(false);
+  const [sigTarget, setSigTarget] = useState<'inspector' | 'guard'>('inspector');
   const [scanner, setScanner] = useState<{ visible: boolean, field: string }>({ visible: false, field: '' });
   const sigRef = React.useRef<any>(null);
 
@@ -347,9 +364,10 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
 
   const canNext = () => {
     if (step === 0) return data.placas && data.trailer;
-    if (step === 1) return points.every(p => p.estado !== '');
-    if (step === 2) return points.filter(p => p.estado === 'malo').every(p => p.comentarios && p.photo);
-    if (step === 3) return data.inspectorFirma;
+    if (step === 1) return data.box_type && data.measures?.alto && data.measures?.ancho;
+    if (step === 2) return points.every(p => p.estado !== '');
+    if (step === 3) return points.filter(p => p.estado === 'malo').every(p => p.comentarios && p.photo);
+    if (step === 4) return data.inspectorFirma;
     return true;
   };
 
@@ -370,7 +388,11 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
         inspector_firma: data.inspectorFirma,
         fecha_hora: new Date().toISOString(),
         client_uuid: '', // context takes care if empty
-        record_id: data.record_id
+        record_id: data.record_id,
+        box_type: data.box_type,
+        measures: data.measures,
+        guard_name: data.guard_name,
+        guard_signature: data.guard_signature
       } as InspectionPayload);
 
       if (data.isFull && data.inspectionsDone === 0) {
@@ -519,6 +541,73 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
 
           {step === 1 && (
             <View>
+              <Text style={styles.label}>{t('tipo_caja') || 'TIPO DE CAJA'}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15 }}>
+                {BOX_TYPES.map(box => (
+                  <Pressable
+                    key={box.id}
+                    onPress={() => setData({ ...data, box_type: box.id, measures: { alto: box.alto, ancho: box.ancho, largo: box.largo, capacidad: box.capacidad } })}
+                    style={[styles.boxChip, data.box_type === box.id && styles.boxChipActive]}
+                  >
+                    <Text style={[styles.boxChipText, data.box_type === box.id && { color: '#FFF' }]}>{box.label}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              <Text style={styles.label}>{t('medidas_entrada_salida') || 'MEDIDAS ENTRADA / SALIDA'}</Text>
+              <View style={styles.measuresGrid}>
+                <View style={styles.measureCol}>
+                  <Text style={styles.measureLabel}>{t('alto') || 'ALTO'}</Text>
+                  <TextInput
+                    style={styles.measureInput}
+                    keyboardType="decimal-pad"
+                    value={data.measures?.alto}
+                    onChangeText={v => setData({...data, measures: { ...data.measures, alto: v }})}
+                  />
+                </View>
+                <View style={styles.measureCol}>
+                  <Text style={styles.measureLabel}>{t('ancho') || 'ANCHO'}</Text>
+                  <TextInput
+                    style={styles.measureInput}
+                    keyboardType="decimal-pad"
+                    value={data.measures?.ancho}
+                    onChangeText={v => setData({...data, measures: { ...data.measures, ancho: v }})}
+                  />
+                </View>
+                <View style={styles.measureCol}>
+                  <Text style={styles.measureLabel}>{t('largo') || 'LARGO'}</Text>
+                  <TextInput
+                    style={styles.measureInput}
+                    keyboardType="decimal-pad"
+                    value={data.measures?.largo}
+                    onChangeText={v => setData({...data, measures: { ...data.measures, largo: v }})}
+                  />
+                </View>
+                <View style={styles.measureCol}>
+                  <Text style={styles.measureLabel}>{t('capacidad') || 'CAPACIDAD'} (m³)</Text>
+                  <TextInput
+                    style={styles.measureInput}
+                    keyboardType="decimal-pad"
+                    value={data.measures?.capacidad}
+                    onChangeText={v => setData({...data, measures: { ...data.measures, capacidad: v }})}
+                  />
+                </View>
+              </View>
+              {data.box_type && (
+                <View style={styles.standardMeasuresBox}>
+                  <Text style={styles.standardTitle}>{t('medidas_estandar') || 'MEDIDAS ESTÁNDAR'} ({data.box_type}")</Text>
+                  {BOX_TYPES.find(b => b.id === data.box_type) && (
+                    <Text style={styles.standardValue}>
+                      {BOX_TYPES.find(b => b.id === data.box_type)?.alto} x {BOX_TYPES.find(b => b.id === data.box_type)?.ancho} x {BOX_TYPES.find(b => b.id === data.box_type)?.largo} · {BOX_TYPES.find(b => b.id === data.box_type)?.capacidad}m³
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
+
+          {step === 2 && (
+            <View>
               <Text style={{ fontWeight: '900', marginBottom: 10, letterSpacing: 1 }}>{t('puntos_inspeccion').toUpperCase()} ({points.filter(p=>p.estado!=='').length}/{points.length})</Text>
               {points.map((p, idx) => (
                 <View key={p.number} style={styles.pointRow}>
@@ -536,7 +625,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
             </View>
           )}
 
-          {step === 2 && (
+          {step === 3 && (
             <View>
               <Text style={{ fontWeight: '900', marginBottom: 15, letterSpacing: 1 }}>{t('detalles_fallas').toUpperCase()}</Text>
               {points.filter(p => p.estado === 'malo').map((p, idx) => {
@@ -569,7 +658,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
             </View>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <View>
               <Text style={styles.label}>{t('actividad_sospechosa').toUpperCase()}</Text>
               <TextInput
@@ -580,11 +669,25 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
                 onChangeText={v => setData({...data, actSospechosa: v})}
               />
 
+              <View style={{ marginBottom: 20, padding: 10, backgroundColor: colors.brandTertiary, borderWidth: 1, borderColor: colors.brandPrimary }}>
+                <Text style={styles.label}>{t('nombre_guardia') || 'NOMBRE DEL GUARDIA'}</Text>
+                <TextInput style={styles.input} value={data.guard_name} onChangeText={v => setData({...data, guard_name: v})} />
+
+                <Text style={styles.label}>{t('firma_guardia') || 'FIRMA DEL GUARDIA'}</Text>
+                <Pressable style={styles.sigArea} onPress={() => { setSigTarget('guard'); setShowSig(true); }}>
+                  {data.guard_signature ? (
+                    <Image source={{ uri: data.guard_signature }} style={{ width: '100%', height: '100%', resizeMode: 'contain' }} />
+                  ) : (
+                    <Text style={{ color: colors.muted, fontWeight: '700' }}>{t('toca_para_firmar')}</Text>
+                  )}
+                </Pressable>
+              </View>
+
               <Text style={styles.label}>{t('nombre_inspector').toUpperCase()}</Text>
               <TextInput style={styles.input} value={data.inspectorNombre} onChangeText={v => setData({...data, inspectorNombre: v})} />
 
               <Text style={styles.label}>{t('firma_inspector').toUpperCase()}</Text>
-              <Pressable style={styles.sigArea} onPress={() => setShowSig(true)}>
+              <Pressable style={styles.sigArea} onPress={() => { setSigTarget('inspector'); setShowSig(true); }}>
                 {data.inspectorFirma ? (
                   <Image source={{ uri: data.inspectorFirma }} style={{ width: '100%', height: '100%', resizeMode: 'contain' }} />
                 ) : (
@@ -599,10 +702,10 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
          {step > 0 && <Pressable style={styles.wizBtnSec} onPress={() => setStep(step-1)}><Text style={styles.wizBtnText}>{t('atras').toUpperCase()}</Text></Pressable>}
          <Pressable
            style={[styles.wizBtnPri, !canNext() && { opacity: 0.5 }]}
-           onPress={() => step < 3 ? setStep(step+1) : handleFinish()}
+           onPress={() => step < 4 ? setStep(step+1) : handleFinish()}
            disabled={!canNext() || saving}
          >
-           {saving ? <ActivityIndicator color="#FFF" /> : <Text style={[styles.wizBtnText, { color: '#FFF' }]}>{step === 3 ? t('finalizar').toUpperCase() : t('siguiente').toUpperCase()}</Text>}
+           {saving ? <ActivityIndicator color="#FFF" /> : <Text style={[styles.wizBtnText, { color: '#FFF' }]}>{step === 4 ? t('finalizar').toUpperCase() : t('siguiente').toUpperCase()}</Text>}
          </Pressable>
       </View>
 
@@ -616,11 +719,15 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
       {showSig && (
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{t('firma_inspector').toUpperCase()}</Text>
+            <Text style={styles.modalTitle}>{sigTarget === 'inspector' ? t('firma_inspector').toUpperCase() : (t('firma_guardia') || 'FIRMA DEL GUARDIA')}</Text>
             <View style={styles.sigCanvasCont}>
               <Signature
                 ref={sigRef}
-                onOK={(sig) => { setData({...data, inspectorFirma: sig}); setShowSig(false); }}
+                onOK={(sig) => {
+                   if (sigTarget === 'inspector') setData({...data, inspectorFirma: sig});
+                   else setData({...data, guard_signature: sig});
+                   setShowSig(false);
+                }}
                 webStyle={`.m-signature-pad--footer{display:none;}`}
               />
             </View>
@@ -699,5 +806,15 @@ const styles = StyleSheet.create({
   modalCard: { backgroundColor: '#FFF', padding: 20, borderWidth: 2, borderColor: colors.borderStrong },
   modalTitle: { fontWeight: '900', marginBottom: 15 },
   sigCanvasCont: { height: 300, borderWidth: 1, borderColor: '#EEE', marginBottom: 20 },
-  modalActions: { flexDirection: 'row', gap: 10 }
+  modalActions: { flexDirection: 'row', gap: 10 },
+  boxChip: { paddingHorizontal: 15, paddingVertical: 10, borderWidth: 2, borderColor: colors.borderStrong, backgroundColor: '#FFF', marginRight: 10 },
+  boxChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  boxChipText: { fontWeight: '900', fontSize: 12, color: colors.onSurface },
+  measuresGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 15 },
+  measureCol: { width: '47%' },
+  measureLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, marginBottom: 5 },
+  measureInput: { borderWidth: 2, borderColor: colors.borderStrong, padding: 8, backgroundColor: '#FFF', fontSize: 14, fontWeight: '700' },
+  standardMeasuresBox: { padding: 10, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1', marginBottom: 20 },
+  standardTitle: { fontSize: 10, fontWeight: '900', color: '#64748B', marginBottom: 2 },
+  standardValue: { fontSize: 13, fontWeight: '900', color: '#1E293B' },
 });

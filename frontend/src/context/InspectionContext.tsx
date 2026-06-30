@@ -31,6 +31,16 @@ export interface InspectionPayload {
   fecha_hora: string;
   client_uuid: string;
   record_id?: string;
+  // Nuevos campos de dimensiones
+  box_type?: string;
+  measures?: {
+    alto?: string;
+    ancho?: string;
+    largo?: string;
+    capacidad?: string;
+  };
+  guard_name?: string;
+  guard_signature?: string;
 }
 
 export interface Inspection extends InspectionPayload {

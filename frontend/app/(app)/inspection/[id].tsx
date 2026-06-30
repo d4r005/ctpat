@@ -190,9 +190,21 @@ export default function InspectionDetail() {
       )
       .join('');
     const inspectorImg = i.inspector_firma ? `<img src="${i.inspector_firma}" style="height:80px;border:1px solid #999;background:#fff;" />` : '<div style="height:80px;border:1px dashed #999;"></div>';
+    const guardImg = i.guard_signature ? `<img src="${i.guard_signature}" style="height:80px;border:1px solid #999;background:#fff;" />` : '<div style="height:80px;border:1px dashed #999;"></div>';
     const appSigImg = i.approved_by_signature ? `<img src="${i.approved_by_signature}" style="height:80px;border:1px solid #999;background:#fff;" />` : '<div style="height:80px;border:1px dashed #999;"></div>';
 
     const headerColor = i.status_general === 'bueno' ? '#16A34A' : '#DC2626';
+
+    const dimensionsHtml = i.box_type ? `
+      <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">${(t('dimensiones_caja') || 'DIMENSIONES DE LA CAJA').toUpperCase()}</h2>
+      <table style="width:100%;border-collapse:collapse;">
+        <tr><td style="padding:6px;border:1px solid #999;width:35%;"><b>${(t('tipo_caja') || 'TIPO DE CAJA').toUpperCase()}</b></td><td style="padding:6px;border:1px solid #999;">${i.box_type}"</td></tr>
+        <tr><td style="padding:6px;border:1px solid #999;"><b>${(t('alto') || 'ALTO').toUpperCase()}</b></td><td style="padding:6px;border:1px solid #999;">${i.measures?.alto || '-'}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #999;"><b>${(t('ancho') || 'ANCHO').toUpperCase()}</b></td><td style="padding:6px;border:1px solid #999;">${i.measures?.ancho || '-'}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #999;"><b>${(t('largo') || 'LARGO').toUpperCase()}</b></td><td style="padding:6px;border:1px solid #999;">${i.measures?.largo || '-'}</td></tr>
+        <tr><td style="padding:6px;border:1px solid #999;"><b>${(t('capacidad') || 'CAPACIDAD').toUpperCase()}</b></td><td style="padding:6px;border:1px solid #999;">${i.measures?.capacidad || '-'} m³</td></tr>
+      </table>
+    ` : '';
 
     return `
 <!DOCTYPE html><html><head><meta charset="utf-8"><title>Inspección NAF</title></head>
@@ -227,6 +239,8 @@ export default function InspectionDetail() {
     <tr><td style="padding:6px;border:1px solid #999;"><b>${t('estado')}</b></td><td style="padding:6px;border:1px solid #999;background:${i.status_general === 'bueno' ? '#dcfce7' : '#fee2e2'};font-weight:bold;">${t(i.status_general === 'bueno' ? 'bueno' : 'malo').toUpperCase()}</td></tr>
   </table>
 
+  ${dimensionsHtml}
+
   <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">${t('inspeccion').toUpperCase()} — ${i.points.length} ${t('puntos')}</h2>
   <table style="width:100%;border-collapse:collapse;">
     <tr style="background:#E4E4E7;font-weight:bold;">
@@ -244,10 +258,13 @@ export default function InspectionDetail() {
   <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">${t('firmas')}</h2>
   <table style="width:100%;border-collapse:collapse;">
     <tr>
-      <td style="padding:10px;border:1px solid #999;width:50%;vertical-align:top;">
+      <td style="padding:10px;border:1px solid #999;width:33%;vertical-align:top;">
+        <b>${t('guardia_seguridad') || "GUARDIA DE SEGURIDAD"}:</b><br/>${i.guard_name || '-'}<br/><br/>${guardImg}
+      </td>
+      <td style="padding:10px;border:1px solid #999;width:33%;vertical-align:top;">
         <b>${t('inspeccion_realizada_por') || "INSPECCIÓN REALIZADA POR"}:</b><br/>${i.inspector_nombre}<br/><br/>${inspectorImg}
       </td>
-      <td style="padding:10px;border:1px solid #999;width:50%;vertical-align:top;">
+      <td style="padding:10px;border:1px solid #999;width:34%;vertical-align:top;">
         <b>${t('aprobacion_rechazo_por') || "APROBACIÓN / RECHAZO POR"}:</b><br/>${i.approved_by_name || '-'}<br/><br/>${appSigImg}
       </td>
     </tr>
@@ -413,6 +430,16 @@ export default function InspectionDetail() {
           <Row label={t('fecha_hora')} value={new Date(insp.fecha_hora).toLocaleString()} />
         </Section>
 
+        {insp.box_type ? (
+          <Section title={t('dimensiones_caja') || 'DIMENSIONES DE LA CAJA'}>
+            <Row label={t('tipo_caja') || "Tipo de Caja"} value={`${insp.box_type}"`} />
+            <Row label={t('alto') || "Alto"} value={insp.measures?.alto || '-'} />
+            <Row label={t('ancho') || "Ancho"} value={insp.measures?.ancho || '-'} />
+            <Row label={t('largo') || "Largo"} value={insp.measures?.largo || '-'} />
+            <Row label={t('capacidad') || "Capacidad"} value={`${insp.measures?.capacidad || '-'} m³`} />
+          </Section>
+        ) : null}
+
         <Section title={t('puntos_inspeccion')}>
           {(isEditing ? editData.points : insp.points)?.map((p, idx) => (
             <View key={p.number} style={styles.pointRow} testID={`detail-point-${p.number}`}>
@@ -469,6 +496,26 @@ export default function InspectionDetail() {
         </Section>
 
         <Section title={t('firmas').toUpperCase()}>
+          {insp.guard_name ? (
+            <View style={{ marginBottom: 20 }}>
+              <Text style={styles.label}>{t('guardia_seguridad') || "GUARDIA DE SEGURIDAD"}</Text>
+              <Text style={styles.value}>{insp.guard_name}</Text>
+              <View style={styles.firmaWrap}>
+                {insp.guard_signature ? (
+                  <Image
+                    source={{ uri: insp.guard_signature }}
+                    style={{ width: '100%', height: 100, resizeMode: 'contain', backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border }}
+                  />
+                ) : (
+                  <View style={[styles.firmaWrap, { borderStyle: 'dashed', borderWidth: 1, height: 100, justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={{ color: colors.muted }}>{t('sin_firma')}</Text>
+                  </View>
+                )}
+                <Text style={[styles.firmaLabel, { marginTop: 4, color: colors.muted }]}>{(t('firma_guardia') || "FIRMA DEL GUARDIA").toUpperCase()}</Text>
+              </View>
+            </View>
+          ) : null}
+
           <Text style={styles.label}>{t('inspector').toUpperCase()}</Text>
           {isEditing ? (
             <TextInput
