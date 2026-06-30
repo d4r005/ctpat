@@ -84,3 +84,31 @@ memory/test_credentials.md
 
 # Mobile development
 android-sdk/
+
+# Local AI & Maintenance scripts
+run_fcc.ps1
+run_fcc_terminal.ps1
+start_fcc.ps1
+install_fcc.ps1
+fcc_out.log
+fcc_err.log
+fcc_server.log
+fcc_server_err.log
+backend/final_cleanup.py
+backend/try_api_key.py
+backend/try_new_token.py
+backend/verify_and_list.py
+backend/peek_headers.py
+backend/peek_more.py
+backend/restore_data.py
+backend/test_token.py
+backend/sample_data.py
+backend/search_plates.py
+backend/search_id.py
+backend/check_users.py
+backend/inspect_activities.py
+backend/list_all_dbs_full.py
+backend/test_webhook_read.py
+backend/test_webhook_get.py
+backend/test_sheets_access.py
+backend/list_dbs.py
