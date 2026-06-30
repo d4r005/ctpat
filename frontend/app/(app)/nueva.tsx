@@ -208,9 +208,16 @@ export default function InspeccionDashboard() {
         <Pressable
           onPress={handleScanIA}
           disabled={isScanning}
-          style={{ position: 'absolute', right: 20, top: 25 }}
+          style={styles.scanIABtn}
         >
-           {isScanning ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="scan-circle" size={32} color={colors.brandSecondary} />}
+           {isScanning ? (
+             <ActivityIndicator size="small" color="#FFF" />
+           ) : (
+             <>
+               <Ionicons name="scan-circle" size={28} color="#FFF" />
+               <Text style={styles.scanIAText}>SCAN IA</Text>
+             </>
+           )}
         </Pressable>
       </View>
 
@@ -602,6 +609,29 @@ const styles = StyleSheet.create({
   actionText: { fontWeight: '900', fontSize: 10, color: colors.brandPrimary },
   statusChip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 2 },
   statusChipText: { color: '#FFF', fontWeight: '900', fontSize: 9 },
+  scanIABtn: {
+    position: 'absolute',
+    right: 15,
+    top: 15,
+    backgroundColor: colors.brandSecondary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  scanIAText: {
+    color: '#FFF',
+    fontWeight: '900',
+    fontSize: 10,
+    letterSpacing: 1,
+  },
   typeCard: { flexDirection: 'row', alignItems: 'center', padding: spacing.lg, gap: spacing.md, borderRadius: 4, minHeight: 80 },
   typeTitle: { color: '#FFF', fontWeight: '900', fontSize: 16 },
   progressHeader: { backgroundColor: colors.brandPrimary, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 10 },
