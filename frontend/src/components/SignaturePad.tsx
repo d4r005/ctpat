@@ -28,15 +28,31 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
     props.onOK(signature);
   };
 
+  // Estilo optimizado para evitar problemas de scroll y carga en web/móvil
   const defaultWebStyle = `
-    .m-signature-pad { box-shadow: none; border: none; }
-    .m-signature-pad--body { border: 2px solid #09090B; }
-    .m-signature-pad--footer { display: none; margin: 0px; }
-    body, html { background-color: transparent; }
+    .m-signature-pad {
+      box-shadow: none;
+      border: none;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .m-signature-pad--body {
+      border: 2px solid #09090B;
+      bottom: 0px;
+    }
+    .m-signature-pad--footer { display: none !important; }
+    body, html {
+      background-color: transparent;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
   `;
 
   return (
-    <View style={{ flex: 1, minHeight: 280 }}>
+    <View style={{ height: 300, width: '100%', overflow: 'hidden', backgroundColor: '#fff' }}>
       <SignatureScreen
         ref={signatureRef}
         onOK={handleOK}
@@ -47,6 +63,7 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
         autoClear={props.autoClear ?? false}
         imageType={props.imageType || 'image/png'}
         androidHardwareAccelerationDisabled={true}
+        startInLoadingState={false}
       />
     </View>
   );

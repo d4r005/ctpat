@@ -5,15 +5,13 @@ const { FileStore } = require('metro-cache');
 
 const config = getDefaultConfig(__dirname);
 
-// Alias react-native-webview to react-native-web-webview for web compatibility
-config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (platform === 'web' && moduleName === 'react-native-webview') {
-    return {
-      filePath: path.resolve(__dirname, 'node_modules/react-native-web-webview/dist/index.js'),
-      type: 'sourceFile',
-    };
-  }
-  return context.resolveRequest(context, moduleName, platform);
+// Optimized resolver for Web and Native
+config.resolver.extraNodeModules = {
+  ...config.resolver.extraNodeModules,
+  // Only use the polyfill if absolutely necessary, otherwise let the library handle it
+  'react-native-webview': Platform === 'web'
+    ? path.resolve(__dirname, 'node_modules/react-native-web-webview')
+    : path.resolve(__dirname, 'node_modules/react-native-webview'),
 };
 
 // Use a stable on-disk store (shared across web/android)
