@@ -1,3 +1,13 @@
+---
+title: SRIUC API
+emoji: 🚛
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # C-TPAT Inspection System (SRIUC)
 
 Sistema de Registro e Inspección de Unidades de Carga (SRIUC) desarrollado para NAF.
@@ -31,3 +41,7 @@ El control maestro del sistema (Gestión de Usuarios y KPIs) está restringido a
 
 ---
 *SRIUC System - Branco Industries © 2026*
+
+## Despliegue
+Este backend corre sobre Docker en Hugging Face Spaces.
+Ruta de salud: `/api/health`
