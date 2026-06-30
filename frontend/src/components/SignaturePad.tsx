@@ -1,5 +1,5 @@
 import React, { forwardRef, useImperativeHandle, useRef } from 'react';
-import { View } from 'react-native';
+import { View, Platform } from 'react-native';
 import SignatureScreen from 'react-native-signature-canvas';
 
 interface SignaturePadProps {
@@ -46,13 +46,11 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
         webStyle={props.webStyle || defaultWebStyle}
         autoClear={props.autoClear ?? false}
         imageType={props.imageType || 'image/png'}
+        androidHardwareAccelerationDisabled={true}
       />
     </View>
   );
 });
-
-SignaturePad.displayName = 'SignaturePad';
-export default SignaturePad;
 
 SignaturePad.displayName = 'SignaturePad';
 export default SignaturePad;
