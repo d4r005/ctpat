@@ -78,7 +78,7 @@ export default function AppLayout() {
         name="embarque/index"
         options={{
           title: t('embarque'),
-          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="truck-trailer" size={24} color={color} />,
+          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="truck-fast" size={24} color={color} />,
         }}
       />
       <Tabs.Screen

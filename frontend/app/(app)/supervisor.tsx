@@ -397,7 +397,7 @@ export default function Supervisor() {
           <View style={styles.tabRow}>
             <TabBtn label="CASETA" icon="business" active={activeTab === 'caseta'} on={() => setActiveTab('caseta')} />
             <TabBtn label="INSPECCIÓN" icon="clipboard" active={activeTab === 'inspeccion'} on={() => setActiveTab('inspeccion')} />
-            <TabBtn label="EMBARQUE" icon="bus" active={activeTab === 'embarque'} on={() => setActiveTab('embarque')} />
+            <TabBtn label="EMBARQUE" icon="truck-fast" active={activeTab === 'embarque'} on={() => setActiveTab('embarque')} isMCI />
           </View>
           <View style={styles.searchCont}>
             <Ionicons name="search" size={20} color={colors.muted} />
@@ -436,11 +436,15 @@ export default function Supervisor() {
 }
 
 // ─── Tab Button ──────────────────────────────────────────────────────────────
-function TabBtn({ label, icon, active, on }: any) {
+function TabBtn({ label, icon, active, on, isMCI }: any) {
   return (
     <Pressable style={[styles.tab, active && styles.tabActive]} onPress={on}>
       {({ pressed }) => (
-        <Ionicons name={icon} size={18} color={active ? '#FFF' : '#333'} />
+        isMCI ? (
+          <MaterialCommunityIcons name={icon as any} size={18} color={active ? '#FFF' : '#333'} />
+        ) : (
+          <Ionicons name={icon as any} size={18} color={active ? '#FFF' : '#333'} />
+        )
       )}
       <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
     </Pressable>
