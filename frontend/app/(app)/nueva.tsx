@@ -401,18 +401,61 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
   };
 
   const pickPointPhoto = async (idx: number) => {
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) { alert(t('acceso_restringido')); return; }
-    const r = await ImagePicker.launchCameraAsync({
-      mediaTypes: 'images',
-      quality: 0.2,
-      base64: true
-    });
-    if (!r.canceled && r.assets[0]?.base64) {
-      const n = [...points];
-      n[idx].photo = `data:image/jpeg;base64,${r.assets[0].base64}`;
-      setPoints(n);
-    }
+    Alert.alert(
+      t('seleccionar_origen'),
+      t('seleccionar_origen_desc') || "Selecciona de dónde cargar la evidencia",
+      [
+        {
+          text: t('camara'),
+          onPress: async () => {
+            const perm = await ImagePicker.requestCameraPermissionsAsync();
+            if (!perm.granted) { alert(t('acceso_restringido')); return; }
+            const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.2, base64: true });
+            if (!r.canceled && r.assets[0]?.base64) {
+              const n = [...points];
+              n[idx].photo = `data:image/jpeg;base64,${r.assets[0].base64}`;
+              setPoints(n);
+            }
+          }
+        },
+        {
+          text: t('galeria'),
+          onPress: async () => {
+            const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!perm.granted) { alert(t('acceso_restringido')); return; }
+            const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.2, base64: true });
+            if (!r.canceled && r.assets[0]?.base64) {
+              const n = [...points];
+              n[idx].photo = `data:image/jpeg;base64,${r.assets[0].base64}`;
+              setPoints(n);
+            }
+          }
+        },
+        {
+          text: "URL (DRIVE/WEB)",
+          onPress: () => {
+            Alert.prompt(
+              "Ingresar URL",
+              "Pega el enlace de Google Drive o Imagen Web",
+              [
+                { text: t('cancelar'), style: 'cancel' },
+                {
+                  text: t('agregar'),
+                  onPress: (url) => {
+                    if (url) {
+                      const n = [...points];
+                      n[idx].photo = url;
+                      setPoints(n);
+                    }
+                  }
+                }
+              ]
+            );
+          }
+        },
+        { text: t('cancelar'), style: 'cancel' }
+      ]
+    );
   };
 
   if (!selectedType) {

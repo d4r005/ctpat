@@ -68,16 +68,61 @@ export default function InspectionDetail() {
   };
 
   const pickPointPhoto = async (idx: number) => {
-    try {
-      const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) { alert(t('acceso_restringido')); return; }
-      const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
-      if (!r.canceled && r.assets[0]?.base64) {
-        const newPoints = [...(editData.points || insp?.points || [])];
-        newPoints[idx] = { ...newPoints[idx], photo: `data:image/jpeg;base64,${r.assets[0].base64}` };
-        setEditData({ ...editData, points: newPoints });
-      }
-    } catch (e: any) { alert(e.message || 'Error al obtener foto'); }
+    Alert.alert(
+      t('seleccionar_origen'),
+      t('seleccionar_origen_desc'),
+      [
+        {
+          text: t('camara'),
+          onPress: async () => {
+            const perm = await ImagePicker.requestCameraPermissionsAsync();
+            if (!perm.granted) { alert(t('acceso_restringido')); return; }
+            const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+            if (!r.canceled && r.assets[0]?.base64) {
+              const newPoints = [...(editData.points || insp?.points || [])];
+              newPoints[idx] = { ...newPoints[idx], photo: `data:image/jpeg;base64,${r.assets[0].base64}` };
+              setEditData({ ...editData, points: newPoints });
+            }
+          }
+        },
+        {
+          text: t('galeria'),
+          onPress: async () => {
+            const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!perm.granted) { alert(t('acceso_restringido')); return; }
+            const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.5, base64: true });
+            if (!r.canceled && r.assets[0]?.base64) {
+              const newPoints = [...(editData.points || insp?.points || [])];
+              newPoints[idx] = { ...newPoints[idx], photo: `data:image/jpeg;base64,${r.assets[0].base64}` };
+              setEditData({ ...editData, points: newPoints });
+            }
+          }
+        },
+        {
+          text: "URL (DRIVE/WEB)",
+          onPress: () => {
+            Alert.prompt(
+              "Ingresar URL",
+              "Pega el enlace directo de la imagen o Google Drive",
+              [
+                { text: t('cancelar'), style: 'cancel' },
+                {
+                  text: t('agregar'),
+                  onPress: (url) => {
+                    if (url) {
+                      const newPoints = [...(editData.points || insp?.points || [])];
+                      newPoints[idx] = { ...newPoints[idx], photo: url };
+                      setEditData({ ...editData, points: newPoints });
+                    }
+                  }
+                }
+              ]
+            );
+          }
+        },
+        { text: t('cancelar'), style: 'cancel' }
+      ]
+    );
   };
 
   const removePointPhoto = (idx: number) => {
@@ -411,7 +456,16 @@ export default function InspectionDetail() {
         </Section>
 
         <Section title={t('actividad_sospechosa').toUpperCase()}>
-          <Text style={styles.bodyText}>{insp.actividad_sospechosa || t('sin_reporte')}</Text>
+          {isEditing ? (
+            <TextInput
+              style={[styles.noteInput, { minHeight: 100 }]}
+              multiline
+              value={editData.actividad_sospechosa || insp.actividad_sospechosa}
+              onChangeText={(v) => setEditData({ ...editData, actividad_sospechosa: v })}
+            />
+          ) : (
+            <Text style={styles.bodyText}>{insp.actividad_sospechosa || t('sin_reporte')}</Text>
+          )}
         </Section>
 
         <Section title={t('firmas').toUpperCase()}>
@@ -428,10 +482,17 @@ export default function InspectionDetail() {
 
           <View style={styles.firmaWrap}>
             { (isEditing ? (editData.inspector_firma || insp.inspector_firma) : insp.inspector_firma) ? (
-              <Image
-                source={{ uri: isEditing ? (editData.inspector_firma || insp.inspector_firma) : insp.inspector_firma }}
-                style={{ width: '100%', height: 100, resizeMode: 'contain', backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border }}
-              />
+              <>
+                <Image
+                  source={{ uri: isEditing ? (editData.inspector_firma || insp.inspector_firma) : insp.inspector_firma }}
+                  style={{ width: '100%', height: 100, resizeMode: 'contain', backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border }}
+                />
+                {isEditing && (
+                  <Pressable style={styles.removeBtnSig} onPress={() => setEditData({ ...editData, inspector_firma: '' })}>
+                    <Ionicons name="trash" size={20} color={colors.error} />
+                  </Pressable>
+                )}
+              </>
             ) : (
               <View style={[styles.firmaWrap, { borderStyle: 'dashed', borderWidth: 1, height: 100, justifyContent: 'center', alignItems: 'center' }]}>
                 <Text style={{ color: colors.muted }}>{t('sin_foto')}</Text>
@@ -471,10 +532,17 @@ export default function InspectionDetail() {
 
               <View style={styles.firmaWrap}>
                 { (isEditing ? (editData.approved_by_signature || insp.approved_by_signature) : insp.approved_by_signature) ? (
-                  <Image
-                    source={{ uri: isEditing ? (editData.approved_by_signature || insp.approved_by_signature) : insp.approved_by_signature }}
-                    style={{ width: '100%', height: 100, resizeMode: 'contain', backgroundColor: '#fff', borderColor: (isEditing ? (editData.approval_status || insp.approval_status) : insp.approval_status) === 'aprobada' ? colors.success : colors.error, borderWidth: 1 }}
-                  />
+                  <>
+                    <Image
+                      source={{ uri: isEditing ? (editData.approved_by_signature || insp.approved_by_signature) : insp.approved_by_signature }}
+                      style={{ width: '100%', height: 100, resizeMode: 'contain', backgroundColor: '#fff', borderColor: (isEditing ? (editData.approval_status || insp.approval_status) : insp.approval_status) === 'aprobada' ? colors.success : colors.error, borderWidth: 1 }}
+                    />
+                    {isEditing && (
+                      <Pressable style={styles.removeBtnSig} onPress={() => setEditData({ ...editData, approved_by_signature: '' })}>
+                        <Ionicons name="trash" size={20} color={colors.error} />
+                      </Pressable>
+                    )}
+                  </>
                 ) : (
                   <View style={[styles.firmaWrap, { borderStyle: 'dashed', borderWidth: 1, height: 100, justifyContent: 'center', alignItems: 'center' }]}>
                     <Text style={{ color: colors.muted }}>{t('sin_foto')}</Text>
@@ -655,6 +723,7 @@ const styles = StyleSheet.create({
   },
   actionBtn: { flex: 1, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 52 },
   actionBtnText: { color: '#FFF', fontWeight: '900', letterSpacing: 1 },
+  removeBtnSig: { position: 'absolute', top: 5, right: 5, padding: 5, backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: 15 },
   signatureBox: {
     borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.lg,
     backgroundColor: colors.surfaceSecondary, alignItems: 'center', marginTop: spacing.sm, minHeight: 72, justifyContent: 'center',

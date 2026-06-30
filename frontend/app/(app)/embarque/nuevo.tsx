@@ -93,32 +93,27 @@ export default function EmbarqueNuevo() {
     }
   };
 
-  const pickPhoto = async (field: string, fromCamera: boolean) => {
+  const pickPhoto = async (field: string, mode: 'camera' | 'gallery' | 'url') => {
     try {
-      if (fromCamera) {
+      if (mode === 'camera') {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) { alert(t('acceso_restringido')); return; }
-        const r = await ImagePicker.launchCameraAsync({
-          mediaTypes: 'images',
-          quality: 0.2, // Mayor compresión
-          base64: true,
-          allowsEditing: false,
-        });
-        if (!r.canceled && r.assets[0]?.base64) {
-          set(field, `data:image/jpeg;base64,${r.assets[0].base64}`);
-        }
-      } else {
+        const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.2, base64: true });
+        if (!r.canceled && r.assets[0]?.base64) set(field, `data:image/jpeg;base64,${r.assets[0].base64}`);
+      } else if (mode === 'gallery') {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) { alert(t('acceso_restringido')); return; }
-        const r = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: 'images',
-          quality: 0.2, // Mayor compresión
-          base64: true,
-          allowsEditing: false,
-        });
-        if (!r.canceled && r.assets[0]?.base64) {
-          set(field, `data:image/jpeg;base64,${r.assets[0].base64}`);
-        }
+        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.2, base64: true });
+        if (!r.canceled && r.assets[0]?.base64) set(field, `data:image/jpeg;base64,${r.assets[0].base64}`);
+      } else {
+        Alert.prompt(
+          "Ingresar URL",
+          "Pega el enlace de Google Drive o Imagen Web",
+          [
+            { text: t('cancelar'), style: 'cancel' },
+            { text: t('agregar'), onPress: (url) => { if (url) set(field, url); } }
+          ]
+        );
       }
     } catch (e: any) { alert(e.message || 'Error'); }
   };
@@ -217,24 +212,27 @@ export default function EmbarqueNuevo() {
             <PhotoField
               label={t('foto_inicio_carga').toUpperCase()}
               value={form.foto_inicio_carga}
-              onCamera={() => pickPhoto('foto_inicio_carga', true)}
-              onGallery={() => pickPhoto('foto_inicio_carga', false)}
+              onCamera={() => pickPhoto('foto_inicio_carga', 'camera')}
+              onGallery={() => pickPhoto('foto_inicio_carga', 'gallery')}
+              onUrl={() => pickPhoto('foto_inicio_carga', 'url')}
               onRemove={() => set('foto_inicio_carga', '')}
               t={t}
             />
             <PhotoField
               label={t('foto_media_carga')}
               value={form.foto_media_carga}
-              onCamera={() => pickPhoto('foto_media_carga', true)}
-              onGallery={() => pickPhoto('foto_media_carga', false)}
+              onCamera={() => pickPhoto('foto_media_carga', 'camera')}
+              onGallery={() => pickPhoto('foto_media_carga', 'gallery')}
+              onUrl={() => pickPhoto('foto_media_carga', 'url')}
               onRemove={() => set('foto_media_carga', '')}
               t={t}
             />
             <PhotoField
               label={t('foto_final_carga')}
               value={form.foto_final_carga}
-              onCamera={() => pickPhoto('foto_final_carga', true)}
-              onGallery={() => pickPhoto('foto_final_carga', false)}
+              onCamera={() => pickPhoto('foto_final_carga', 'camera')}
+              onGallery={() => pickPhoto('foto_final_carga', 'gallery')}
+              onUrl={() => pickPhoto('foto_final_carga', 'url')}
               onRemove={() => set('foto_final_carga', '')}
               t={t}
             />
@@ -325,7 +323,7 @@ function SignatureModal({ sigTarget, onClose, sigRef, onOK, t }: any) {
   );
 }
 
-function PhotoField({ label, value, onCamera, onGallery, onRemove, t }: any) {
+function PhotoField({ label, value, onCamera, onGallery, onUrl, onRemove, t }: any) {
   return (
     <View style={{ marginBottom: spacing.md }}>
       <Text style={styles.label}>{label}</Text>
@@ -337,14 +335,20 @@ function PhotoField({ label, value, onCamera, onGallery, onRemove, t }: any) {
           </Pressable>
         </View>
       ) : (
-        <View style={styles.photoActionRow}>
-          <Pressable style={styles.photoBtn} onPress={onCamera}>
-            <Ionicons name="camera" size={20} color={colors.onBrandPrimary} />
-            <Text style={styles.photoBtnText}>{t('foto_caps')}</Text>
-          </Pressable>
-          <Pressable style={[styles.photoBtn, { backgroundColor: colors.brandSecondary }]} onPress={onGallery}>
-            <Ionicons name="images" size={20} color={colors.onBrandSecondary} />
-            <Text style={[styles.photoBtnText, { color: colors.onBrandSecondary }]}>{t('galeria_caps')}</Text>
+        <View style={{ gap: spacing.xs }}>
+          <View style={styles.photoActionRow}>
+            <Pressable style={styles.photoBtn} onPress={onCamera}>
+              <Ionicons name="camera" size={20} color={colors.onBrandPrimary} />
+              <Text style={styles.photoBtnText}>{t('foto_caps')}</Text>
+            </Pressable>
+            <Pressable style={[styles.photoBtn, { backgroundColor: colors.brandSecondary }]} onPress={onGallery}>
+              <Ionicons name="images" size={20} color={colors.onBrandSecondary} />
+              <Text style={[styles.photoBtnText, { color: colors.onBrandSecondary }]}>{t('galeria_caps')}</Text>
+            </Pressable>
+          </View>
+          <Pressable onPress={onUrl} style={[styles.photoBtn, { backgroundColor: colors.info, width: '100%', marginTop: 0 }]}>
+            <Ionicons name="link" size={20} color="#FFF" />
+            <Text style={[styles.photoBtnText, { color: '#FFF' }]}>URL (DRIVE/WEB)</Text>
           </Pressable>
         </View>
       )}

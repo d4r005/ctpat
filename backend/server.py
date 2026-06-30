@@ -594,12 +594,21 @@ def _inline_sig(src_val: str, label: str, name: str = "") -> str:
 
 
 def _photo_block(url: str, label: str) -> str:
-    if not url or (not url.startswith("data:image") and not url.startswith("http")):
+    if not url:
         return ""
+
+    # Determinar información de la foto
+    info = "Cámara/Local"
+    if "drive.google.com" in url or "doc-0s-80-docs.googleusercontent.com" in url:
+        info = "Google Drive"
+    elif url.startswith("http"):
+        info = "Enlace Web"
+
     return (
         '<div style="display:inline-block;width:30%;margin:1%;vertical-align:top;'
         'border:1px solid #eee;padding:5px;background:#FFF;text-align:center;">'
-        '<p style="margin:0 0 4px 0;font-size:7px;font-weight:bold;color:#666;text-transform:uppercase;">' + label + "</p>"
+        '<p style="margin:0 0 2px 0;font-size:6.5px;font-weight:bold;color:#666;text-transform:uppercase;">' + label + "</p>"
+        '<p style="margin:0 0 4px 0;font-size:5.5px;color:#999;">Origen: ' + info + '</p>'
         '<img src="' + url + '" style="width:100%;height:100px;object-fit:cover;border:1px solid #ddd;" />'
         "</div>"
     )
@@ -732,8 +741,18 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
                 cls   = "g" if estado == "bueno" else "b" if estado == "malo" else ""
                 est_label = "BUENO / 良好" if estado == "bueno" else ("FALLA / 故障" if estado == "malo" else "N/A")
                 foto_html = ""
-                if pt.get("photo") and (pt["photo"].startswith("data:image") or pt["photo"].startswith("http")):
-                    foto_html = '<br/><img src="' + pt["photo"] + '" style="max-height:90px;max-width:220px;object-fit:contain;border:1px solid #ddd;margin-top:3px;"/>'
+                if pt.get("photo"):
+                    p_url = pt["photo"]
+                    p_info = "Cámara"
+                    if "drive.google.com" in p_url or "doc-0s-80-docs.googleusercontent.com" in p_url: p_info = "Drive"
+                    elif p_url.startswith("http"): p_info = "Web"
+
+                    foto_html = (
+                        '<div style="margin-top:4px;border:1px solid #eee;padding:4px;background:#f9fafb;">'
+                        '<p style="margin:0 0 2px 0;font-size:5.5px;color:#888;">INFO FOTO: ' + p_info + '</p>'
+                        '<img src="' + p_url + '" style="max-height:100px;max-width:240px;object-fit:contain;border:1px solid #ddd;"/>'
+                        '</div>'
+                    )
                 rows_html += (
                     "<tr>"
                     '<td style="text-align:center;width:28px;">' + str(num) + "</td>"

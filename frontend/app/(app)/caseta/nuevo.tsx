@@ -167,32 +167,27 @@ export default function CasetaNuevo() {
     return false;
   };
 
-  const pickPhoto = async (setter: (v: string) => void, fromCamera: boolean) => {
+  const pickPhoto = async (setter: (v: string) => void, mode: 'camera' | 'gallery' | 'url') => {
     try {
-      if (fromCamera) {
+      if (mode === 'camera') {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) { alert(t('acceso_restringido')); return; }
-        const r = await ImagePicker.launchCameraAsync({
-          mediaTypes: 'images',
-          quality: 0.2, // Mayor compresión para evitar errores de conexión
-          base64: true,
-          allowsEditing: false,
-        });
-        if (!r.canceled && r.assets[0]?.base64) {
-          setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
-        }
-      } else {
+        const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.2, base64: true });
+        if (!r.canceled && r.assets[0]?.base64) setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
+      } else if (mode === 'gallery') {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) { alert(t('acceso_restringido')); return; }
-        const r = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: 'images',
-          quality: 0.2, // Mayor compresión
-          base64: true,
-          allowsEditing: false,
-        });
-        if (!r.canceled && r.assets[0]?.base64) {
-          setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
-        }
+        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.2, base64: true });
+        if (!r.canceled && r.assets[0]?.base64) setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
+      } else {
+        Alert.prompt(
+          "Ingresar URL",
+          "Pega el enlace de Google Drive o Imagen Web",
+          [
+            { text: t('cancelar'), style: 'cancel' },
+            { text: t('agregar'), onPress: (url) => { if (url) setter(url); } }
+          ]
+        );
       }
     } catch (e: any) { alert(e.message || 'Error'); }
   };
@@ -366,8 +361,9 @@ export default function CasetaNuevo() {
               <PhotoBox
                 label={t('unidad_frente')}
                 value={fotoFrente}
-                onCamera={() => pickPhoto(setFotoFrente, true)}
-                onGallery={() => pickPhoto(setFotoFrente, false)}
+                onCamera={() => pickPhoto(setFotoFrente, 'camera')}
+                onGallery={() => pickPhoto(setFotoFrente, 'gallery')}
+                onUrl={() => pickPhoto(setFotoFrente, 'url')}
                 onRemove={() => setFotoFrente('')}
                 t={t}
               />
@@ -375,8 +371,9 @@ export default function CasetaNuevo() {
               <PhotoBox
                 label={t('caja_atras') + " (1)"}
                 value={fotoAtras}
-                onCamera={() => pickPhoto(setFotoAtras, true)}
-                onGallery={() => pickPhoto(setFotoAtras, false)}
+                onCamera={() => pickPhoto(setFotoAtras, 'camera')}
+                onGallery={() => pickPhoto(setFotoAtras, 'gallery')}
+                onUrl={() => pickPhoto(setFotoAtras, 'url')}
                 onRemove={() => setFotoAtras('')}
                 t={t}
               />
@@ -385,8 +382,9 @@ export default function CasetaNuevo() {
                 <PhotoBox
                   label={t('caja_atras') + " (2)"}
                   value={fotoAtras2}
-                  onCamera={() => pickPhoto(setFotoAtras2, true)}
-                  onGallery={() => pickPhoto(setFotoAtras2, false)}
+                  onCamera={() => pickPhoto(setFotoAtras2, 'camera')}
+                  onGallery={() => pickPhoto(setFotoAtras2, 'gallery')}
+                  onUrl={() => pickPhoto(setFotoAtras2, 'url')}
                   onRemove={() => setFotoAtras2('')}
                   t={t}
                 />
@@ -395,8 +393,9 @@ export default function CasetaNuevo() {
               <PhotoBox
                 label={t('id_chofer')}
                 value={fotoId}
-                onCamera={() => pickPhoto(setFotoId, true)}
-                onGallery={() => pickPhoto(setFotoId, false)}
+                onCamera={() => pickPhoto(setFotoId, 'camera')}
+                onGallery={() => pickPhoto(setFotoId, 'gallery')}
+                onUrl={() => pickPhoto(setFotoId, 'url')}
                 onRemove={() => setFotoId('')}
                 t={t}
               />
@@ -592,7 +591,7 @@ function ToggleRow({ label, value, onChange, testID, t }: any) {
   );
 }
 
-function PhotoBox({ label, value, onCamera, onGallery, onRemove, t }: any) {
+function PhotoBox({ label, value, onCamera, onGallery, onUrl, onRemove, t }: any) {
   return (
     <View style={{ marginBottom: spacing.lg }}>
       <Text style={styles.fieldLabel}>{label} *</Text>
@@ -604,14 +603,20 @@ function PhotoBox({ label, value, onCamera, onGallery, onRemove, t }: any) {
           </Pressable>
         </View>
       ) : (
-        <View style={styles.photoActionRow}>
-          <Pressable onPress={onCamera} style={styles.photoActionBtn}>
-            <Ionicons name="camera" size={20} color={colors.onBrandPrimary} />
-            <Text style={styles.photoActionText}>{t('foto_caps')}</Text>
-          </Pressable>
-          <Pressable onPress={onGallery} style={[styles.photoActionBtn, { backgroundColor: colors.brandSecondary }]}>
-            <Ionicons name="images" size={20} color={colors.onBrandSecondary} />
-            <Text style={[styles.photoActionText, { color: colors.onBrandSecondary }]}>{t('galeria_caps')}</Text>
+        <View style={{ gap: spacing.xs }}>
+          <View style={styles.photoActionRow}>
+            <Pressable onPress={onCamera} style={styles.photoActionBtn}>
+              <Ionicons name="camera" size={20} color={colors.onBrandPrimary} />
+              <Text style={styles.photoActionText}>{t('foto_caps')}</Text>
+            </Pressable>
+            <Pressable onPress={onGallery} style={[styles.photoActionBtn, { backgroundColor: colors.brandSecondary }]}>
+              <Ionicons name="images" size={20} color={colors.onBrandSecondary} />
+              <Text style={[styles.photoActionText, { color: colors.onBrandSecondary }]}>{t('galeria_caps')}</Text>
+            </Pressable>
+          </View>
+          <Pressable onPress={onUrl} style={[styles.photoActionBtn, { backgroundColor: colors.info, width: '100%' }]}>
+            <Ionicons name="link" size={20} color="#FFF" />
+            <Text style={[styles.photoActionText, { color: '#FFF' }]}>URL (DRIVE/WEB)</Text>
           </Pressable>
         </View>
       )}

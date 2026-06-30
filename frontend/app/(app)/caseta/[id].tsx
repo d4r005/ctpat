@@ -51,7 +51,6 @@ export default function CasetaDetail() {
     sello_vvtt_estado_2: '',
     sello_vvtt_foto_2: '',
     guardia_salida_nombre: '',
-    firma_operador_salida: ''
   });
 
   const load = async () => {
@@ -112,19 +111,64 @@ export default function CasetaDetail() {
   };
 
   const pickPhoto = async (section: 'entry' | 'exit', field: string) => {
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: 'images',
-      quality: 0.3,
-      base64: true,
-    });
-    if (!result.canceled && result.assets[0].base64) {
-      const b64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      if (section === 'entry') {
-        setEntryForm({ ...entryForm, [field]: b64 });
-      } else {
-        setExitData({ ...exitData, [field]: b64 });
-      }
-    }
+    Alert.alert(
+      t('seleccionar_origen'),
+      t('seleccionar_origen_desc'),
+      [
+        {
+          text: t('camara'),
+          onPress: async () => {
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: 'images',
+              quality: 0.3,
+              base64: true,
+            });
+            if (!result.canceled && result.assets[0].base64) {
+              const b64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
+              if (section === 'entry') setEntryForm({ ...entryForm, [field]: b64 });
+              else setExitData({ ...exitData, [field]: b64 });
+            }
+          }
+        },
+        {
+          text: t('galeria'),
+          onPress: async () => {
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: 'images',
+              quality: 0.3,
+              base64: true,
+            });
+            if (!result.canceled && result.assets[0].base64) {
+              const b64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
+              if (section === 'entry') setEntryForm({ ...entryForm, [field]: b64 });
+              else setExitData({ ...exitData, [field]: b64 });
+            }
+          }
+        },
+        {
+          text: "URL (DRIVE/WEB)",
+          onPress: () => {
+            Alert.prompt(
+              "Ingresar URL",
+              "Pega el enlace directo de la imagen o Google Drive",
+              [
+                { text: t('cancelar'), style: 'cancel' },
+                {
+                  text: t('agregar'),
+                  onPress: (url) => {
+                    if (url) {
+                      if (section === 'entry') setEntryForm({ ...entryForm, [field]: url });
+                      else setExitData({ ...exitData, [field]: url });
+                    }
+                  }
+                }
+              ]
+            );
+          }
+        },
+        { text: t('cancelar'), style: 'cancel' }
+      ]
+    );
   };
 
   const removePhoto = (section: 'entry' | 'exit', field: string) => {
@@ -205,6 +249,29 @@ export default function CasetaDetail() {
                    <PhotoThumbnail label={t('frente')} uri={entryForm.foto_frente_unidad} onPick={editEntry ? ()=>pickPhoto('entry', 'foto_frente_unidad') : null} onRemove={editEntry ? ()=>removePhoto('entry', 'foto_frente_unidad') : null} />
                    <PhotoThumbnail label={t('atras')} uri={entryForm.foto_atras_caja} onPick={editEntry ? ()=>pickPhoto('entry', 'foto_atras_caja') : null} onRemove={editEntry ? ()=>removePhoto('entry', 'foto_atras_caja') : null} />
                    <PhotoThumbnail label={t('id_chofer')} uri={entryForm.foto_id_chofer} onPick={editEntry ? ()=>pickPhoto('entry', 'foto_id_chofer') : null} onRemove={editEntry ? ()=>removePhoto('entry', 'foto_id_chofer') : null} />
+                </View>
+              </View>
+
+              <View style={styles.subSection}>
+                <Text style={styles.subTitle}>{t('firmas').toUpperCase()}</Text>
+                <View style={styles.grid}>
+                   <View style={{ flex: 1 }}>
+                     <Text style={styles.infoLabel}>{t('firma_operador')}</Text>
+                     <Pressable style={styles.sigBoxSmall} onPress={editEntry ? () => setShowSig(true) : undefined}>
+                        {entryForm.firma_operador ? (
+                          <>
+                            <Image source={{ uri: entryForm.firma_operador }} style={{ width: '100%', height: 60, resizeMode: 'contain' }} />
+                            {editEntry && (
+                              <Pressable style={styles.removeBtnSig} onPress={() => setEntryForm({...entryForm, firma_operador: ''})}>
+                                <Ionicons name="trash" size={16} color={colors.error} />
+                              </Pressable>
+                            )}
+                          </>
+                        ) : (
+                          <Text style={styles.sigPlaceholderSmall}>{t('toca_para_firmar')}</Text>
+                        )}
+                     </Pressable>
+                   </View>
                 </View>
               </View>
 
@@ -321,10 +388,15 @@ export default function CasetaDetail() {
                   {isFull && <PhotoThumbnail label={t('foto_sello_vvtt')+" 2"} uri={exitData.sello_vvtt_foto_2} onPick={()=>pickPhoto('exit', 'sello_vvtt_foto_2')} onRemove={()=>removePhoto('exit', 'sello_vvtt_foto_2')} />}
                 </View>
 
-                <Text style={styles.fieldLabel}>{t('firma_operador')}</Text>
+                <Text style={styles.fieldLabel}>{t('firma_guardia')}</Text>
                 <Pressable style={styles.sigBox} onPress={() => setShowSig(true)}>
-                  {exitData.firma_operador_salida ? (
-                    <Image source={{ uri: exitData.firma_operador_salida }} style={{ width: '100%', height: 100, resizeMode: 'contain' }} />
+                  {exitData.firma_guardia ? (
+                    <>
+                      <Image source={{ uri: exitData.firma_guardia }} style={{ width: '100%', height: 100, resizeMode: 'contain' }} />
+                      <Pressable style={styles.removeBtnSig} onPress={() => setExitData({...exitData, firma_guardia: ''})}>
+                        <Ionicons name="trash" size={24} color={colors.error} />
+                      </Pressable>
+                    </>
                   ) : (
                     <Text style={styles.sigPlaceholder}>{t('toca_para_firmar')}</Text>
                   )}
@@ -346,12 +418,13 @@ export default function CasetaDetail() {
       {showSig && (
         <View style={styles.modal}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('firma_operador')}</Text>
+            <Text style={styles.modalTitle}>FIRMA</Text>
             <View style={styles.sigContainer}>
               <Signature
                 ref={sigRef}
                 onOK={(sig) => {
-                  setExitData({ ...exitData, firma_operador_salida: sig });
+                  if (showExit) setExitData({ ...exitData, firma_guardia: sig });
+                  else setEntryForm({ ...entryForm, firma_operador: sig });
                   setShowSig(false);
                 }}
                 webStyle={`.m-signature-pad--footer{display:none;}`}
@@ -453,6 +526,9 @@ const styles = StyleSheet.create({
   optionTextActive: { color: '#FFF' },
   sigBox: { height: 100, borderWidth: 2, borderColor: colors.borderStrong, marginTop: 5, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF' },
   sigPlaceholder: { color: colors.muted, fontWeight: '700' },
+  sigBoxSmall: { height: 60, borderWidth: 1, borderColor: colors.border, marginTop: 5, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F9F9F9' },
+  sigPlaceholderSmall: { color: colors.muted, fontSize: 10, fontWeight: '700' },
+  removeBtnSig: { position: 'absolute', top: 5, right: 5, padding: 5, backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: 15 },
   saveBtn: { backgroundColor: colors.success, padding: 15, alignItems: 'center', marginTop: 25, borderRadius: 4 },
   saveBtnText: { color: '#FFF', fontWeight: '900', letterSpacing: 1 },
   modal: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 20, zIndex: 100 },
