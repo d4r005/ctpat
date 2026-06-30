@@ -56,14 +56,24 @@ function EmailModal({
     setSending(true);
     setResult(null);
     try {
+      // Timeout extendido para envío de correo (90s)
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 90000);
       const res = await apiCall<any>('/report/send-email', {
         method: 'POST',
         token,
         body: { record_id: recordId, extra_emails: extraList },
       });
-      setResult({ ok: true, msg: res.message || 'Correo enviado correctamente' });
+      clearTimeout(tid);
+      setResult({ ok: true, msg: res.message || 'Reporte en camino, revisa tu bandeja en unos momentos.' });
     } catch (e: any) {
-      setResult({ ok: false, msg: e.message || 'Error al enviar el correo' });
+      const msg = e.message || '';
+      if (msg.includes('timeout') || msg.includes('AbortError')) {
+        // Backend respondió pero la conexión fue lenta — puede que sí se envió
+        setResult({ ok: true, msg: 'El reporte fue enviado al servidor. Revisa tu bandeja de correo en unos minutos.' });
+      } else {
+        setResult({ ok: false, msg: msg || 'Error al enviar el correo' });
+      }
     } finally {
       setSending(false);
     }

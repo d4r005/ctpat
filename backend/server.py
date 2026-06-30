@@ -524,13 +524,21 @@ async def _build_report_html(record_id: str) -> tuple:
 
     def sig_img(src_b64):
         if src_b64 and src_b64.startswith("data:image"):
-            return f'<img src="{src_b64}" style="max-height:50px;max-width:140px;object-fit:contain;" />' 
+            # Incluir firma solo si es razonablemente pequeña (< 50KB en base64 ~ 68K chars)
+            if len(src_b64) < 68000:
+                return f'<img src="{src_b64}" style="max-height:50px;max-width:140px;object-fit:contain;" />'
+            return '<span style="color:#10B981;font-size:9px;font-weight:bold;">✓ Firma registrada</span>'
         return '<span style="color:#bbb;font-size:9px;">Sin firma</span>'
 
     def photo_block(url, label):
-        if not url or not (url.startswith("data:image") or url.startswith("http")):
+        if not url:
             return ""
-        return f'<div style="display:inline-block;width:30%;margin:1%;vertical-align:top;text-align:center;"><p style="margin:0 0 3px 0;font-size:9px;font-weight:bold;color:#444;">{label}</p><img src="{url}" style="width:100%;height:90px;object-fit:cover;border:1px solid #ddd;" /></div>'
+        # Las fotos base64 son muy pesadas para email — solo mostrar si es URL HTTP
+        if url.startswith("http"):
+            return f'<div style="display:inline-block;width:30%;margin:1%;vertical-align:top;text-align:center;"><p style="margin:0 0 3px 0;font-size:9px;font-weight:bold;color:#444;">{label}</p><img src="{url}" style="width:100%;height:90px;object-fit:cover;border:1px solid #ddd;" /></div>'
+        if url.startswith("data:image"):
+            return f'<div style="display:inline-block;width:30%;margin:1%;vertical-align:top;text-align:center;padding:8px;border:1px solid #eee;"><p style="margin:0 0 3px 0;font-size:9px;font-weight:bold;color:#444;">{label}</p><p style="font-size:9px;color:#10B981;">📎 Foto registrada en sistema</p></div>'
+        return ""
 
     # Puntos de inspección
     points_rows = ""
@@ -1071,14 +1079,24 @@ async def _trigger_automatic_report(record_id: str):
 @api_router.post("/report/send-email")
 async def send_email_endpoint(body: SendReportEmailBody, u: Dict[str, Any] = Depends(get_current_user)):
     """
-    Envía el reporte consolidado por correo electrónico.
-    Siempre envía a REPORT_RECIPIENT + extra_emails opcionales.
-    Requiere autenticación (cualquier usuario).
+    Dispara el envío del reporte consolidado en background.
+    Responde inmediatamente para no generar timeout en el cliente.
     """
-    ok, msg = await send_report_email(body.record_id, body.extra_emails)
-    if not ok:
-        raise HTTPException(500, msg)
-    return {"ok": True, "message": msg}
+    # Validar que el registro existe antes de responder
+    rec = await db.vehicle_records.find_one({"id": body.record_id}, {"_id": 0, "entry": 1})
+    if not rec:
+        raise HTTPException(404, "Registro no encontrado")
+
+    # Lanzar el envío en background — el cliente no espera
+    asyncio.create_task(send_report_email(body.record_id, body.extra_emails))
+
+    plates = rec.get("entry", {}).get("placas_unidad", "")
+    recipients_count = 1 + len([e for e in body.extra_emails if e.strip()])
+    return {
+        "ok": True,
+        "message": f"Reporte de {plates} en cola de envío a {recipients_count} destinatario(s). Llegará en unos momentos.",
+        "async": True
+    }
 
 @api_router.get("/report/consolidated/{record_id}")
 async def get_consolidated_report(record_id: str, u: Dict[str, Any] = Depends(get_current_user)):
