@@ -671,14 +671,14 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
         + tr("Licencia / 驾驶证", entry.get("licencia_conductor") or entry.get("numero_licencia"))
         + tr("Compañía / 运输公司", entry.get("compania_transporte"))
         + tr("Tractor / 牵引车", entry.get("numero_tractor"))
-        + th2("CAJA 1 / 货箱 1")
+        + th2("CAJA / 货箱")
         + tr("Empresa Caja / 货箱公司", entry.get("compania_caja"))
         + tr("Caja / 货箱", entry.get("numero_caja"))
         + tr("Sello Entrada / 进场封条", entry.get("sello_entrada"))
     )
     if is_full:
         caseta_rows += (
-            th2("CAJA 2 / 货箱 2")
+            th2("CAJA / 货箱 2")
             + tr("Empresa Caja 2", entry.get("compania_caja_2"))
             + tr("Caja 2 / 货箱 2", entry.get("numero_caja_2"))
             + tr("Sello Entrada 2", entry.get("sello_entrada_2"))
@@ -697,7 +697,7 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
         )
         if is_full:
             caseta_rows += tr("Sello Salida 2", ex.get("sello_salida_2"))
-        caseta_rows += tr("Guardia Salida", ex.get("guardia_salida_nombre"))
+        caseta_rows += tr("Guardia Salida / 门卫", ex.get("guardia_salida_nombre"))
 
     fotos_caseta = (
         _photo_block(entry.get("foto_frente_unidad"), "Frente / 前方")

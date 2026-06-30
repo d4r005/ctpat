@@ -1,24 +1,6 @@
 import React, { forwardRef, useImperativeHandle, useRef } from 'react';
-import { Platform, View, Text } from 'react-native';
-
-// Dynamic imports
-let WebSignature: any;
-let NativeSignature: any;
-
-if (Platform.OS === 'web') {
-  try {
-    WebSignature = require('react-signature-canvas');
-    if (WebSignature.default) WebSignature = WebSignature.default;
-  } catch (e) {
-    console.error('Error loading web signature canvas', e);
-  }
-} else {
-  try {
-    NativeSignature = require('react-native-signature-canvas').default;
-  } catch (e) {
-    console.error('Error loading native signature canvas', e);
-  }
-}
+import { View } from 'react-native';
+import SignatureScreen from 'react-native-signature-canvas';
 
 interface SignaturePadProps {
   onOK: (signature: string) => void;
@@ -27,78 +9,50 @@ interface SignaturePadProps {
   confirmText?: string;
   webStyle?: string;
   autoClear?: boolean;
-  imageType?: string;
+  imageType?: 'image/png' | 'image/jpeg';
 }
 
 export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
-  const nativeRef = useRef<any>(null);
-  const webRef = useRef<any>(null);
+  const signatureRef = useRef<any>(null);
 
   useImperativeHandle(ref, () => ({
     readSignature: () => {
-      if (Platform.OS === 'web') {
-        if (webRef.current && !webRef.current.isEmpty()) {
-          // CAPTURA WEB: Forzar fondo blanco puro en el canvas antes de exportar
-          const canvas = webRef.current.getCanvas();
-          const tempCanvas = document.createElement('canvas');
-          tempCanvas.width = canvas.width;
-          tempCanvas.height = canvas.height;
-          const tempCtx = tempCanvas.getContext('2d');
-          if (tempCtx) {
-            tempCtx.fillStyle = '#FFFFFF';
-            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-            tempCtx.drawImage(canvas, 0, 0);
-            props.onOK(tempCanvas.toDataURL('image/jpeg', 0.8));
-          }
-        } else {
-          props.onOK('');
-        }
-      } else {
-        nativeRef.current?.readSignature();
-      }
+      signatureRef.current?.readSignature();
     },
     clear: () => {
-      if (Platform.OS === 'web') {
-        webRef.current?.clear();
-      } else {
-        nativeRef.current?.clear();
-      }
+      signatureRef.current?.clearSignature();
     }
   }));
 
-  if (Platform.OS === 'web') {
-    if (!WebSignature) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Error loading Signature Canvas</Text></View>;
-    return (
-      <View style={{ flex: 1, backgroundColor: '#FFF', minHeight: 280 }}>
-        <WebSignature
-          ref={webRef}
-          backgroundColor="rgb(255,255,255)"
-          canvasProps={{
-            style: { width: '100%', height: '100%', minHeight: '280px', cursor: 'crosshair', backgroundColor: '#FFFFFF' }
-          }}
-        />
-      </View>
-    );
-  }
+  const handleOK = (signature: string) => {
+    props.onOK(signature);
+  };
 
-  // NATIVO: Usar PNG para capturar el trazo y dejar que el servidor lo procese con fondo blanco real
+  const defaultWebStyle = `
+    .m-signature-pad { box-shadow: none; border: none; }
+    .m-signature-pad--body { border: 2px solid #09090B; }
+    .m-signature-pad--footer { display: none; margin: 0px; }
+    body, html { background-color: transparent; }
+  `;
+
   return (
-    <NativeSignature
-      ref={nativeRef}
-      onOK={props.onOK}
-      backgroundColor="#FFFFFF"
-      bg="#FFFFFF"
-      descriptionText={props.descriptionText}
-      clearText={props.clearText}
-      confirmText={props.confirmText}
-      webStyle={`.m-signature-pad { background-color: #FFFFFF !important; box-shadow: none; border: none; }
-                 .m-signature-pad--body { background-color: #FFFFFF !important; }
-                 canvas { background-color: #FFFFFF !important; }`}
-      autoClear={false}
-      imageType="image/png"
-    />
+    <View style={{ flex: 1, minHeight: 280 }}>
+      <SignatureScreen
+        ref={signatureRef}
+        onOK={handleOK}
+        descriptionText={props.descriptionText || 'Firme aquí'}
+        clearText={props.clearText || 'Borrar'}
+        confirmText={props.confirmText || 'Guardar'}
+        webStyle={props.webStyle || defaultWebStyle}
+        autoClear={props.autoClear ?? false}
+        imageType={props.imageType || 'image/png'}
+      />
+    </View>
   );
 });
+
+SignaturePad.displayName = 'SignaturePad';
+export default SignaturePad;
 
 SignaturePad.displayName = 'SignaturePad';
 export default SignaturePad;

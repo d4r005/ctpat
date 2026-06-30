@@ -39,6 +39,7 @@ export default function EmbarqueNuevo() {
     nombre_guardia: '', firma_almacenista: '', firma_guardia: '',
     foto_inicio_carga: '', foto_media_carga: '', foto_final_carga: '',
     inspection_id: params.inspection_id || '',
+    cliente_otro: '',
   });
 
   useEffect(() => {
@@ -119,7 +120,8 @@ export default function EmbarqueNuevo() {
   };
 
   const save = async () => {
-    if (!form.almacenista.trim() || !form.cliente.trim()) {
+    const finalCliente = form.cliente === 'OTRO' ? form.cliente_otro : form.cliente;
+    if (!form.almacenista.trim() || !finalCliente.trim()) {
       alert(t('obligatorios_msg'));
       return;
     }
@@ -127,6 +129,7 @@ export default function EmbarqueNuevo() {
     try {
       const payload = {
         ...form,
+        cliente: finalCliente,
         record_id: params.record_id || '' // Enviar record_id para vínculo atómico
       };
       const created = await saveShippingTicket(payload);
@@ -178,37 +181,53 @@ export default function EmbarqueNuevo() {
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <Section title={t('almacen').toUpperCase()}>
-            <F label={`${t('almacenista_caps')} *`} v={form.almacenista} on={(t: string) => set('almacenista', t)} tid="emb-almacenista" />
-            <F label={t('area').toUpperCase()} v={form.area} on={(t: string) => set('area', t)} tid="emb-area" />
-            <F label={t('sellos_caps')} v={form.sellos} on={(t: string) => set('sellos', t)} tid="emb-sellos" />
+          <Section title="ALMACEN">
+            <F label="ALMACENISTA *" v={form.almacenista} on={(t: string) => set('almacenista', t)} tid="emb-almacenista" />
+            <F label="AREA" v={form.area} on={(t: string) => set('area', t)} tid="emb-area" />
+            <F label="SELLOS" v={form.sellos} on={(t: string) => set('sellos', t)} tid="emb-sellos" />
           </Section>
 
-          <Section title={t('material_a_carga').toUpperCase()}>
-            <F label={`${t('cliente_caps')} *`} v={form.cliente} on={(t: string) => set('cliente', t)} tid="emb-cliente" />
-            <F label={t('operador_nombre').toUpperCase()} v={form.operador} on={(t: string) => set('operador', t)} tid="emb-operador" />
-            <F label={t('linea_transporte_caps')} v={form.linea_transporte} on={(t: string) => set('linea_transporte', t)} tid="emb-linea" />
-            <F label={t('numero_economico_unidad').toUpperCase()} v={form.numero_economico} on={(t: string) => set('numero_economico', t)} tid="emb-economico" />
-            <F label={t('placas_unidad_caps')} v={form.placas_unidad} on={(t: string) => set('placas_unidad', t)} tid="emb-placas-unidad" />
-            <F label={t('numero_caja_caps')} v={form.numero_caja} on={(t: string) => set('numero_caja', t)} tid="emb-caja" />
-            <F label={t('placas_caja_caps')} v={form.placas_caja} on={(t: string) => set('placas_caja', t)} tid="emb-placas-caja" />
+          <Section title="MATERIAL A CARGA">
+            <Text style={styles.label}>CLIENTE *</Text>
+            <View style={[styles.optionsRow, { marginBottom: spacing.md }]}>
+              {['FD', 'EVF', 'LALUR', 'OTRO'].map(c => (
+                <Pressable
+                  key={c}
+                  style={[styles.optionChip, (form.cliente === c || (c === 'OTRO' && !['FD', 'EVF', 'LALUR'].includes(form.cliente) && form.cliente !== '')) && styles.optionChipActive]}
+                  onPress={() => set('cliente', c)}
+                >
+                  <Text style={[styles.optionText, (form.cliente === c || (c === 'OTRO' && !['FD', 'EVF', 'LALUR'].includes(form.cliente) && form.cliente !== '')) && styles.optionTextActive]}>{c}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {form.cliente === 'OTRO' && (
+              <F label="ESPECIFIQUE CLIENTE" v={form.cliente_otro} on={(t: string) => set('cliente_otro', t)} tid="emb-cliente-otro" />
+            )}
+
+            <F label="OPERADOR" v={form.operador} on={(t: string) => set('operador', t)} tid="emb-operador" />
+            <F label="LINEA TRANSPORTE" v={form.linea_transporte} on={(t: string) => set('linea_transporte', t)} tid="emb-linea" />
+            <F label="NUMERO ECONOMICO UNIDAD" v={form.numero_economico} on={(t: string) => set('numero_economico', t)} tid="emb-economico" />
+            <F label="PLACAS UNIDAD" v={form.placas_unidad} on={(t: string) => set('placas_unidad', t)} tid="emb-placas-unidad" />
+            <F label="NUMERO CAJA" v={form.numero_caja} on={(t: string) => set('numero_caja', t)} tid="emb-caja" />
+            <F label="PLACAS CAJA" v={form.placas_caja} on={(t: string) => set('placas_caja', t)} tid="emb-placas-caja" />
           </Section>
 
-          <Section title={t('tiempos_y_carga').toUpperCase()}>
-            <F label={t('hora_llegada_caseta').toUpperCase()} v={form.hora_llegada} on={(t: string) => set('hora_llegada', t)} tid="emb-hora-llegada" placeholder="HH:MM" />
-            <F label={t('hora_apertura_cortina_caps')} v={form.hora_apertura_cortina} on={(t: string) => set('hora_apertura_cortina', t)} tid="emb-hora-apertura" placeholder="HH:MM" />
-            <F label={t('hora_cierre_cortina_caps')} v={form.hora_cierre_cortina} on={(t: string) => set('hora_cierre_cortina', t)} tid="emb-hora-cierre" placeholder="HH:MM" />
-            <F label={t('hora_salida_desenrampe').toUpperCase()} v={form.hora_salida} on={(t: string) => set('hora_salida', t)} tid="emb-hora-salida" placeholder="HH:MM" />
-            <F label={t('numero_pallets_caps')} v={form.numero_pallets} on={(t: string) => set('numero_pallets', t)} tid="emb-pallets" kb="numeric" />
-            <F label={t('numero_sello_caps')} v={form.numero_sello} on={(t: string) => set('numero_sello', t)} tid="emb-sello" />
+          <Section title="TIEMPOS Y CARGA">
+            <F label="HORA LLEGADA CASETA" v={form.hora_llegada} on={(t: string) => set('hora_llegada', t)} tid="emb-hora-llegada" placeholder="HH:MM" />
+            <F label="HORA APERTURA CORTINA" v={form.hora_apertura_cortina} on={(t: string) => set('hora_apertura_cortina', t)} tid="emb-hora-apertura" placeholder="HH:MM" />
+            <F label="HORA CIERRE CORTINA" v={form.hora_cierre_cortina} on={(t: string) => set('hora_cierre_cortina', t)} tid="emb-hora-cierre" placeholder="HH:MM" />
+            <F label="HORA SALIDA DESENRAMPE" v={form.hora_salida} on={(t: string) => set('hora_salida', t)} tid="emb-hora-salida" placeholder="HH:MM" />
+            <F label="NUMERO PALLETS" v={form.numero_pallets} on={(t: string) => set('numero_pallets', t)} tid="emb-pallets" kb="numeric" />
+            <F label="NUMERO SELLO" v={form.numero_sello} on={(t: string) => set('numero_sello', t)} tid="emb-sello" />
           </Section>
 
-          <Section title={t('observaciones_y_danos').toUpperCase()}>
-            <F label={t('observaciones').toUpperCase()} v={form.observaciones} on={(t: string) => set('observaciones', t)} tid="emb-obs" multiline />
-            <F label={t('danos_caja_desc').toUpperCase()} v={form.daño_caja} on={(t: string) => set('daño_caja', t)} tid="emb-dano" multiline />
+          <Section title="OBSERVACIONES Y DAÑOS">
+            <F label="OBSERVACIONES" v={form.observaciones} on={(t: string) => set('observaciones', t)} tid="emb-obs" multiline />
+            <F label="DAÑOS CAJA" v={form.daño_caja} on={(t: string) => set('daño_caja', t)} tid="emb-dano" multiline />
           </Section>
 
-          <Section title={t('evidencia_carga').toUpperCase()}>
+          <Section title="EVIDENCIA CARGA">
             <PhotoField
               label={t('foto_inicio_carga').toUpperCase()}
               value={form.foto_inicio_carga}
@@ -238,17 +257,31 @@ export default function EmbarqueNuevo() {
             />
           </Section>
 
-          <Section title={t('firmas').toUpperCase()}>
-            <F label={t('nombre_guardia_seguridad')} v={form.nombre_guardia} on={(t: string) => set('nombre_guardia', t)} tid="emb-guardia" />
+          <Section title="FIRMAS">
+            <F label="NOMBRE GUARDIA SEGURIDAD" v={form.nombre_guardia} on={(t: string) => set('nombre_guardia', t)} tid="emb-guardia" />
             <Pressable testID="emb-firma-almacenista" style={styles.signatureBox} onPress={() => setSigTarget('almacenista')}>
-              <Text style={form.firma_almacenista ? styles.firmaDone : styles.firmaCta}>
-                {form.firma_almacenista ? t('firma_almacenista_caps') : t('firma_almacenista')}
-              </Text>
+              {form.firma_almacenista ? (
+                <>
+                  <Image source={{ uri: form.firma_almacenista }} style={{ width: '100%', height: 50, resizeMode: 'contain' }} />
+                  <Pressable style={styles.removeBtnSig} onPress={() => set('firma_almacenista', '')}>
+                    <Ionicons name="trash" size={16} color={colors.error} />
+                  </Pressable>
+                </>
+              ) : (
+                <Text style={styles.firmaCta}>FIRMA ALMACENISTA</Text>
+              )}
             </Pressable>
             <Pressable testID="emb-firma-guardia" style={styles.signatureBox} onPress={() => setSigTarget('guardia')}>
-              <Text style={form.firma_guardia ? styles.firmaDone : styles.firmaCta}>
-                {form.firma_guardia ? t('firma_guardia_caps') : t('firma_guardia')}
-              </Text>
+              {form.firma_guardia ? (
+                <>
+                  <Image source={{ uri: form.firma_guardia }} style={{ width: '100%', height: 50, resizeMode: 'contain' }} />
+                  <Pressable style={styles.removeBtnSig} onPress={() => set('firma_guardia', '')}>
+                    <Ionicons name="trash" size={16} color={colors.error} />
+                  </Pressable>
+                </>
+              ) : (
+                <Text style={styles.firmaCta}>FIRMA GUARDIA</Text>
+              )}
             </Pressable>
           </Section>
 
@@ -389,4 +422,10 @@ const styles = StyleSheet.create({
   photoImg: { width: '100%', height: 200, resizeMode: 'cover' },
   photoRemove: { position: 'absolute', top: 8, right: 8, backgroundColor: '#FFF', borderRadius: 12 },
   photoActionRow: { flexDirection: 'row', gap: spacing.sm },
+  optionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  optionChip: { borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, paddingVertical: 8, flexShrink: 0, backgroundColor: '#FFF' },
+  optionChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  optionText: { fontWeight: '900', fontSize: 11, color: colors.onSurface, letterSpacing: 1 },
+  optionTextActive: { color: colors.onBrandPrimary },
+  removeBtnSig: { position: 'absolute', top: 5, right: 5, padding: 5, backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: 15 },
 });

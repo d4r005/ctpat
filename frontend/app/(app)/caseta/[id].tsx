@@ -225,19 +225,19 @@ export default function CasetaDetail() {
               </View>
 
               <View style={styles.subSection}>
-                <Text style={styles.subTitle}>{t('caja_1_caps')}</Text>
+                <Text style={styles.subTitle}>CAJA</Text>
                 <View style={styles.grid}>
-                  <EditableItem label={t('numero_caja_caps')} value={entryForm.numero_caja} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_caja: v}) : null} />
-                  <EditableItem label={t('sello')} value={entryForm.sello_entrada} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, sello_entrada: v}) : null} />
+                  <EditableItem label="NUMERO CAJA" value={entryForm.numero_caja} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_caja: v}) : null} />
+                  <EditableItem label="SELLO" value={entryForm.sello_entrada} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, sello_entrada: v}) : null} />
                 </View>
               </View>
 
               {isFull && (
                 <View style={styles.subSection}>
-                  <Text style={styles.subTitle}>{t('caja_2_caps')}</Text>
+                  <Text style={styles.subTitle}>CAJA</Text>
                   <View style={styles.grid}>
-                    <EditableItem label={t('numero_caja_caps')} value={entryForm.numero_caja_2} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_caja_2: v}) : null} />
-                    <EditableItem label={t('sello')} value={entryForm.sello_entrada_2} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, sello_entrada_2: v}) : null} />
+                    <EditableItem label="NUMERO CAJA" value={entryForm.numero_caja_2} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_caja_2: v}) : null} />
+                    <EditableItem label="SELLO" value={entryForm.sello_entrada_2} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, sello_entrada_2: v}) : null} />
                   </View>
                 </View>
               )}
