@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Query, File, UploadFile
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Query, File, UploadFile, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import Response, JSONResponse
 from dotenv import load_dotenv
@@ -426,7 +426,7 @@ async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Op
     return enriched
 
 @api_router.post("/vehicle-records", response_model=VehicleRecord)
-async def create_record(body: VehicleEntry, u: Dict[str, Any] = Depends(get_current_user)):
+async def create_record(body: VehicleEntry, background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
     rid = str(uuid.uuid4())
     doc = body.dict()
     full_doc = {
@@ -439,7 +439,7 @@ async def create_record(body: VehicleEntry, u: Dict[str, Any] = Depends(get_curr
         if full_doc["entry"].get(f): full_doc["entry"][f] = ensure_clean_image(full_doc["entry"][f])
     await db.vehicle_records.insert_one(full_doc)
     # Sincronizar automáticamente al sheet
-    asyncio.create_task(sync_to_google_sheets("entrada", full_doc))
+    background_tasks.add_task(sync_to_google_sheets, "entrada", full_doc)
     return VehicleRecord(**full_doc)
 
 @api_router.get("/vehicle-records/{rec_id}", response_model=VehicleRecord)
@@ -540,9 +540,38 @@ def _sd(d) -> str:
 
 
 def _img_tag(src_val: str, style: str = "max-height:56px;max-width:150px;object-fit:contain;") -> str:
-    if src_val and (src_val.startswith("data:image") or src_val.startswith("http")):
-        return '<img src="' + src_val + '" style="' + style + '" />'
-    return '<div style="width:120px;height:55px;background:#f5f5f5;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:7px;border:1px dashed #ccc;">Sin firma</div>'
+    """Maneja imágenes para el correo, convirtiendo URLs de Drive a base64 si es necesario."""
+    if not src_val:
+        return '<div style="width:120px;height:55px;background:#f5f5f5;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:7px;border:1px dashed #ccc;">Sin firma</div>'
+
+    final_src = src_val
+
+    # Si es una URL de Google Drive (común cuando se sincroniza con Sheets)
+    if "drive.google.com" in src_val or "doc-0s-80-docs.googleusercontent.com" in src_val:
+        try:
+            # Intentar extraer el ID del archivo
+            import re
+            file_id_match = re.search(r'id=([a-zA-Z0-9_-]+)', src_val)
+            if not file_id_match:
+                file_id_match = re.search(r'file/d/([a-zA-Z0-9_-]+)', src_val)
+
+            if file_id_match:
+                file_id = file_id_match.group(1)
+                token = os.environ.get("GOOGLEDRIVE_ACCESS_TOKEN", "")
+                if token:
+                    download_url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media"
+                    r = requests.get(download_url, headers={"Authorization": f"Bearer {token}"}, timeout=10)
+                    if r.status_code == 200:
+                        b64 = base64.b64encode(r.content).decode()
+                        mime = r.headers.get("Content-Type", "image/jpeg")
+                        final_src = f"data:{mime};base64,{b64}"
+        except Exception as e:
+            logger.error(f"Error convirtiendo imagen de Drive a b64: {e}")
+
+    if final_src.startswith("data:image") or final_src.startswith("http"):
+        return '<img src="' + final_src + '" style="' + style + '" />'
+
+    return '<div style="width:120px;height:55px;background:#f5f5f5;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:7px;border:1px dashed #ccc;">Error imagen</div>'
 
 
 def _inline_sig(src_val: str, label: str, name: str = "") -> str:
@@ -867,27 +896,43 @@ def _sync_send_email(host, port, user, password, recipients, msg):
         s.sendmail(user, recipients, msg.as_string())
 
 @api_router.patch("/vehicle-records/{rec_id}/exit", response_model=VehicleRecord)
-async def exit_record(rec_id: str, body: VehicleExit, u: Dict[str, Any] = Depends(get_current_user)):
+async def exit_record(rec_id: str, body: VehicleExit, background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
     x = body.dict(); x["fecha_salida"] = datetime.now(timezone.utc).isoformat()
     if x.get("firma_guardia"): x["firma_guardia"] = ensure_clean_image(x["firma_guardia"])
     await db.vehicle_records.update_one({"id": rec_id}, {"$set": {"exit": x, "status": "salida"}})
     up = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
     # Sincronizar salida automáticamente al sheet
-    if up: asyncio.create_task(sync_to_google_sheets("salida", up))
-    # Enviar reporte automático por correo si el proceso está completo
+    if up: background_tasks.add_task(sync_to_google_sheets, "salida", up)
+    # Enviar reporte automático por correo si el proceso está completo (Ingreso + Inspección + Embarque + Salida)
+    # Excepción: Si es "DESCARGA", se omite el Ticket de Embarque
     if up:
+        entry_data     = up.get("entry", {})
+        has_entry      = bool(entry_data)
         has_inspection = bool(up.get("inspection_id") or up.get("inspection_ids"))
         has_ticket     = bool(up.get("shipping_ticket_id"))
-        if has_inspection and has_ticket:
-            asyncio.create_task(send_report_email(rec_id))
-            logger.info(f"Reporte automático disparado para record {rec_id}")
+        has_exit       = bool(up.get("exit"))
+
+        # Determinar si es un proceso de descarga
+        is_descarga = "descarga" in entry_data.get("condicion_carga", "").lower()
+
+        # El proceso está completo si tiene entrada, inspección y salida.
+        # El ticket de embarque solo es obligatorio si NO es descarga.
+        if has_entry and has_inspection and has_exit and (is_descarga or has_ticket):
+            background_tasks.add_task(send_report_email, rec_id)
+            motivo = "Descarga" if is_descarga else "Carga Completa"
+            logger.info(f"Reporte automático disparado para record {rec_id} ({motivo})")
         else:
-            logger.info(f"Salida registrada para {rec_id} pero proceso incompleto (insp={has_inspection}, ticket={has_ticket}) — email omitido")
+            missing = []
+            if not has_entry: missing.append("Ingreso")
+            if not has_inspection: missing.append("Inspección")
+            if not is_descarga and not has_ticket: missing.append("Embarque (Obligatorio para Carga)")
+            if not has_exit: missing.append("Salida")
+            logger.info(f"Salida registrada para {rec_id} pero proceso incompleto. Faltan: {', '.join(missing)}")
     return VehicleRecord(**up)
 
 # --- Inspecciones ---
 @api_router.post("/inspections", response_model=Inspection)
-async def create_inspection(body: InspectionCreate, u: Dict[str, Any] = Depends(get_current_user)):
+async def create_inspection(body: InspectionCreate, background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
     iid = str(uuid.uuid4()); doc = body.dict()
     doc.update({
         "id": iid, "user_id": u["id"], "created_at": datetime.now(timezone.utc).isoformat(),
@@ -920,7 +965,7 @@ async def create_inspection(body: InspectionCreate, u: Dict[str, Any] = Depends(
                 )
                 doc["record_id"] = rec_by_plates["id"]
     # Sincronizar automáticamente al sheet
-    asyncio.create_task(sync_to_google_sheets("inspeccion", doc))
+    background_tasks.add_task(sync_to_google_sheets, "inspeccion", doc)
 
     # Notificar si hay fallas (alerta global para supervisores)
     if doc["status_general"] == "malo":
@@ -988,7 +1033,7 @@ async def approve_insp(insp_id: str, body: ApprovalBody, u: Dict[str, Any] = Dep
 
 # --- Embarque ---
 @api_router.post("/shipping-tickets")
-async def create_ticket(body: ShippingTicketCreate, u: Dict[str, Any] = Depends(get_current_user)):
+async def create_ticket(body: ShippingTicketCreate, background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
     tid = str(uuid.uuid4()); doc = body.dict()
     doc.update({"id": tid, "user_id": u["id"], "created_at": datetime.now(timezone.utc).isoformat()})
     for f in ["firma_almacenista", "firma_guardia", "foto_inicio_carga", "foto_media_carga", "foto_final_carga"]:
@@ -1014,7 +1059,7 @@ async def create_ticket(body: ShippingTicketCreate, u: Dict[str, Any] = Depends(
                 )
                 doc["record_id"] = rec_by_plates["id"]
     # Sincronizar automáticamente al sheet
-    asyncio.create_task(sync_to_google_sheets("embarque", doc))
+    background_tasks.add_task(sync_to_google_sheets, "embarque", doc)
     return {"id": tid}
 
 @api_router.get("/shipping-tickets", response_model=List[Dict[str, Any]])
@@ -1280,7 +1325,7 @@ async def _trigger_automatic_report(record_id: str):
 # --- Reporte Consolidado ---
 
 @api_router.post("/report/send-email")
-async def send_email_endpoint(body: SendReportEmailBody, u: Dict[str, Any] = Depends(get_current_user)):
+async def send_email_endpoint(body: SendReportEmailBody, background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
     """
     Dispara el envío del reporte consolidado en background.
     Responde inmediatamente para no generar timeout en el cliente.
@@ -1291,7 +1336,7 @@ async def send_email_endpoint(body: SendReportEmailBody, u: Dict[str, Any] = Dep
         raise HTTPException(404, "Registro no encontrado")
 
     # Lanzar el envío en background — el cliente no espera
-    asyncio.create_task(send_report_email(body.record_id, body.extra_emails))
+    background_tasks.add_task(send_report_email, body.record_id, body.extra_emails)
 
     plates = rec.get("entry", {}).get("placas_unidad", "")
     recipients_count = 1 + len([e for e in body.extra_emails if e.strip()])
