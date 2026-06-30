@@ -24,6 +24,7 @@ import requests
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
+from email.mime.image import MIMEImage
 from email import encoders
 from PIL import Image, ImageDraw, ImageFont
 
@@ -473,17 +474,15 @@ async def delete_record(rec_id: str, u: Dict[str, Any] = Depends(get_current_use
 
 # ========== Email: Reporte Consolidado ==========
 
-async def _build_report_html(record_id: str) -> tuple:
-    """
-    Construye el HTML del reporte consolidado para un record_id.
-    Devuelve (html: str, placas: str) o (None, None) si no se encuentra.
-    """
+async def _collect_report_data(record_id: str):
+    """Recolecta caseta + inspecciones + ticket para un record_id."""
     rec = await db.vehicle_records.find_one({"id": record_id}, {"_id": 0})
-    if not rec: return None, None
+    if not rec:
+        return None, None, None, None
 
     placas = rec.get("entry", {}).get("placas_unidad", "")
 
-    # Inspecciones vinculadas
+    # Inspecciones
     insp_ids = list(set(rec.get("inspection_ids", [])))
     if rec.get("inspection_id") and rec["inspection_id"] not in insp_ids:
         insp_ids.append(rec["inspection_id"])
@@ -512,114 +511,237 @@ async def _build_report_html(record_id: str) -> tuple:
                 sort=[("created_at", -1)])
             if ticket and "_id" in ticket: del ticket["_id"]
 
-    # ── HTML del reporte (inline, compatible con email) ──
-    entry = rec.get("entry", {})
-    ex    = rec.get("exit", {}) or {}
-    first_insp = inspections[0] if inspections else {}
+    return rec, inspections, ticket, placas
+
+
+def _b64_to_bytes(data_url: str):
+    """Convierte data:image/...;base64,... a bytes. Retorna (bytes, ext)."""
+    try:
+        header, b64data = data_url.split(",", 1)
+        ext = "png"
+        if "jpeg" in header or "jpg" in header: ext = "jpeg"
+        elif "png" in header: ext = "png"
+        elif "webp" in header: ext = "webp"
+        img_bytes = base64.b64decode(b64data)
+        return img_bytes, ext
+    except Exception:
+        return None, None
+
+
+def _build_email_html(rec, inspections, ticket, placas, cid_map: dict) -> str:
+    """
+    Construye el HTML del reporte para email.
+    cid_map: { "cid_key": "cid:cid_string" } para referenciar imágenes adjuntas.
+    """
+    entry      = rec.get("entry", {}) or {}
+    ex         = rec.get("exit",  {}) or {}
     created_at = rec.get("created_at", "")
+    first_insp = inspections[0] if inspections else {}
 
     def fmt_date(d):
         try: return datetime.fromisoformat(d).strftime("%d/%m/%Y %H:%M") if d else "-"
         except: return d or "-"
 
-    def sig_img(src_b64):
-        if src_b64 and src_b64.startswith("data:image"):
-            # Incluir firma solo si es razonablemente pequeña (< 50KB en base64 ~ 68K chars)
-            if len(src_b64) < 68000:
-                return f'<img src="{src_b64}" style="max-height:50px;max-width:140px;object-fit:contain;" />'
-            return '<span style="color:#10B981;font-size:9px;font-weight:bold;">✓ Firma registrada</span>'
-        return '<span style="color:#bbb;font-size:9px;">Sin firma</span>'
+    def sig_cell(cid_key: str, nombre: str = "") -> str:
+        src_ref = cid_map.get(cid_key, "")
+        inner = (f'<img src="{src_ref}" style="max-height:55px;max-width:160px;object-fit:contain;" />' 
+                 if src_ref else
+                 '<span style="color:#bbb;font-size:9px;display:block;line-height:55px;">Sin firma</span>')
+        label = cid_key.replace("sig_", "").replace("_", " ").upper()
+        return f"""
+          <div style="text-align:center;min-width:150px;display:inline-block;margin:8px 16px 0 0;">
+            <div style="height:60px;border-bottom:2px solid #0A2540;margin-bottom:4px;
+                        display:flex;align-items:flex-end;justify-content:center;">{inner}</div>
+            <p style="margin:0;font-size:8px;font-weight:bold;color:#0A2540;">{label}</p>
+            {f'<p style="margin:1px 0 0 0;font-size:8px;color:#555;">{nombre}</p>' if nombre else ""}
+          </div>"""
 
-    def photo_block(url, label):
-        if not url:
-            return ""
-        # Las fotos base64 son muy pesadas para email — solo mostrar si es URL HTTP
-        if url.startswith("http"):
-            return f'<div style="display:inline-block;width:30%;margin:1%;vertical-align:top;text-align:center;"><p style="margin:0 0 3px 0;font-size:9px;font-weight:bold;color:#444;">{label}</p><img src="{url}" style="width:100%;height:90px;object-fit:cover;border:1px solid #ddd;" /></div>'
-        if url.startswith("data:image"):
-            return f'<div style="display:inline-block;width:30%;margin:1%;vertical-align:top;text-align:center;padding:8px;border:1px solid #eee;"><p style="margin:0 0 3px 0;font-size:9px;font-weight:bold;color:#444;">{label}</p><p style="font-size:9px;color:#10B981;">📎 Foto registrada en sistema</p></div>'
-        return ""
+    def photo_cell(cid_key: str, label: str) -> str:
+        src_ref = cid_map.get(cid_key, "")
+        if not src_ref: return ""
+        return f"""
+          <div style="display:inline-block;width:30%;margin:1%;vertical-align:top;text-align:center;
+                      border:1px solid #eee;padding:5px;">
+            <p style="margin:0 0 4px 0;font-size:8px;font-weight:bold;color:#555;">{label}</p>
+            <img src="{src_ref}" style="width:100%;height:90px;object-fit:cover;border:1px solid #ddd;" />
+          </div>"""
 
     # Puntos de inspección
     points_rows = ""
     for p in first_insp.get("points", []):
         estado = p.get("estado", "-")
         color  = "#10B981" if estado == "bueno" else "#EF4444" if estado == "malo" else "#6B7280"
-        points_rows += f'<tr><td style="padding:3px 6px;border:1px solid #ddd;font-size:9px;">{p.get("number","")}</td><td style="padding:3px 6px;border:1px solid #ddd;font-size:9px;">{p.get("name","")}</td><td style="padding:3px 6px;border:1px solid #ddd;text-align:center;"><span style="color:{color};font-weight:bold;font-size:9px;">{estado.upper()}</span></td><td style="padding:3px 6px;border:1px solid #ddd;font-size:9px;">{p.get("comentarios","")}</td></tr>'
+        foto_cell = ""
+        if p.get("photo"):
+            ck = f"pt_{p.get('number','x')}_photo"
+            foto_cell = f'<img src="{cid_map.get(ck, "")}" style="height:40px;" />' if cid_map.get(ck) else ""
+        points_rows += (
+            f'<tr><td style="padding:3px 6px;border:1px solid #ddd;font-size:9px;text-align:center;">{p.get("number","")}</td>'
+            f'<td style="padding:3px 6px;border:1px solid #ddd;font-size:9px;">{p.get("name","")}</td>'
+            f'<td style="padding:3px 6px;border:1px solid #ddd;text-align:center;">{foto_cell}</td>'
+            f'<td style="padding:3px 6px;border:1px solid #ddd;text-align:center;"><span style="color:{color};font-weight:bold;font-size:9px;">{estado.upper()}</span></td>'
+            f'<td style="padding:3px 6px;border:1px solid #ddd;font-size:9px;">{p.get("comentarios","")}</td></tr>'
+        )
 
+    # Ticket HTML
     ticket_html = ""
     if ticket:
         ticket_html = f"""
-        <h2 style="background:#0A2540;color:#FFF;padding:8px 12px;font-size:12px;margin:20px 0 8px 0;">3. TICKET DE EMBARQUE</h2>
+        <h2 style="background:#0A2540;color:#FFF;padding:8px 12px;font-size:12px;margin:20px 0 8px 0;">
+          3. TICKET DE EMBARQUE / 运输单</h2>
         <table style="width:100%;border-collapse:collapse;font-size:10px;">
-            <tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;width:35%;">Cliente</td><td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("cliente","")}</td><td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;width:35%;">Almacenista</td><td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("almacenista","")}</td></tr>
-            <tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Caja</td><td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("numero_caja","")}</td><td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Pallets</td><td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("numero_pallets","")}</td></tr>
-            <tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Sello Final</td><td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("numero_sello","")}</td><td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Guardia</td><td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("nombre_guardia","")}</td></tr>
-            <tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Observaciones</td><td colspan="3" style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("observaciones","")}</td></tr>
+          <tr>
+            <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;width:25%;">Cliente</td>
+            <td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("cliente","")}</td>
+            <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;width:25%;">Almacenista</td>
+            <td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("almacenista","")}</td>
+          </tr>
+          <tr>
+            <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Caja</td>
+            <td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("numero_caja","")}</td>
+            <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Pallets</td>
+            <td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("numero_pallets","")}</td>
+          </tr>
+          <tr>
+            <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Sello Final</td>
+            <td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("numero_sello","")}</td>
+            <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Guardia</td>
+            <td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("nombre_guardia","")}</td>
+          </tr>
+          <tr>
+            <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Observaciones</td>
+            <td colspan="3" style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("observaciones","")}</td>
+          </tr>
         </table>
-        <div style="margin-top:12px;display:flex;gap:20px;">
-            <div style="text-align:center;flex:1;"><div style="height:55px;display:flex;align-items:flex-end;justify-content:center;border-bottom:2px solid #0A2540;margin-bottom:3px;">{sig_img(ticket.get("firma_almacenista",""))}</div><p style="margin:0;font-size:8px;font-weight:bold;">ALMACENISTA</p></div>
-            <div style="text-align:center;flex:1;"><div style="height:55px;display:flex;align-items:flex-end;justify-content:center;border-bottom:2px solid #0A2540;margin-bottom:3px;">{sig_img(ticket.get("firma_guardia",""))}</div><p style="margin:0;font-size:8px;font-weight:bold;">GUARDIA</p></div>
-        </div>
-        """
+        <div style="margin-top:12px;">
+          {sig_cell("sig_almacenista", ticket.get("almacenista",""))}
+          {sig_cell("sig_guardia_embarque", ticket.get("nombre_guardia",""))}
+        </div>"""
 
-    fotos_html = "".join([
-        photo_block(entry.get("foto_frente_unidad"), "Frente"),
-        photo_block(entry.get("foto_atras_caja"), "Atrás"),
-        photo_block(entry.get("foto_id_chofer"), "ID Chofer"),
-    ])
+    # Fotos de caseta
+    fotos_html = (
+        photo_cell("foto_frente",  "Frente unidad") +
+        photo_cell("foto_atras",   "Atrás / Caja") +
+        photo_cell("foto_id",      "ID Chofer") +
+        photo_cell("foto_sello",   "Sello") +
+        photo_cell("foto_cargo1",  "Carga 1") +
+        photo_cell("foto_cargo2",  "Carga 2") +
+        photo_cell("foto_cargo3",  "Carga 3")
+    )
 
-    html = f"""<!DOCTYPE html>
+    # Inspecciones resumen
+    insps_summary = "".join([
+        f'<p style="font-size:10px;margin:4px 0;">'
+        f'<b>Tipo:</b> {ins.get("inspection_type","")} &nbsp; '
+        f'<b>Inspector:</b> {ins.get("inspector_nombre","")} &nbsp; '
+        f'<b>Resultado:</b> <span style="color:{"#10B981" if ins.get("status_general")=="bueno" else "#EF4444"};'
+        f'font-weight:bold;">{ins.get("status_general","").upper()}</span></p>'
+        for ins in inspections
+    ]) or '<p style="color:#888;">Sin inspecciones vinculadas</p>'
+
+    return f"""<!DOCTYPE html>
 <html><head><meta charset="UTF-8">
-<style>body{{font-family:Arial,sans-serif;font-size:10px;color:#1a1a1a;margin:20px;}}
-table{{width:100%;border-collapse:collapse;}}
-h2{{font-size:12px;margin:16px 0 6px 0;}}
+<style>
+  body {{ font-family: Arial, sans-serif; font-size: 10px; color: #1a1a1a; margin: 20px; }}
+  table {{ width: 100%; border-collapse: collapse; }}
+  h2 {{ font-size: 12px; margin: 16px 0 6px 0; }}
 </style></head><body>
+
 <div style="text-align:center;background:#0A2540;padding:14px;color:#FFF;margin-bottom:16px;">
   <h1 style="margin:0;font-size:16px;letter-spacing:2px;">REPORTE CONSOLIDADO C-TPAT</h1>
-  <p style="margin:4px 0 0 0;font-size:10px;">NAF INDUSTRIES · Generado: {fmt_date(datetime.now(timezone.utc).isoformat())}</p>
+  <p style="margin:4px 0 0 0;font-size:10px;">
+    NAF INDUSTRIES &nbsp;·&nbsp; Unidad: <b>{placas}</b>
+    &nbsp;·&nbsp; Generado: {fmt_date(datetime.now(timezone.utc).isoformat())}
+  </p>
 </div>
 
-<h2 style="background:#0A2540;color:#FFF;padding:8px 12px;font-size:12px;margin:0 0 8px 0;">1. REGISTRO DE CASETA</h2>
-<table><tr>
-  <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;width:25%;">Placas</td><td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("placas_unidad","")}</td>
-  <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;width:25%;">Chofer</td><td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("chofer_nombre","")}</td>
-</tr><tr>
-  <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Compañía</td><td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("compania_transporte","")}</td>
-  <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Tractor</td><td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("numero_tractor","")}</td>
-</tr><tr>
-  <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Caja</td><td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("numero_caja","")}</td>
-  <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Sello Entrada</td><td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("sello_entrada","")}</td>
-</tr><tr>
-  <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Fecha Entrada</td><td style="padding:4px 8px;border:1px solid #ddd;">{fmt_date(entry.get("fecha_entrada") or created_at)}</td>
-  <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Fecha Salida</td><td style="padding:4px 8px;border:1px solid #ddd;">{fmt_date(ex.get("fecha_salida",""))}</td>
-</tr></table>
-<div style="margin-top:12px;text-align:center;">
-  <div style="display:inline-block;min-width:150px;text-align:center;">
-    <div style="height:55px;display:flex;align-items:flex-end;justify-content:center;border-bottom:2px solid #0A2540;margin-bottom:3px;">{sig_img(entry.get("firma_operador",""))}</div>
-    <p style="margin:0;font-size:8px;font-weight:bold;">OPERADOR / {entry.get("chofer_nombre","")}</p>
-  </div>
-</div>
-{f'<div style="margin-top:10px;">{fotos_html}</div>' if fotos_html else ""}
+<!-- 1. CASETA -->
+<h2 style="background:#0A2540;color:#FFF;padding:8px 12px;font-size:12px;margin:0 0 8px 0;">
+  1. REGISTRO DE CASETA / 门卫室记录</h2>
+<table>
+  <tr>
+    <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;width:25%;">Placas / 车牌</td>
+    <td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("placas_unidad","")}</td>
+    <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;width:25%;">Chofer / 司机</td>
+    <td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("chofer_nombre","")}</td>
+  </tr>
+  <tr>
+    <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Compañía</td>
+    <td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("compania_transporte","")}</td>
+    <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Licencia</td>
+    <td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("numero_licencia","")}</td>
+  </tr>
+  <tr>
+    <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Tractor</td>
+    <td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("numero_tractor","")}</td>
+    <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Caja / Trailer</td>
+    <td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("numero_caja","")}</td>
+  </tr>
+  <tr>
+    <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Sello Entrada</td>
+    <td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("sello_entrada","")}</td>
+    <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Tipo Unidad</td>
+    <td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("tipo_unidad","").upper()}</td>
+  </tr>
+  <tr>
+    <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Fecha Entrada</td>
+    <td style="padding:4px 8px;border:1px solid #ddd;">{fmt_date(entry.get("fecha_entrada") or created_at)}</td>
+    <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Fecha Salida</td>
+    <td style="padding:4px 8px;border:1px solid #ddd;">{fmt_date(ex.get("fecha_salida",""))}</td>
+  </tr>
+</table>
 
-<h2 style="background:#0A2540;color:#FFF;padding:8px 12px;font-size:12px;margin:20px 0 8px 0;">2. INSPECCIÓN C-TPAT</h2>
-{"".join([f'<p style="font-size:10px;margin:4px 0;"><b>Tipo:</b> {ins.get("inspection_type","")} &nbsp; <b>Inspector:</b> {ins.get("inspector_nombre","")} &nbsp; <b>Resultado:</b> <span style="color:{"#10B981" if ins.get("status_general")=="bueno" else "#EF4444"};font-weight:bold;">{ins.get("status_general","").upper()}</span></p>' for ins in inspections] or ['<p style="color:#888;">Sin inspecciones vinculadas</p>'])}
+<!-- Firma Operador (en sección de caseta, debajo del reglamento) -->
+<div style="margin-top:14px;padding:10px;background:#F9FAFB;border:1px solid #E5E7EB;">
+  <p style="margin:0 0 6px 0;font-size:9px;font-weight:bold;color:#374151;">ACEPTADO POR EL OPERADOR / 司机签字确认</p>
+  {sig_cell("sig_operador", entry.get("chofer_nombre",""))}
+</div>
+
+{f'<div style="margin-top:12px;">{fotos_html}</div>' if fotos_html.strip() else ""}
+
+<!-- 2. INSPECCIÓN -->
+<h2 style="background:#0A2540;color:#FFF;padding:8px 12px;font-size:12px;margin:20px 0 8px 0;">
+  2. INSPECCIÓN C-TPAT / C-TPAT 检查</h2>
+{insps_summary}
 <table style="margin-top:6px;">
-  <thead><tr style="background:#F3F4F6;"><th style="padding:4px 6px;border:1px solid #ddd;font-size:9px;">#</th><th style="padding:4px 6px;border:1px solid #ddd;font-size:9px;text-align:left;">Punto</th><th style="padding:4px 6px;border:1px solid #ddd;font-size:9px;">Estado</th><th style="padding:4px 6px;border:1px solid #ddd;font-size:9px;text-align:left;">Comentarios</th></tr></thead>
+  <thead>
+    <tr style="background:#F3F4F6;">
+      <th style="padding:4px 6px;border:1px solid #ddd;font-size:9px;text-align:center;">#</th>
+      <th style="padding:4px 6px;border:1px solid #ddd;font-size:9px;text-align:left;">Punto</th>
+      <th style="padding:4px 6px;border:1px solid #ddd;font-size:9px;">Foto</th>
+      <th style="padding:4px 6px;border:1px solid #ddd;font-size:9px;">Estado</th>
+      <th style="padding:4px 6px;border:1px solid #ddd;font-size:9px;text-align:left;">Comentarios</th>
+    </tr>
+  </thead>
   <tbody>{points_rows}</tbody>
 </table>
-{"".join([f'<div style="margin-top:8px;display:inline-block;min-width:150px;text-align:center;margin-right:20px;"><div style="height:55px;display:flex;align-items:flex-end;justify-content:center;border-bottom:2px solid #0A2540;margin-bottom:3px;">{sig_img(ins.get("inspector_firma",""))}</div><p style="margin:0;font-size:8px;font-weight:bold;">INSPECTOR / {ins.get("inspector_nombre","")}</p></div>' for ins in inspections])}
+
+<!-- Firmas Inspector + Supervisor (en tabla de inspección) -->
+<div style="margin-top:14px;padding:10px;background:#F9FAFB;border:1px solid #E5E7EB;">
+  <p style="margin:0 0 6px 0;font-size:9px;font-weight:bold;color:#374151;">FIRMAS DE INSPECCIÓN / 检查签字</p>
+  {"".join([sig_cell(f"sig_inspector_{idx}", ins.get("inspector_nombre","")) for idx, ins in enumerate(inspections)])}
+  {"".join([sig_cell(f"sig_supervisor_{idx}", ins.get("approved_by","") or ins.get("approved_by_name","")) for idx, ins in enumerate(inspections) if ins.get("approved_by_signature") or ins.get("approved_sig")])}
+</div>
 
 {ticket_html}
 
 </body></html>"""
+
+
+async def _build_report_html(record_id: str) -> tuple:
+    """Wrapper legacy — devuelve (html, placas) sin adjuntos."""
+    rec, inspections, ticket, placas = await _collect_report_data(record_id)
+    if not rec: return None, None
+    html = _build_email_html(rec, inspections, ticket, placas, {})
     return html, placas
 
 
 async def send_report_email(record_id: str, extra_emails: List[str] = []):
     """
-    Envía el reporte consolidado por correo.
-    Siempre incluye REPORT_RECIPIENT + los extra_emails opcionales.
+    Construye y envía el reporte consolidado COMPLETO:
+    - HTML con firmas e imágenes incrustadas via CID (MIME multipart/related)
+    - Fotos de caseta e inspección adjuntas como partes MIME separadas
+    - Firmas (base64) incrustadas directamente en el HTML via CID
     """
     smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
     smtp_port = int(os.environ.get("SMTP_PORT", "587"))
@@ -631,26 +753,85 @@ async def send_report_email(record_id: str, extra_emails: List[str] = []):
         logger.error("send_report_email: credenciales SMTP no configuradas")
         return False, "Credenciales SMTP no configuradas"
 
-    html, placas = await _build_report_html(record_id)
-    if not html:
+    rec, inspections, ticket, placas = await _collect_report_data(record_id)
+    if not rec:
         return False, "Registro no encontrado"
 
-    # Lista de destinatarios única
     all_recipients = list({default_recipient.lower()} | {e.strip().lower() for e in extra_emails if e.strip()})
 
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"Reporte CTPAT - Unidad {placas} - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-        msg["From"]    = smtp_user
-        msg["To"]      = ", ".join(all_recipients)
-        msg.attach(MIMEText(html, "html"))
+    entry      = rec.get("entry", {}) or {}
+    first_insp = inspections[0] if inspections else {}
 
+    # ── Recolectar todas las imágenes y asignar CID únicos ──
+    attachments: list[tuple[bytes, str, str]] = []  # (bytes, ext, cid)
+    cid_map: dict[str, str] = {}  # cid_key -> "cid:xxx"
+
+    def register_image(cid_key: str, data_url: str):
+        """Convierte base64 a bytes y registra en cid_map + attachments."""
+        if not data_url: return
+        if data_url.startswith("data:image"):
+            img_bytes, ext = _b64_to_bytes(data_url)
+            if img_bytes:
+                cid = f"{cid_key}_{uuid.uuid4().hex[:8]}@ctpat"
+                attachments.append((img_bytes, ext, cid))
+                cid_map[cid_key] = f"cid:{cid}"
+        elif data_url.startswith("http"):
+            # URL externa — referenciar directamente (no descargar)
+            cid_map[cid_key] = data_url
+
+    # Firmas
+    register_image("sig_operador",         entry.get("firma_operador", ""))
+    register_image("sig_almacenista",      (ticket or {}).get("firma_almacenista", ""))
+    register_image("sig_guardia_embarque", (ticket or {}).get("firma_guardia", ""))
+    for idx, ins in enumerate(inspections):
+        register_image(f"sig_inspector_{idx}", ins.get("inspector_firma", ""))
+        sup_sig = ins.get("approved_by_signature") or ins.get("approved_sig", "")
+        if sup_sig:
+            register_image(f"sig_supervisor_{idx}", sup_sig)
+
+    # Fotos de caseta
+    register_image("foto_frente",  entry.get("foto_frente_unidad", ""))
+    register_image("foto_atras",   entry.get("foto_atras_caja", ""))
+    register_image("foto_id",      entry.get("foto_id_chofer", ""))
+    register_image("foto_sello",   entry.get("foto_sello_vvtt", "") or entry.get("foto_sello", ""))
+    register_image("foto_cargo1",  entry.get("foto_carga_1", "") or entry.get("foto_interior_1", ""))
+    register_image("foto_cargo2",  entry.get("foto_carga_2", "") or entry.get("foto_interior_2", ""))
+    register_image("foto_cargo3",  entry.get("foto_carga_3", "") or entry.get("foto_interior_3", ""))
+
+    # Fotos de puntos de inspección
+    for p in first_insp.get("points", []):
+        if p.get("photo"):
+            register_image(f"pt_{p.get('number', 'x')}_photo", p["photo"])
+
+    # ── Construir HTML ──
+    html_body = _build_email_html(rec, inspections, ticket, placas, cid_map)
+
+    # ── Ensamblar mensaje MIME multipart/related ──
+    outer = MIMEMultipart("mixed")
+    outer["Subject"] = f"Reporte CTPAT · {placas} · {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+    outer["From"]    = smtp_user
+    outer["To"]      = ", ".join(all_recipients)
+
+    related = MIMEMultipart("related")
+    related.attach(MIMEText(html_body, "html", "utf-8"))
+
+    for img_bytes, ext, cid in attachments:
+        mime_img = MIMEImage(img_bytes, _subtype=ext)
+        mime_img.add_header("Content-ID", f"<{cid}>")
+        mime_img.add_header("Content-Disposition", "inline")
+        related.attach(mime_img)
+
+    outer.attach(related)
+
+    try:
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, lambda: _sync_send_email(smtp_host, smtp_port, smtp_user, smtp_pass, all_recipients, msg))
-        logger.info(f"Reporte enviado a {all_recipients} para unidad {placas}")
-        return True, f"Reporte enviado a {len(all_recipients)} destinatario(s)"
+        await loop.run_in_executor(None, lambda: _sync_send_email(
+            smtp_host, smtp_port, smtp_user, smtp_pass, all_recipients, outer
+        ))
+        logger.info(f"Reporte completo enviado a {all_recipients} · unidad {placas} · {len(attachments)} imágenes adjuntas")
+        return True, f"Reporte enviado a {len(all_recipients)} destinatario(s) con {len(attachments)} imágenes"
     except Exception as e:
-        logger.error(f"Error enviando email: {e}")
+        logger.error(f"Error enviando email completo: {e}")
         return False, str(e)
 
 
