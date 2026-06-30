@@ -148,31 +148,31 @@ class InspectionPoint(BaseModel):
     photo: str = ""
 
 class InspectionCreate(BaseModel):
-    inspection_type: str
-    compania_transportista: str
-    placas_unidad: str
-    numero_trailer: str
-    numero_precinto: str
-    sello_alta_seguridad: str
-    sello_verificado: bool
-    points: List[InspectionPoint]
-    actividad_sospechosa: str = ""
-    inspector_nombre: str
-    inspector_firma: str
-    record_id: Optional[str] = None
-
-class Inspection(BaseModel):
-    id: str
-    user_id: str
-    created_at: str
-    inspection_type: str
+    inspection_type: str = ""
     compania_transportista: str = ""
-    placas_unidad: str
+    placas_unidad: str = ""
     numero_trailer: str = ""
     numero_precinto: str = ""
     sello_alta_seguridad: str = ""
     sello_verificado: bool = False
-    status_general: str
+    points: List[InspectionPoint] = []
+    actividad_sospechosa: str = ""
+    inspector_nombre: str = ""
+    inspector_firma: str = ""
+    record_id: Optional[str] = None
+
+class Inspection(BaseModel):
+    id: str
+    user_id: str = ""
+    created_at: str = ""
+    inspection_type: str = ""
+    compania_transportista: str = ""
+    placas_unidad: str = ""
+    numero_trailer: str = ""
+    numero_precinto: str = ""
+    sello_alta_seguridad: str = ""
+    sello_verificado: bool = False
+    status_general: str = "bueno"
     approval_status: str = "pendiente"
     approval_note: str = ""
     approved_by: str = ""
@@ -180,10 +180,12 @@ class Inspection(BaseModel):
     approved_by_signature: str = ""
     approved_sig: str = ""
     approved_at: str = ""
-    inspector_nombre: str = "Admin"
+    inspector_nombre: str = ""
     inspector_firma: str = ""
     fecha_hora: str = ""
     actividad_sospechosa: str = ""
+    points: List[InspectionPoint] = []
+    record_id: Optional[str] = None
     points: List[InspectionPoint] = []
     record_id: Optional[str] = None
 

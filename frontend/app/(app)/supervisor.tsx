@@ -208,6 +208,13 @@ export default function Supervisor() {
     visible: false, recordId: '', plates: '',
   });
 
+  // Asegurar recarga al cambiar a pestaña inspección
+  React.useEffect(() => {
+    if (activeTab === 'inspeccion' && token) {
+      refreshInspections();
+    }
+  }, [activeTab, token, refreshInspections]);
+
   const fetchEverything = useCallback(async () => {
     if (!token) return;
     setLoading(true);

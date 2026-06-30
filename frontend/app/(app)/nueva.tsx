@@ -205,20 +205,6 @@ export default function InspeccionDashboard() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.topHeader}>
         <MainHeader title="NAF" subtitle={t('inspeccion').toUpperCase()} />
-        <Pressable
-          onPress={handleScanIA}
-          disabled={isScanning}
-          style={styles.scanIABtn}
-        >
-           {isScanning ? (
-             <ActivityIndicator size="small" color="#FFF" />
-           ) : (
-             <>
-               <Ionicons name="scan-circle" size={24} color="#FFF" />
-               <Text style={styles.scanIAText}>SCAN IA</Text>
-             </>
-           )}
-        </Pressable>
       </View>
 
       <View style={styles.headerActions}>
@@ -231,6 +217,22 @@ export default function InspeccionDashboard() {
             onChangeText={setQuery}
           />
         </View>
+
+        <Pressable
+          onPress={handleScanIA}
+          disabled={isScanning}
+          style={styles.scanActionBtn}
+        >
+           {isScanning ? (
+             <ActivityIndicator size="small" color={colors.brandPrimary} />
+           ) : (
+             <View style={styles.scanInner}>
+               <Ionicons name="scan-circle" size={24} color={colors.brandSecondary} />
+               <Text style={styles.scanActionText}>IA</Text>
+             </View>
+           )}
+        </Pressable>
+
         <Pressable style={styles.newBtn} onPress={() => handleStartInspection()}>
           <Ionicons name="add" size={24} color="#FFF" />
         </Pressable>
@@ -637,8 +639,19 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   headerActions: { flexDirection: 'row', padding: spacing.md, gap: spacing.sm, alignItems: 'center', marginTop: -10 },
-  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, height: 48 },
-  searchInput: { flex: 1, padding: spacing.sm, fontSize: 14, color: colors.onSurface },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.sm, height: 48 },
+  searchInput: { flex: 1, padding: spacing.xs, fontSize: 13, color: colors.onSurface },
+  scanActionBtn: {
+    height: 48,
+    paddingHorizontal: 8,
+    backgroundColor: colors.surface,
+    borderWidth: 2,
+    borderColor: colors.borderStrong,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scanInner: { alignItems: 'center' },
+  scanActionText: { fontSize: 8, fontWeight: '900', color: colors.brandSecondary, marginTop: -2 },
   newBtn: { width: 48, height: 48, backgroundColor: colors.brandPrimary, alignItems: 'center', justifyContent: 'center', borderRadius: 4 },
   filterRow: { flexDirection: 'row', paddingHorizontal: spacing.md, gap: 8, marginBottom: 5 },
   filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface },
@@ -652,30 +665,6 @@ const styles = StyleSheet.create({
   actionText: { fontWeight: '900', fontSize: 10, color: colors.brandPrimary },
   statusChip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 2 },
   statusChipText: { color: '#FFF', fontWeight: '900', fontSize: 9 },
-  scanIABtn: {
-    position: 'absolute',
-    right: 15,
-    top: 75,
-    backgroundColor: colors.brandSecondary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 6,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    zIndex: 10,
-  },
-  scanIAText: {
-    color: '#FFF',
-    fontWeight: '900',
-    fontSize: 10,
-    letterSpacing: 1,
-  },
   typeCard: { flexDirection: 'row', alignItems: 'center', padding: spacing.lg, gap: spacing.md, borderRadius: 4, minHeight: 80 },
   typeTitle: { color: '#FFF', fontWeight: '900', fontSize: 16 },
   progressHeader: { backgroundColor: colors.brandPrimary, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 10 },
