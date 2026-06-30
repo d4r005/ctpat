@@ -210,6 +210,10 @@ class ApprovalBody(BaseModel):
     name: str
     signature: str
 
+class SendReportEmailBody(BaseModel):
+    record_id: str
+    extra_emails: List[str] = []
+
 # ========== Ayudantes y Utilidades ==========
 
 def ensure_clean_image(b64: str) -> str:
@@ -466,6 +470,191 @@ async def delete_record(rec_id: str, u: Dict[str, Any] = Depends(get_current_use
     await db.vehicle_records.delete_one({"id": rec_id})
     return {"ok": True}
 
+
+# ========== Email: Reporte Consolidado ==========
+
+async def _build_report_html(record_id: str) -> tuple:
+    """
+    Construye el HTML del reporte consolidado para un record_id.
+    Devuelve (html: str, placas: str) o (None, None) si no se encuentra.
+    """
+    rec = await db.vehicle_records.find_one({"id": record_id}, {"_id": 0})
+    if not rec: return None, None
+
+    placas = rec.get("entry", {}).get("placas_unidad", "")
+
+    # Inspecciones vinculadas
+    insp_ids = list(set(rec.get("inspection_ids", [])))
+    if rec.get("inspection_id") and rec["inspection_id"] not in insp_ids:
+        insp_ids.append(rec["inspection_id"])
+
+    inspections = []
+    for iid in insp_ids:
+        insp = await db.inspections.find_one({"id": iid}, {"_id": 0})
+        if insp: inspections.append(insp)
+
+    if not inspections and placas:
+        pl = re.sub(r"[^A-Z0-9]", "", placas.upper())
+        if pl:
+            inspections = await db.inspections.find(
+                {"placas_unidad": {"$regex": pl, "$options": "i"}},
+                {"_id": 0}).sort("created_at", -1).to_list(10)
+
+    # Ticket
+    ticket = None
+    if rec.get("shipping_ticket_id"):
+        ticket = await db.shipping_tickets.find_one({"id": rec["shipping_ticket_id"]}, {"_id": 0})
+    if not ticket and placas:
+        pl = re.sub(r"[^A-Z0-9]", "", placas.upper())
+        if pl:
+            ticket = await db.shipping_tickets.find_one(
+                {"placas_unidad": {"$regex": pl, "$options": "i"}},
+                sort=[("created_at", -1)])
+            if ticket and "_id" in ticket: del ticket["_id"]
+
+    # ── HTML del reporte (inline, compatible con email) ──
+    entry = rec.get("entry", {})
+    ex    = rec.get("exit", {}) or {}
+    first_insp = inspections[0] if inspections else {}
+    created_at = rec.get("created_at", "")
+
+    def fmt_date(d):
+        try: return datetime.fromisoformat(d).strftime("%d/%m/%Y %H:%M") if d else "-"
+        except: return d or "-"
+
+    def sig_img(src_b64):
+        if src_b64 and src_b64.startswith("data:image"):
+            return f'<img src="{src_b64}" style="max-height:50px;max-width:140px;object-fit:contain;" />' 
+        return '<span style="color:#bbb;font-size:9px;">Sin firma</span>'
+
+    def photo_block(url, label):
+        if not url or not (url.startswith("data:image") or url.startswith("http")):
+            return ""
+        return f'<div style="display:inline-block;width:30%;margin:1%;vertical-align:top;text-align:center;"><p style="margin:0 0 3px 0;font-size:9px;font-weight:bold;color:#444;">{label}</p><img src="{url}" style="width:100%;height:90px;object-fit:cover;border:1px solid #ddd;" /></div>'
+
+    # Puntos de inspección
+    points_rows = ""
+    for p in first_insp.get("points", []):
+        estado = p.get("estado", "-")
+        color  = "#10B981" if estado == "bueno" else "#EF4444" if estado == "malo" else "#6B7280"
+        points_rows += f'<tr><td style="padding:3px 6px;border:1px solid #ddd;font-size:9px;">{p.get("number","")}</td><td style="padding:3px 6px;border:1px solid #ddd;font-size:9px;">{p.get("name","")}</td><td style="padding:3px 6px;border:1px solid #ddd;text-align:center;"><span style="color:{color};font-weight:bold;font-size:9px;">{estado.upper()}</span></td><td style="padding:3px 6px;border:1px solid #ddd;font-size:9px;">{p.get("comentarios","")}</td></tr>'
+
+    ticket_html = ""
+    if ticket:
+        ticket_html = f"""
+        <h2 style="background:#0A2540;color:#FFF;padding:8px 12px;font-size:12px;margin:20px 0 8px 0;">3. TICKET DE EMBARQUE</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:10px;">
+            <tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;width:35%;">Cliente</td><td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("cliente","")}</td><td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;width:35%;">Almacenista</td><td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("almacenista","")}</td></tr>
+            <tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Caja</td><td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("numero_caja","")}</td><td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Pallets</td><td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("numero_pallets","")}</td></tr>
+            <tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Sello Final</td><td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("numero_sello","")}</td><td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Guardia</td><td style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("nombre_guardia","")}</td></tr>
+            <tr><td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Observaciones</td><td colspan="3" style="padding:4px 8px;border:1px solid #ddd;">{ticket.get("observaciones","")}</td></tr>
+        </table>
+        <div style="margin-top:12px;display:flex;gap:20px;">
+            <div style="text-align:center;flex:1;"><div style="height:55px;display:flex;align-items:flex-end;justify-content:center;border-bottom:2px solid #0A2540;margin-bottom:3px;">{sig_img(ticket.get("firma_almacenista",""))}</div><p style="margin:0;font-size:8px;font-weight:bold;">ALMACENISTA</p></div>
+            <div style="text-align:center;flex:1;"><div style="height:55px;display:flex;align-items:flex-end;justify-content:center;border-bottom:2px solid #0A2540;margin-bottom:3px;">{sig_img(ticket.get("firma_guardia",""))}</div><p style="margin:0;font-size:8px;font-weight:bold;">GUARDIA</p></div>
+        </div>
+        """
+
+    fotos_html = "".join([
+        photo_block(entry.get("foto_frente_unidad"), "Frente"),
+        photo_block(entry.get("foto_atras_caja"), "Atrás"),
+        photo_block(entry.get("foto_id_chofer"), "ID Chofer"),
+    ])
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>body{{font-family:Arial,sans-serif;font-size:10px;color:#1a1a1a;margin:20px;}}
+table{{width:100%;border-collapse:collapse;}}
+h2{{font-size:12px;margin:16px 0 6px 0;}}
+</style></head><body>
+<div style="text-align:center;background:#0A2540;padding:14px;color:#FFF;margin-bottom:16px;">
+  <h1 style="margin:0;font-size:16px;letter-spacing:2px;">REPORTE CONSOLIDADO C-TPAT</h1>
+  <p style="margin:4px 0 0 0;font-size:10px;">NAF INDUSTRIES · Generado: {fmt_date(datetime.now(timezone.utc).isoformat())}</p>
+</div>
+
+<h2 style="background:#0A2540;color:#FFF;padding:8px 12px;font-size:12px;margin:0 0 8px 0;">1. REGISTRO DE CASETA</h2>
+<table><tr>
+  <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;width:25%;">Placas</td><td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("placas_unidad","")}</td>
+  <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;width:25%;">Chofer</td><td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("chofer_nombre","")}</td>
+</tr><tr>
+  <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Compañía</td><td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("compania_transporte","")}</td>
+  <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Tractor</td><td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("numero_tractor","")}</td>
+</tr><tr>
+  <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Caja</td><td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("numero_caja","")}</td>
+  <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Sello Entrada</td><td style="padding:4px 8px;border:1px solid #ddd;">{entry.get("sello_entrada","")}</td>
+</tr><tr>
+  <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Fecha Entrada</td><td style="padding:4px 8px;border:1px solid #ddd;">{fmt_date(entry.get("fecha_entrada") or created_at)}</td>
+  <td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold;">Fecha Salida</td><td style="padding:4px 8px;border:1px solid #ddd;">{fmt_date(ex.get("fecha_salida",""))}</td>
+</tr></table>
+<div style="margin-top:12px;text-align:center;">
+  <div style="display:inline-block;min-width:150px;text-align:center;">
+    <div style="height:55px;display:flex;align-items:flex-end;justify-content:center;border-bottom:2px solid #0A2540;margin-bottom:3px;">{sig_img(entry.get("firma_operador",""))}</div>
+    <p style="margin:0;font-size:8px;font-weight:bold;">OPERADOR / {entry.get("chofer_nombre","")}</p>
+  </div>
+</div>
+{f'<div style="margin-top:10px;">{fotos_html}</div>' if fotos_html else ""}
+
+<h2 style="background:#0A2540;color:#FFF;padding:8px 12px;font-size:12px;margin:20px 0 8px 0;">2. INSPECCIÓN C-TPAT</h2>
+{"".join([f'<p style="font-size:10px;margin:4px 0;"><b>Tipo:</b> {ins.get("inspection_type","")} &nbsp; <b>Inspector:</b> {ins.get("inspector_nombre","")} &nbsp; <b>Resultado:</b> <span style="color:{"#10B981" if ins.get("status_general")=="bueno" else "#EF4444"};font-weight:bold;">{ins.get("status_general","").upper()}</span></p>' for ins in inspections] or ['<p style="color:#888;">Sin inspecciones vinculadas</p>'])}
+<table style="margin-top:6px;">
+  <thead><tr style="background:#F3F4F6;"><th style="padding:4px 6px;border:1px solid #ddd;font-size:9px;">#</th><th style="padding:4px 6px;border:1px solid #ddd;font-size:9px;text-align:left;">Punto</th><th style="padding:4px 6px;border:1px solid #ddd;font-size:9px;">Estado</th><th style="padding:4px 6px;border:1px solid #ddd;font-size:9px;text-align:left;">Comentarios</th></tr></thead>
+  <tbody>{points_rows}</tbody>
+</table>
+{"".join([f'<div style="margin-top:8px;display:inline-block;min-width:150px;text-align:center;margin-right:20px;"><div style="height:55px;display:flex;align-items:flex-end;justify-content:center;border-bottom:2px solid #0A2540;margin-bottom:3px;">{sig_img(ins.get("inspector_firma",""))}</div><p style="margin:0;font-size:8px;font-weight:bold;">INSPECTOR / {ins.get("inspector_nombre","")}</p></div>' for ins in inspections])}
+
+{ticket_html}
+
+</body></html>"""
+    return html, placas
+
+
+async def send_report_email(record_id: str, extra_emails: List[str] = []):
+    """
+    Envía el reporte consolidado por correo.
+    Siempre incluye REPORT_RECIPIENT + los extra_emails opcionales.
+    """
+    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+    smtp_user = os.environ.get("SMTP_USER", "")
+    smtp_pass = os.environ.get("SMTP_PASS", "")
+    default_recipient = os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com")
+
+    if not smtp_user or not smtp_pass:
+        logger.error("send_report_email: credenciales SMTP no configuradas")
+        return False, "Credenciales SMTP no configuradas"
+
+    html, placas = await _build_report_html(record_id)
+    if not html:
+        return False, "Registro no encontrado"
+
+    # Lista de destinatarios única
+    all_recipients = list({default_recipient.lower()} | {e.strip().lower() for e in extra_emails if e.strip()})
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"Reporte CTPAT - Unidad {placas} - {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        msg["From"]    = smtp_user
+        msg["To"]      = ", ".join(all_recipients)
+        msg.attach(MIMEText(html, "html"))
+
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: _sync_send_email(smtp_host, smtp_port, smtp_user, smtp_pass, all_recipients, msg))
+        logger.info(f"Reporte enviado a {all_recipients} para unidad {placas}")
+        return True, f"Reporte enviado a {len(all_recipients)} destinatario(s)"
+    except Exception as e:
+        logger.error(f"Error enviando email: {e}")
+        return False, str(e)
+
+
+def _sync_send_email(host, port, user, password, recipients, msg):
+    """Envío SMTP síncrono (se ejecuta en executor)."""
+    import smtplib
+    with smtplib.SMTP(host, port) as s:
+        s.ehlo()
+        s.starttls()
+        s.login(user, password)
+        s.sendmail(user, recipients, msg.as_string())
+
 @api_router.patch("/vehicle-records/{rec_id}/exit", response_model=VehicleRecord)
 async def exit_record(rec_id: str, body: VehicleExit, u: Dict[str, Any] = Depends(get_current_user)):
     x = body.dict(); x["fecha_salida"] = datetime.now(timezone.utc).isoformat()
@@ -474,6 +663,15 @@ async def exit_record(rec_id: str, body: VehicleExit, u: Dict[str, Any] = Depend
     up = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
     # Sincronizar salida automáticamente al sheet
     if up: asyncio.create_task(sync_to_google_sheets("salida", up))
+    # Enviar reporte automático por correo si el proceso está completo
+    if up:
+        has_inspection = bool(up.get("inspection_id") or up.get("inspection_ids"))
+        has_ticket     = bool(up.get("shipping_ticket_id"))
+        if has_inspection and has_ticket:
+            asyncio.create_task(send_report_email(rec_id))
+            logger.info(f"Reporte automático disparado para record {rec_id}")
+        else:
+            logger.info(f"Salida registrada para {rec_id} pero proceso incompleto (insp={has_inspection}, ticket={has_ticket}) — email omitido")
     return VehicleRecord(**up)
 
 # --- Inspecciones ---
@@ -869,6 +1067,19 @@ async def _trigger_automatic_report(record_id: str):
         logger.error(f"Error triggering automatic report: {e}")
 
 # --- Reporte Consolidado ---
+
+@api_router.post("/report/send-email")
+async def send_email_endpoint(body: SendReportEmailBody, u: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Envía el reporte consolidado por correo electrónico.
+    Siempre envía a REPORT_RECIPIENT + extra_emails opcionales.
+    Requiere autenticación (cualquier usuario).
+    """
+    ok, msg = await send_report_email(body.record_id, body.extra_emails)
+    if not ok:
+        raise HTTPException(500, msg)
+    return {"ok": True, "message": msg}
+
 @api_router.get("/report/consolidated/{record_id}")
 async def get_consolidated_report(record_id: str, u: Dict[str, Any] = Depends(get_current_user)):
     """Devuelve todos los datos consolidados de un registro: caseta + inspecciones + ticket de embarque"""
