@@ -214,7 +214,7 @@ export default function InspeccionDashboard() {
              <ActivityIndicator size="small" color="#FFF" />
            ) : (
              <>
-               <Ionicons name="scan-circle" size={28} color="#FFF" />
+               <Ionicons name="scan-circle" size={24} color="#FFF" />
                <Text style={styles.scanIAText}>SCAN IA</Text>
              </>
            )}
@@ -612,7 +612,7 @@ const styles = StyleSheet.create({
   scanIABtn: {
     position: 'absolute',
     right: 15,
-    top: 15,
+    top: 75,
     backgroundColor: colors.brandSecondary,
     flexDirection: 'row',
     alignItems: 'center',
@@ -625,6 +625,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
+    zIndex: 10,
   },
   scanIAText: {
     color: '#FFF',

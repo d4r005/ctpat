@@ -50,9 +50,9 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack }) =>
         <Pressable onPress={() => setShowProfile(true)} style={styles.userContainer}>
           <View style={styles.avatarCircle}>
             <Text style={styles.avatarText}>{user?.name?.charAt(0).toUpperCase() || 'D'}</Text>
-            <View style={[styles.onlineIndicator, !isOnline && { backgroundColor: colors.muted }]} />
+            <View style={[styles.onlineIndicator, !isOnline && { backgroundColor: colors.error }]} />
           </View>
-          <Text style={[styles.onlineStatusText, !isOnline && { color: colors.muted }]}>● {isOnline ? t('online') : t('fuera_linea')}</Text>
+          <Text style={[styles.onlineStatusText, !isOnline && { color: colors.error }]}>● {isOnline ? t('online') : t('fuera_linea')}</Text>
         </Pressable>
       </View>
       <NotificationsPanel visible={showNotifs} onClose={() => setShowNotifs(false)} />

@@ -263,7 +263,8 @@ export default function Supervisor() {
         }));
       source = [...safeRecords, ...virtuals];
     } else if (activeTab === 'inspeccion') {
-      source = safeInsps;
+      // Mostrar todas las inspecciones cargadas en el contexto
+      source = Array.isArray(allInspections) ? allInspections : [];
     } else if (activeTab === 'embarque') {
       const pendingShipping = safeInsps
         .filter(i => !ticketPlates.has(normalize(i.placas_unidad)))
