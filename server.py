@@ -147,6 +147,12 @@ class InspectionPoint(BaseModel):
     comentarios: str = ""
     photo: str = ""
 
+class Measures(BaseModel):
+    alto: str = ""
+    ancho: str = ""
+    largo: str = ""
+    capacidad: str = ""
+
 class InspectionCreate(BaseModel):
     inspection_type: str
     compania_transportista: str
@@ -160,6 +166,11 @@ class InspectionCreate(BaseModel):
     inspector_nombre: str
     inspector_firma: str
     record_id: Optional[str] = None
+    # Nuevos campos
+    box_type: str = ""
+    measures: Optional[Measures] = None
+    guard_name: str = ""
+    guard_signature: str = ""
 
 class Inspection(BaseModel):
     id: str
@@ -186,6 +197,11 @@ class Inspection(BaseModel):
     actividad_sospechosa: str = ""
     points: List[InspectionPoint] = []
     record_id: Optional[str] = None
+    # Nuevos campos
+    box_type: str = ""
+    measures: Optional[Measures] = None
+    guard_name: str = ""
+    guard_signature: str = ""
 
 class ShippingTicketCreate(BaseModel):
     almacenista: str
@@ -760,6 +776,27 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
             )
             itype_label = "19 PUNTOS / 19点检查" if "19" in itype else "9 PUNTOS / 9点检查"
 
+            dimensions_rows = ""
+            if insp.get("box_type"):
+                m = insp.get("measures", {})
+                dimensions_rows = (
+                    th2("DIMENSIONES DE LA CAJA / 货箱尺寸")
+                    + tr("Tipo de Caja / 货箱类型", str(insp.get("box_type")) + '"')
+                    + tr("Alto / 高度", m.get("alto", "-"))
+                    + tr("Ancho / 宽度", m.get("ancho", "-"))
+                    + tr("Largo / 长度", m.get("largo", "-"))
+                    + tr("Capacidad / 容量", str(m.get("capacidad", "-")) + " m³")
+                )
+
+            guard_cell = ""
+            if insp.get("guard_name"):
+                guard_cell = (
+                    '<tr><td style="background:#f9fafb;vertical-align:middle;"><b>Guardia / 警卫</b></td><td>'
+                    + '<div class="sr"><span style="font-size:9px;font-weight:600;">' + str(insp.get("guard_name") or "-") + "</span>"
+                    + _inline_sig(insp.get("guard_signature", ""), "Firma Guardia / 警卫签字")
+                    + "</div></td></tr>"
+                )
+
             insp_blocks.append(
                 '<div style="margin-bottom:20px;border:1px solid #0A2540;padding:10px;">'
                 '<p style="font-weight:bold;background:#e8f0fe;padding:6px;margin:-10px -10px 10px;color:#0A2540;border-bottom:2px solid #0A2540;">'
@@ -770,10 +807,12 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
                 + tr("Compañía / 运输公司", insp.get("compania_transportista"))
                 + tr("Precinto / 铅封", (insp.get("numero_precinto") or "-") + " | Sello alta seg.: " + (insp.get("sello_alta_seguridad") or "-"))
                 + tr("Fecha Inspección / 检查日期", _sd(insp.get("fecha_hora") or insp.get("created_at")))
+                + dimensions_rows
                 + '<tr><td style="background:#f9fafb;vertical-align:middle;"><b>Inspector / 检查员</b></td><td>'
                 + '<div class="sr"><span style="font-size:9px;font-weight:600;">' + (insp.get("inspector_nombre") or "-") + "</span>"
                 + _inline_sig(insp.get("inspector_firma", ""), "Firma Inspector / 检查员签字")
                 + "</div></td></tr>"
+                + guard_cell
                 + '<tr><td style="background:#f9fafb;vertical-align:middle;"><b>Supervisor aprueba / 主管批准</b></td><td>' + sup_cell + "</td></tr>"
                 + "</table>"
                 "<table>"
@@ -945,6 +984,7 @@ async def create_inspection(body: InspectionCreate, background_tasks: Background
         "approval_status": "pendiente"
     })
     doc["inspector_firma"] = ensure_clean_image(doc.get("inspector_firma", ""))
+    doc["guard_signature"] = ensure_clean_image(doc.get("guard_signature", ""))
     for p in doc["points"]:
         if p.get("photo"): p["photo"] = ensure_clean_image(p["photo"])
     await db.inspections.insert_one(doc)
@@ -1002,6 +1042,8 @@ async def update_inspection(insp_id: str, body: Dict[str, Any], u: Dict[str, Any
     # Limpiar fotos
     if body.get("inspector_firma") and body["inspector_firma"].startswith("data:image"):
         body["inspector_firma"] = ensure_clean_image(body["inspector_firma"])
+    if body.get("guard_signature") and body["guard_signature"].startswith("data:image"):
+        body["guard_signature"] = ensure_clean_image(body["guard_signature"])
     if body.get("approved_by_signature") and body["approved_by_signature"].startswith("data:image"):
         body["approved_by_signature"] = ensure_clean_image(body["approved_by_signature"])
     if "points" in body:
