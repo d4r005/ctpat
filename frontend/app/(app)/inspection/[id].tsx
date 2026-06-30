@@ -542,7 +542,7 @@ export default function InspectionDetail() {
               </>
             ) : (
               <View style={[styles.firmaWrap, { borderStyle: 'dashed', borderWidth: 1, height: 100, justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={{ color: colors.muted }}>{t('sin_foto')}</Text>
+                <Text style={{ color: colors.muted }}>{t('sin_firma')}</Text>
               </View>
             )}
 
@@ -551,14 +551,14 @@ export default function InspectionDetail() {
                 style={[styles.actionBtn, { backgroundColor: colors.brandPrimary, marginTop: 8 }]}
                 onPress={() => {
                   setSigModalConfig({
-                    title: t('editar_firma_operador'),
+                    title: t('editar_firma_inspector'),
                     onSave: (sig) => setEditData({ ...editData, inspector_firma: sig })
                   });
                   setShowSigModal(true);
                 }}
               >
                 <Ionicons name="brush" size={20} color="#FFF" />
-                <Text style={styles.actionBtnText}>{t('cambiar_firma_operador')}</Text>
+                <Text style={styles.actionBtnText}>{t('cambiar_firma_inspector')}</Text>
               </Pressable>
             )}
             <Text style={[styles.firmaLabel, { marginTop: 4 }]}>{t('firma_inspector').toUpperCase()}</Text>
@@ -592,7 +592,7 @@ export default function InspectionDetail() {
                   </>
                 ) : (
                   <View style={[styles.firmaWrap, { borderStyle: 'dashed', borderWidth: 1, height: 100, justifyContent: 'center', alignItems: 'center' }]}>
-                    <Text style={{ color: colors.muted }}>{t('sin_foto')}</Text>
+                    <Text style={{ color: colors.muted }}>{t('sin_firma')}</Text>
                   </View>
                 )}
 
@@ -601,14 +601,14 @@ export default function InspectionDetail() {
                     style={[styles.actionBtn, { backgroundColor: colors.brandPrimary, marginTop: 8 }]}
                     onPress={() => {
                       setSigModalConfig({
-                        title: t('editar_firma_operador'),
+                        title: t('editar_firma_supervisor'),
                         onSave: (sig) => setEditData({ ...editData, approved_by_signature: sig })
                       });
                       setShowSigModal(true);
                     }}
                   >
                     <Ionicons name="brush" size={20} color="#FFF" />
-                    <Text style={styles.actionBtnText}>{t('cambiar_firma_operador')}</Text>
+                    <Text style={styles.actionBtnText}>{t('cambiar_firma_supervisor')}</Text>
                   </Pressable>
                 )}
                 <Text style={[styles.firmaLabel, { color: (isEditing ? (editData.approval_status || insp.approval_status) : insp.approval_status) === 'aprobada' ? colors.success : colors.error, marginTop: 4 }]}>{t('firma_autorizacion_caps')}</Text>
@@ -664,7 +664,7 @@ function SignatureModal({ onClose, onSave, title, t }: { onClose: () => void; on
             confirmText={t('guardar')}
             webStyle={style}
             autoClear={false}
-            imageType="image/jpeg"
+            imageType="image/png"
           />
         </View>
         <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>

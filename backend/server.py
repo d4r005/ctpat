@@ -237,7 +237,16 @@ def ensure_clean_image(b64: str) -> str:
     if not b64 or not b64.startswith("data:image"): return b64
     try:
         header, data = b64.split(",", 1)
-        img = Image.open(io.BytesIO(base64.b64decode(data))).convert("RGB")
+        img = Image.open(io.BytesIO(base64.b64decode(data)))
+        if img.mode in ("RGBA", "P"):
+            bg = Image.new("RGB", img.size, (255, 255, 255))
+            if img.mode == "RGBA":
+                bg.paste(img, mask=img.split()[3])
+            else:
+                bg.paste(img)
+            img = bg
+        else:
+            img = img.convert("RGB")
         img.thumbnail((1200, 1200))
         out = io.BytesIO()
         img.save(out, format="JPEG", quality=75)
@@ -248,7 +257,16 @@ def add_watermark(b64: str) -> str:
     if not b64 or not b64.startswith("data:image"): return b64
     try:
         header, data = b64.split(",", 1)
-        img = Image.open(io.BytesIO(base64.b64decode(data))).convert("RGB")
+        img = Image.open(io.BytesIO(base64.b64decode(data)))
+        if img.mode in ("RGBA", "P"):
+            bg = Image.new("RGB", img.size, (255, 255, 255))
+            if img.mode == "RGBA":
+                bg.paste(img, mask=img.split()[3])
+            else:
+                bg.paste(img)
+            img = bg
+        else:
+            img = img.convert("RGB")
         draw = ImageDraw.Draw(img)
         txt = f"NAF - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         draw.text((10, 10), txt, fill=(255, 0, 0))
