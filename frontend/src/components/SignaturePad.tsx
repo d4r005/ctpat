@@ -1,6 +1,12 @@
 import React, { forwardRef, useImperativeHandle, useRef } from 'react';
-import { View, Platform } from 'react-native';
+import { View, Platform, StyleSheet } from 'react-native';
 import SignatureScreen from 'react-native-signature-canvas';
+
+// Importación condicional para Web
+let ReactSignatureCanvas: any;
+if (Platform.OS === 'web') {
+  ReactSignatureCanvas = require('react-signature-canvas').default;
+}
 
 interface SignaturePadProps {
   onOK: (signature: string) => void;
@@ -14,59 +20,75 @@ interface SignaturePadProps {
 
 export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
   const signatureRef = useRef<any>(null);
+  const webCanvasRef = useRef<any>(null);
 
   useImperativeHandle(ref, () => ({
     readSignature: () => {
-      signatureRef.current?.readSignature();
+      if (Platform.OS === 'web' && webCanvasRef.current) {
+        const sig = webCanvasRef.current.getTrimmedCanvas().toDataURL(props.imageType || 'image/png');
+        props.onOK(sig);
+      } else {
+        signatureRef.current?.readSignature();
+      }
     },
     clear: () => {
-      signatureRef.current?.clearSignature();
+      if (Platform.OS === 'web' && webCanvasRef.current) {
+        webCanvasRef.current.clear();
+      } else {
+        signatureRef.current?.clearSignature();
+      }
     }
   }));
 
-  const handleOK = (signature: string) => {
-    props.onOK(signature);
-  };
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.webContainer}>
+        <ReactSignatureCanvas
+          ref={webCanvasRef}
+          penColor="#000"
+          canvasProps={{
+            className: 'sigCanvas',
+            style: {
+              width: '100%',
+              height: '100%',
+              minHeight: '280px',
+              border: '2px solid #09090B',
+              backgroundColor: '#fff'
+            }
+          }}
+        />
+      </View>
+    );
+  }
 
-  // Estilo optimizado para evitar problemas de scroll y carga en web/móvil
   const defaultWebStyle = `
-    .m-signature-pad {
-      box-shadow: none;
-      border: none;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-    }
-    .m-signature-pad--body {
-      border: 2px solid #09090B;
-      bottom: 0px;
-    }
-    .m-signature-pad--footer { display: none !important; }
-    body, html {
-      background-color: transparent;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-    }
+    .m-signature-pad { box-shadow: none; border: none; }
+    .m-signature-pad--body { border: 2px solid #09090B; }
+    .m-signature-pad--footer { display: none; margin: 0px; }
+    body, html { background-color: transparent; }
   `;
 
   return (
-    <View style={{ height: 300, width: '100%', overflow: 'hidden', backgroundColor: '#fff' }}>
+    <View style={{ flex: 1, minHeight: 280 }}>
       <SignatureScreen
         ref={signatureRef}
-        onOK={handleOK}
+        onOK={props.onOK}
         descriptionText={props.descriptionText || 'Firme aquí'}
-        clearText={props.clearText || 'Borrar'}
-        confirmText={props.confirmText || 'Guardar'}
         webStyle={props.webStyle || defaultWebStyle}
         autoClear={props.autoClear ?? false}
         imageType={props.imageType || 'image/png'}
-        androidHardwareAccelerationDisabled={true}
-        startInLoadingState={false}
       />
     </View>
   );
+});
+
+const styles = StyleSheet.create({
+  webContainer: {
+    flex: 1,
+    width: '100%',
+    height: 300,
+    backgroundColor: '#fff',
+  }
 });
 
 SignaturePad.displayName = 'SignaturePad';
