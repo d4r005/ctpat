@@ -939,23 +939,44 @@ async def _build_report_html(record_id: str) -> tuple:
     return html, placas
 
 
+def _sync_send_via_gmail_api(sender_email: str, msg) -> dict:
+    """
+    Envía un mensaje MIME ya construido usando la API de Gmail (HTTPS, puerto 443)
+    en lugar de SMTP crudo. HuggingFace Spaces bloquea a nivel de red los puertos
+    SMTP salientes (25/465/587 -> "Network is unreachable"/timeout), pero el
+    puerto 443 (HTTPS) sí funciona, así que usamos la API REST de Gmail.
+    Requiere GMAIL_ACCESS_TOKEN en el entorno (inyectado periódicamente vía
+    /api/admin/refresh-gmail-token, igual que GOOGLEDRIVE_ACCESS_TOKEN).
+    """
+    token = os.environ.get("GMAIL_ACCESS_TOKEN", "")
+    if not token:
+        raise RuntimeError("GMAIL_ACCESS_TOKEN no configurado")
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    resp = requests.post(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        json={"raw": raw},
+        timeout=30,
+    )
+    if resp.status_code >= 300:
+        raise RuntimeError(f"Gmail API error {resp.status_code}: {resp.text[:300]}")
+    return resp.json()
+
+
 async def send_report_email(record_id: str, extra_emails: List[str] = []):
     """
-    Envía el reporte consolidado COMPLETO por correo.
+    Envía el reporte consolidado COMPLETO por correo usando la API de Gmail.
     HTML con todas las secciones, fotos y firmas en base64 inline — igual al PDF.
     Se ejecuta como tarea async nativa de FastAPI BackgroundTasks (mismo event loop
     que el resto de la app), evitando el error "Future attached to a different loop"
     que ocurría al crear un event loop nuevo dentro de un hilo del threadpool.
     """
-    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-    smtp_user = os.environ.get("SMTP_USER", "")
-    smtp_pass = os.environ.get("SMTP_PASS", "")
+    sender_email = os.environ.get("SMTP_USER", "d4r005@gmail.com")
     default_recipient = os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com")
 
-    if not smtp_user or not smtp_pass:
-        logger.error("send_report_email: credenciales SMTP no configuradas")
-        return False, "Credenciales SMTP no configuradas"
+    if not os.environ.get("GMAIL_ACCESS_TOKEN"):
+        logger.error("send_report_email: GMAIL_ACCESS_TOKEN no configurado")
+        return False, "Token de Gmail no configurado"
 
     try:
         rec, inspections, ticket, placas = await _collect_report_data(record_id)
@@ -970,46 +991,19 @@ async def send_report_email(record_id: str, extra_emails: List[str] = []):
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = "Reporte CTPAT  " + placas + "  " + datetime.now().strftime("%d/%m/%Y %H:%M")
-    msg["From"]    = smtp_user
+    msg["From"]    = sender_email
     msg["To"]      = ", ".join(all_recipients)
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:
-        # Envío SMTP es bloqueante (I/O de red) -> se delega a un hilo para no
-        # congelar el event loop principal, pero sin crear un loop nuevo.
-        await asyncio.to_thread(_sync_send_email, smtp_host, smtp_port, smtp_user, smtp_pass, all_recipients, msg)
+        # La llamada HTTPS a la API de Gmail es bloqueante -> se delega a un hilo
+        # para no congelar el event loop principal.
+        await asyncio.to_thread(_sync_send_via_gmail_api, sender_email, msg)
         logger.info("Reporte completo enviado a " + str(all_recipients) + " unidad " + placas)
         return True, "Reporte completo enviado a " + str(len(all_recipients)) + " destinatario(s)"
     except Exception as e:
         logger.error("Error enviando email: " + str(e))
         return False, str(e)
-
-
-def _sync_send_email(host, port, user, password, recipients, msg):
-    """
-    Envío SMTP síncrono (se ejecuta en un hilo aparte, no en el event loop).
-    Fuerza resolución IPv4 porque el contenedor de HuggingFace Spaces no tiene
-    ruta de salida IPv6, y smtp.gmail.com puede resolver a una IP v6 que
-    produce "Network is unreachable" (errno 101).
-    """
-    import smtplib
-    import socket
-
-    _orig_getaddrinfo = socket.getaddrinfo
-    def _ipv4_only_getaddrinfo(*args, **kwargs):
-        results = _orig_getaddrinfo(*args, **kwargs)
-        ipv4 = [r for r in results if r[0] == socket.AF_INET]
-        return ipv4 if ipv4 else results
-
-    socket.getaddrinfo = _ipv4_only_getaddrinfo
-    try:
-        with smtplib.SMTP(host, port, timeout=30) as s:
-            s.ehlo()
-            s.starttls()
-            s.login(user, password)
-            s.sendmail(user, recipients, msg.as_string())
-    finally:
-        socket.getaddrinfo = _orig_getaddrinfo
 
 @api_router.patch("/vehicle-records/{rec_id}/exit", response_model=VehicleRecord)
 async def exit_record(rec_id: str, body: VehicleExit, background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
@@ -1843,6 +1837,22 @@ async def refresh_sheets_token(body: Dict[str, Any], u: Dict[str, Any] = Depends
     logger.info("GOOGLEDRIVE_ACCESS_TOKEN actualizado correctamente")
     return {"ok": True, "message": "Token inyectado correctamente"}
 
+
+@api_router.post("/admin/refresh-gmail-token")
+async def refresh_gmail_token(body: Dict[str, Any], u: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Permite inyectar el access token de Gmail al entorno del servidor.
+    Se llama desde el sandbox (que sí tiene el token OAuth fresco, auto-refrescado)
+    para poder enviar correos vía la API de Gmail (HTTPS), ya que HuggingFace
+    Spaces bloquea los puertos SMTP salientes.
+    """
+    if not is_admin(u): raise HTTPException(403)
+    token = body.get("token", "").strip()
+    if not token: raise HTTPException(400, "Token requerido")
+    os.environ["GMAIL_ACCESS_TOKEN"] = token
+    logger.info("GMAIL_ACCESS_TOKEN actualizado correctamente")
+    return {"ok": True, "message": "Token inyectado correctamente"}
+
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.add_middleware(GZipMiddleware)
@@ -1850,23 +1860,21 @@ app.add_middleware(GZipMiddleware)
 @app.on_event("startup")
 async def startup_event():
     logger.info("SRIUC Backend Iniciando...")
-    # Prueba de vida: Enviar un mini-correo al admin indicando que el servidor reinició
+    # Prueba de vida: Enviar un mini-correo al admin indicando que el servidor reinició.
+    # Usa la API de Gmail (HTTPS) — SMTP directo no funciona en HuggingFace Spaces
+    # porque el contenedor bloquea los puertos salientes 25/465/587.
     try:
-        from email.mime.text import MIMEText
-        import smtplib
-        user = os.environ.get("SMTP_USER")
-        passw = os.environ.get("SMTP_PASS")
-        dest = os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com")
-        if user and passw:
+        if os.environ.get("GMAIL_ACCESS_TOKEN"):
+            sender_email = os.environ.get("SMTP_USER", "d4r005@gmail.com")
+            dest = os.environ.get("REPORT_RECIPIENT", "d.trujillo@brancoindustries.com")
             msg = MIMEText(f"El servidor SRIUC en Hugging Face ha reiniciado correctamente a las {datetime.now().isoformat()}. Las tareas de background están activas.")
             msg["Subject"] = "SISTEMA ONLINE - SRIUC"
-            msg["From"] = user
+            msg["From"] = sender_email
             msg["To"] = dest
-            with smtplib.SMTP(os.environ.get("SMTP_HOST", "smtp.gmail.com"), 587) as s:
-                s.starttls()
-                s.login(user, passw)
-                s.sendmail(user, [dest], msg.as_string())
-            logger.info("Correo de notificación de inicio enviado.")
+            await asyncio.to_thread(_sync_send_via_gmail_api, sender_email, msg)
+            logger.info("Correo de notificación de inicio enviado (Gmail API).")
+        else:
+            logger.info("Notificación de inicio omitida: GMAIL_ACCESS_TOKEN aún no configurado.")
     except Exception as e:
         logger.error(f"Error enviando notificación de inicio: {e}")
 
