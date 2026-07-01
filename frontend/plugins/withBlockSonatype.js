@@ -1,33 +1,30 @@
-const { withSettingsGradle } = require('@expo/config-plugins');
+const { withAppBuildGradle } = require('@expo/config-plugins');
 
 /**
- * Plugin que bloquea el repositorio de snapshots de Sonatype
- * que causa timeouts en la compilación de expo-camera (cameraview).
+ * Bloquea com.google.android:cameraview agregando un sustituto local
+ * en el build.gradle de la app, evitando que Gradle consulte Sonatype.
  */
 module.exports = function withBlockSonatype(config) {
-  return withSettingsGradle(config, (mod) => {
+  return withAppBuildGradle(config, (mod) => {
     const contents = mod.modResults.contents;
-    
-    // Si ya tiene la modificación, no la dupliquemos
-    if (contents.includes('// Block Sonatype snapshots')) {
+
+    if (contents.includes('// Fix cameraview sonatype')) {
       return mod;
     }
-    
-    // Agregar al inicio del settings.gradle (antes del primer bloque)
+
+    // Agregar resolutionStrategy al final del bloque android {}
     const patch = `
-// Block Sonatype snapshots — evita timeouts en cameraview
-gradle.beforeSettings { settings ->
-  settings.pluginManagement {
-    repositories {
-      gradlePluginPortal()
-      google()
-      mavenCentral()
-      mavenLocal()
+
+// Fix cameraview sonatype — forzar versión disponible en mavenCentral
+configurations.all {
+    resolutionStrategy {
+        force 'androidx.camera:camera-core:1.3.4'
     }
-  }
+    exclude group: 'com.google.android', module: 'cameraview'
 }
 `;
-    mod.modResults.contents = patch + contents;
+    // Insertar antes del último cierre del archivo
+    mod.modResults.contents = contents.trimEnd() + patch;
     return mod;
   });
 };
