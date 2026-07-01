@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "frontend",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -20,21 +19,10 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0A2540"
       },
-      "edgeToEdgeEnabled": false,
-      "statusBar": {
-        "barStyle": "dark-content",
-        "backgroundColor": "#F4F4F5",
-        "translucent": false
-      },
-      "navigationBar": {
-        "backgroundColor": "#FFFFFF",
-        "barStyle": "dark-content"
-      },
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
-      ],
-      "usesCleartextTraffic": true
+      ]
     },
     "web": {
       "bundler": "metro",
