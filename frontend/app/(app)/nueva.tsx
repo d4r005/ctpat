@@ -75,11 +75,21 @@ export default function InspeccionDashboard() {
           else Alert.alert('Error', 'No se pudo procesar el documento físico.');
         } else {
           // Iniciar inspección con los datos extraídos
+          const hasMeasures = res.measures && (res.measures.alto || res.measures.ancho || res.measures.largo || res.measures.capacidad);
+
           setFormData({
             ...formData,
             placas: sanitizePlate(res.placas_unidad || ''),
             compania: (res.compania_transportista || '').toUpperCase(),
             status_general: res.status_general || 'bueno',
+            ...(hasMeasures ? {
+              measures: {
+                alto: (res.measures.alto || '').toString(),
+                ancho: (res.measures.ancho || '').toString(),
+                largo: (res.measures.largo || '').toString(),
+                capacidad: (res.measures.capacidad || '').toString(),
+              }
+            } : {}),
           });
 
           if (res.points && Array.isArray(res.points)) {
@@ -87,9 +97,10 @@ export default function InspeccionDashboard() {
             setFormData(prev => ({ ...prev, _ai_points: res.points }));
           }
 
-          setSelectedType('19_puntos'); // Por defecto para escaneo
+          // Si el documento traía medidas de la unidad, se precargan y se abre directo en el paso de medidas (9 puntos contenedor)
+          setSelectedType(hasMeasures ? '9_puntos_contenedor' : '19_puntos');
           setShowForm(true);
-          Alert.alert('Escaneo Exitoso', 'Datos de inspección recuperados.');
+          Alert.alert('Escaneo Exitoso', hasMeasures ? 'Datos de inspección y medidas de la unidad recuperados.' : 'Datos de inspección recuperados.');
         }
       }
     } catch (e: any) {
