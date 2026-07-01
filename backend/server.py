@@ -1443,6 +1443,30 @@ async def _trigger_automatic_report(record_id: str):
 
 # --- Reporte Consolidado ---
 
+@api_router.get("/debug/smtp-ports")
+async def debug_smtp_ports(u: Dict[str, Any] = Depends(get_current_user)):
+    """Diagnostico temporal: prueba conectividad TCP saliente a distintos puertos SMTP."""
+    import socket, time
+    host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    results = {}
+    for port in [587, 465, 25]:
+        t0 = time.time()
+        try:
+            s = socket.create_connection((host, port), timeout=8)
+            s.close()
+            results[port] = {"ok": True, "elapsed": round(time.time() - t0, 2)}
+        except Exception as e:
+            results[port] = {"ok": False, "error": str(e), "elapsed": round(time.time() - t0, 2)}
+    # Tambien probar una conexion HTTPS de control (deberia funcionar siempre)
+    try:
+        t0 = time.time()
+        s = socket.create_connection(("resend.com", 443), timeout=8)
+        s.close()
+        results["https_443_control"] = {"ok": True, "elapsed": round(time.time() - t0, 2)}
+    except Exception as e:
+        results["https_443_control"] = {"ok": False, "error": str(e)}
+    return {"host": host, "results": results}
+
 @api_router.post("/report/send-email")
 async def send_email_endpoint(body: SendReportEmailBody, background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
     """
