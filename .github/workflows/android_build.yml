@@ -44,23 +44,21 @@ jobs:
 
       - name: Symlink node_modules para Gradle
         run: |
-          # settings.gradle usa workingDir(rootDir) = frontend/android/
-          # pero node_modules están en frontend/ — symlink resuelve el problema
           ln -s ${{ github.workspace }}/frontend/node_modules \
                 ${{ github.workspace }}/frontend/android/node_modules
-          echo "Symlink creado: frontend/android/node_modules -> frontend/node_modules"
+          echo "Symlink creado"
           ls -la ${{ github.workspace }}/frontend/android/node_modules | head -5
 
-      - name: Build Release APK
+      - name: Build Debug APK (firmado con debug key, sin proguard)
         working-directory: frontend/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease -x lint --no-daemon \
+          ./gradlew assembleDebug -x lint --no-daemon \
             -Dorg.gradle.project.reactNativeArchitectures="arm64-v8a"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: SRIUC-Final-APK
-          path: frontend/android/app/build/outputs/apk/release/app-release.apk
+          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
