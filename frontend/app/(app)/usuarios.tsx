@@ -161,10 +161,10 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
                   <Text style={[styles.userName, nested && { fontSize: 12 }]}>{item.name}</Text>
                   {item.role === 'admin' && (
-                    <View style={[styles.roleChip, { backgroundColor: colors.info }]}><Text style={styles.roleChipText}>ADMIN</Text></View>
+                    <View style={[styles.roleChip, { backgroundColor: colors.info }]}><Text style={styles.roleChipText}>{t('rol_admin').toUpperCase()}</Text></View>
                   )}
                   {item.role === 'supervisor' && (
-                    <View style={styles.roleChip}><Text style={styles.roleChipText}>SUPER</Text></View>
+                    <View style={styles.roleChip}><Text style={styles.roleChipText}>{t('rol_super').toUpperCase()}</Text></View>
                   )}
                   {!item.active && (
                     <View style={[styles.roleChip, { backgroundColor: colors.error }]}>

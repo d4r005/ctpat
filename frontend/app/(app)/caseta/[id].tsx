@@ -131,7 +131,7 @@ export default function CasetaDetail() {
           text: t('camara'),
           onPress: async () => {
             const result = await ImagePicker.launchCameraAsync({
-              mediaTypes: ['images'],
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
               quality: 0.3,
               base64: true,
             });
@@ -146,7 +146,7 @@ export default function CasetaDetail() {
           text: t('galeria'),
           onPress: async () => {
             const result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ['images'],
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
               quality: 0.3,
               base64: true,
             });
@@ -251,7 +251,7 @@ export default function CasetaDetail() {
               </View>
 
               <View style={styles.subSection}>
-                <Text style={styles.subTitle}>CAJA</Text>
+                <Text style={styles.subTitle}>{t('caja').toUpperCase()}</Text>
                 <View style={styles.grid}>
                   <EditableItem label="NUMERO CAJA" value={entryForm.numero_caja} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_caja: v}) : null} />
                   <EditableItem label="SELLO" value={entryForm.sello_entrada} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, sello_entrada: v}) : null} />
@@ -260,7 +260,7 @@ export default function CasetaDetail() {
 
               {isFull && (
                 <View style={styles.subSection}>
-                  <Text style={styles.subTitle}>CAJA</Text>
+                  <Text style={styles.subTitle}>{t('caja').toUpperCase()}</Text>
                   <View style={styles.grid}>
                     <EditableItem label="NUMERO CAJA" value={entryForm.numero_caja_2} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_caja_2: v}) : null} />
                     <EditableItem label="SELLO" value={entryForm.sello_entrada_2} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, sello_entrada_2: v}) : null} />
@@ -270,17 +270,17 @@ export default function CasetaDetail() {
 
               {/* DATOS ADICIONALES — frecuentemente vacíos en registros históricos reconstruidos */}
               <View style={styles.subSection}>
-                <Text style={styles.subTitle}>DATOS ADICIONALES</Text>
+                <Text style={styles.subTitle}>{t('datos_adicionales').toUpperCase()}</Text>
                 <View style={styles.grid}>
-                  <EditableItem label="DESTINO" value={entryForm.destino} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, destino: v}) : null} />
-                  <EditableItem label="CONDICIÓN DE CARGA" value={entryForm.condicion_carga} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, condicion_carga: v}) : null} />
-                  <EditableItem label="NUMERO DE GUIA" value={entryForm.numero_guia} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_guia: v}) : null} />
-                  <EditableItem label="NUMERO REQUERIMIENTO" value={entryForm.numero_requerimiento} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_requerimiento: v}) : null} />
-                  <EditableItem label="ORDEN DE COMPRA" value={entryForm.numero_orden_compra} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_orden_compra: v}) : null} />
-                  <EditableItem label="LICENCIA CONDUCTOR" value={entryForm.licencia_conductor} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, licencia_conductor: v}) : null} />
+                  <EditableItem label={t('destino_caps')} value={entryForm.destino} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, destino: v}) : null} />
+                  <EditableItem label={t('condicion_carga').toUpperCase()} value={entryForm.condicion_carga} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, condicion_carga: v}) : null} />
+                  <EditableItem label={t('numero_guia').toUpperCase()} value={entryForm.numero_guia} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_guia: v}) : null} />
+                  <EditableItem label={t('numero_requerimiento').toUpperCase()} value={entryForm.numero_requerimiento} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_requerimiento: v}) : null} />
+                  <EditableItem label={t('orden_compra').toUpperCase()} value={entryForm.numero_orden_compra} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_orden_compra: v}) : null} />
+                  <EditableItem label={t('licencia_conductor').toUpperCase()} value={entryForm.licencia_conductor} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, licencia_conductor: v}) : null} />
                 </View>
                 <View style={{ marginTop: spacing.sm }}>
-                  <Text style={styles.infoLabel}>DESCRIPCIÓN DE CARGA</Text>
+                  <Text style={styles.infoLabel}>{t('descripcion_carga').toUpperCase()}</Text>
                   {editEntry ? (
                     <TextInput
                       style={[styles.input, { minHeight: 60, textAlignVertical: 'top' }]}
@@ -397,7 +397,7 @@ export default function CasetaDetail() {
                   style={styles.input}
                   value={exitData.guardia_salida_nombre}
                   onChangeText={(v) => setExitData({ ...exitData, guardia_salida_nombre: v.toUpperCase() })}
-                  placeholder="NOMBRE DEL GUARDIA"
+                  placeholder={t('nombre_guardia').toUpperCase()}
                 />
 
                 <Text style={styles.fieldLabel}>{t('condicion_salida_label')} *</Text>
@@ -470,7 +470,7 @@ export default function CasetaDetail() {
       {showSig && (
         <View style={styles.modal}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>FIRMA</Text>
+            <Text style={styles.modalTitle}>{t('firma').toUpperCase()}</Text>
             <View style={styles.sigContainer}>
               <Signature
                 ref={sigRef}

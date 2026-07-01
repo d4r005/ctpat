@@ -56,7 +56,7 @@ export default function EmbarqueNuevo() {
     try {
       // launchCameraAsync ya solicita el permiso de cámara internamente.
       const r = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.4,
         base64: true,
       });
@@ -97,12 +97,12 @@ export default function EmbarqueNuevo() {
       if (mode === 'camera') {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) { alert(t('acceso_restringido')); return; }
-        const r = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.2, base64: true });
+        const r = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.2, base64: true });
         if (!r.canceled && r.assets[0]?.base64) set(field, `data:image/jpeg;base64,${r.assets[0].base64}`);
       } else if (mode === 'gallery') {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) { alert(t('acceso_restringido')); return; }
-        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.2, base64: true });
+        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.2, base64: true });
         if (!r.canceled && r.assets[0]?.base64) set(field, `data:image/jpeg;base64,${r.assets[0].base64}`);
       } else {
         Alert.prompt(
@@ -186,7 +186,7 @@ export default function EmbarqueNuevo() {
           </Section>
 
           <Section title="MATERIAL A CARGA">
-            <Text style={styles.label}>CLIENTE *</Text>
+            <Text style={styles.label}>{t('cliente').toUpperCase()} *</Text>
             <View style={[styles.optionsRow, { marginBottom: spacing.md }]}>
               {['FD', 'EVF', 'LALUR', 'OTRO'].map(c => (
                 <Pressable
@@ -379,7 +379,7 @@ function PhotoField({ label, value, onCamera, onGallery, onUrl, onRemove, t }: a
           </View>
           <Pressable onPress={onUrl} style={[styles.photoBtn, { backgroundColor: colors.info, width: '100%', marginTop: 0 }]}>
             <Ionicons name="link" size={20} color="#FFF" />
-            <Text style={[styles.photoBtnText, { color: '#FFF' }]}>URL (DRIVE/WEB)</Text>
+            <Text style={[styles.photoBtnText, { color: '#FFF' }]}>{t('url_drive_web').toUpperCase()}</Text>
           </Pressable>
         </View>
       )}

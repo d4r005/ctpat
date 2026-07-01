@@ -48,7 +48,7 @@ export default function InspeccionDashboard() {
     try {
       // launchCameraAsync ya solicita el permiso de cámara internamente.
       const r = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.4,
         base64: true,
       });
@@ -432,7 +432,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
           onPress: async () => {
             const perm = await ImagePicker.requestCameraPermissionsAsync();
             if (!perm.granted) { alert(t('acceso_restringido')); return; }
-            const r = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.2, base64: true });
+            const r = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.2, base64: true });
             if (!r.canceled && r.assets[0]?.base64) {
               const n = [...points];
               n[idx].photo = `data:image/jpeg;base64,${r.assets[0].base64}`;
@@ -445,7 +445,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
           onPress: async () => {
             const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (!perm.granted) { alert(t('acceso_restringido')); return; }
-            const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.2, base64: true });
+            const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.2, base64: true });
             if (!r.canceled && r.assets[0]?.base64) {
               const n = [...points];
               n[idx].photo = `data:image/jpeg;base64,${r.assets[0].base64}`;
@@ -532,7 +532,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
                 <View style={[styles.checkbox, data.selloVerificado && styles.checkboxOn]}>
                   {data.selloVerificado && <Ionicons name="checkmark" size={18} color="#FFF" />}
                 </View>
-                <Text style={styles.checkLabel}>SELLO VERIFICADO (VER, TIRAR, TORCER)</Text>
+                <Text style={styles.checkLabel}>{t('sello_verificado_completo').toUpperCase()}</Text>
               </Pressable>
             </View>
           )}

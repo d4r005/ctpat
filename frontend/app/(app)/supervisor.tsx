@@ -33,6 +33,7 @@ function EmailModal({
   token: string;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const DEFAULT_EMAIL = 'd.trujillo@brancoindustries.com';
   const [extraInput, setExtraInput] = useState('');
   const [extraList, setExtraList] = useState<string[]>([]);
@@ -43,9 +44,9 @@ function EmailModal({
 
   const addEmail = () => {
     const e = extraInput.trim().toLowerCase();
-    if (!isValidEmail(e)) { Alert.alert('Email inválido', 'Ingresa un correo válido'); return; }
-    if (e === DEFAULT_EMAIL.toLowerCase()) { Alert.alert('Ya incluido', 'Ese correo ya está en la lista por defecto'); return; }
-    if (extraList.includes(e)) { Alert.alert('Duplicado', 'Ese correo ya está en la lista'); return; }
+    if (!isValidEmail(e)) { Alert.alert(t('email_invalido_title'), t('email_invalido_msg')); return; }
+    if (e === DEFAULT_EMAIL.toLowerCase()) { Alert.alert(t('ya_incluido_title'), t('ya_incluido_msg')); return; }
+    if (extraList.includes(e)) { Alert.alert(t('duplicado_title'), t('duplicado_msg')); return; }
     setExtraList(prev => [...prev, e]);
     setExtraInput('');
   };
@@ -65,14 +66,14 @@ function EmailModal({
         body: { record_id: recordId, extra_emails: extraList },
       });
       clearTimeout(tid);
-      setResult({ ok: true, msg: res.message || 'Reporte en camino, revisa tu bandeja en unos momentos.' });
+      setResult({ ok: true, msg: res.message || t('reporte_en_camino') });
     } catch (e: any) {
       const msg = e.message || '';
       if (msg.includes('timeout') || msg.includes('AbortError')) {
         // Backend respondió pero la conexión fue lenta — puede que sí se envió
-        setResult({ ok: true, msg: 'El reporte fue enviado al servidor. Revisa tu bandeja de correo en unos minutos.' });
+        setResult({ ok: true, msg: t('reporte_enviado_lento') });
       } else {
-        setResult({ ok: false, msg: msg || 'Error al enviar el correo' });
+        setResult({ ok: false, msg: msg || t('error_enviar_correo') });
       }
     } finally {
       setSending(false);
@@ -93,7 +94,7 @@ function EmailModal({
           {/* Header */}
           <View style={styles.modalHeader}>
             <Ionicons name="mail" size={18} color="#FFF" />
-            <Text style={styles.modalTitle}>ENVIAR REPORTE POR CORREO</Text>
+            <Text style={styles.modalTitle}>{t('enviar_reporte_correo').toUpperCase()}</Text>
             <Pressable onPress={handleClose} hitSlop={10}>
               <Ionicons name="close" size={20} color="#FFF" />
             </Pressable>
@@ -107,14 +108,14 @@ function EmailModal({
             </View>
 
             {/* Destinatario fijo */}
-            <Text style={styles.sectionLabel}>DESTINATARIO PRINCIPAL (siempre incluido)</Text>
+            <Text style={styles.sectionLabel}>{t('destinatario_principal_desc').toUpperCase()}</Text>
             <View style={styles.fixedEmail}>
               <Ionicons name="shield-checkmark-outline" size={14} color="#10B981" />
               <Text style={styles.fixedEmailText}>{DEFAULT_EMAIL}</Text>
             </View>
 
             {/* Agregar correos extra */}
-            <Text style={[styles.sectionLabel, { marginTop: 14 }]}>AGREGAR DESTINATARIOS ADICIONALES</Text>
+            <Text style={[styles.sectionLabel, { marginTop: 14 }]}>{t('agregar_destinatarios').toUpperCase()}</Text>
             <View style={styles.inputRow}>
               <TextInput
                 style={styles.emailInput}
@@ -150,7 +151,7 @@ function EmailModal({
             <View style={styles.summaryBox}>
               <Ionicons name="people-outline" size={14} color="#374151" />
               <Text style={styles.summaryText}>
-                {1 + extraList.length} destinatario{1 + extraList.length > 1 ? 's' : ''} en total
+                {t('destinatarios_total', { count: 1 + extraList.length })}
               </Text>
             </View>
 
@@ -166,7 +167,7 @@ function EmailModal({
           {/* Botones */}
           <View style={styles.modalFooter}>
             <Pressable style={styles.cancelBtn} onPress={handleClose} disabled={sending}>
-              <Text style={styles.cancelBtnText}>CANCELAR</Text>
+              <Text style={styles.cancelBtnText}>{t('cancelar').toUpperCase()}</Text>
             </Pressable>
             <Pressable
               style={[styles.sendBtn, sending && { opacity: 0.6 }]}
@@ -178,7 +179,7 @@ function EmailModal({
                 : <Ionicons name={result?.ok ? 'checkmark' : 'send'} size={16} color="#FFF" />
               }
               <Text style={styles.sendBtnText}>
-                {sending ? 'ENVIANDO...' : result?.ok ? 'CERRAR' : 'ENVIAR REPORTE'}
+                {sending ? t('enviando').toUpperCase() : result?.ok ? t('cerrar').toUpperCase() : t('enviar_reporte').toUpperCase()}
               </Text>
             </Pressable>
           </View>
@@ -253,10 +254,10 @@ export default function Supervisor() {
     setSyncing(true);
     try {
       const res = await apiCall<any>('/admin/repair-links', { method: 'POST', token });
-      Alert.alert("Auditoría Finalizada", `Se han recuperado ${res.reconstructed} registros y vinculado un total de ${res.total_records} folios.`);
+      Alert.alert(t('auditoria_finalizada_title'), t('auditoria_finalizada_msg', { reconstructed: res.reconstructed, total: res.total_records }));
       await fetchEverything();
     } catch (e: any) {
-      Alert.alert("Error", e.message);
+      Alert.alert(t('error'), e.message);
     } finally {
       setSyncing(false);
     }
@@ -338,7 +339,7 @@ export default function Supervisor() {
       const res = await apiCall<{ html: string }>(`/report/html/${recordId}`, { token });
       await outputPdf(res.html);
     } catch (e: any) {
-      Alert.alert("Error", e.message);
+      Alert.alert(t('error'), e.message);
     } finally {
       setReportLoading(null);
     }
@@ -371,7 +372,7 @@ export default function Supervisor() {
   const handleEmail = (item: any) => {
     const { recordId, plates } = getRecordIdForEmail(item);
     if (!recordId) {
-      Alert.alert('Sin registro', 'No se encontró un registro de caseta para esta unidad. El correo requiere un folio completo.');
+      Alert.alert(t('sin_registro_title'), t('sin_registro_msg'));
       return;
     }
     setEmailModal({ visible: true, recordId, plates });
@@ -379,7 +380,7 @@ export default function Supervisor() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <MainHeader title="NAF" subtitle="SUPERVISOR DEL PANEL" />
+      <MainHeader title="NAF" subtitle={t('panel').toUpperCase()} />
 
       {/* Modal de correo */}
       <EmailModal
@@ -396,34 +397,34 @@ export default function Supervisor() {
       >
         {/* HERRAMIENTAS ADMIN */}
         <View style={styles.adminBox}>
-          <Text style={styles.adminTitle}>HERRAMIENTAS ADMIN</Text>
+          <Text style={styles.adminTitle}>{t('admin_tools').toUpperCase()}</Text>
           <View style={styles.adminRow}>
             <Pressable style={styles.adminBtn} onPress={handleRepair} disabled={syncing}>
               {syncing ? <ActivityIndicator size={14} color={colors.brandPrimary} /> : <Ionicons name="link-outline" size={16} color={colors.brandPrimary} />}
-              <Text style={styles.adminBtnText}>VINCULAR REGISTROS HUÉRFANOS</Text>
+              <Text style={styles.adminBtnText}>{t('vincular_huerfanos').toUpperCase()}</Text>
             </Pressable>
             <Pressable style={styles.adminBtn} onPress={() => router.push('/(app)/usuarios')}>
               <Ionicons name="people-outline" size={16} color="#333" />
-              <Text style={styles.adminBtnText}>USUARIOS</Text>
+              <Text style={styles.adminBtnText}>{t('usuarios_caps').toUpperCase()}</Text>
             </Pressable>
           </View>
           <Pressable style={[styles.adminBtn, { marginTop: 8, backgroundColor: '#E0E7FF' }]} onPress={() => router.push('/(app)/analitica')}>
             <Ionicons name="stats-chart" size={16} color="#4338CA" />
-            <Text style={[styles.adminBtnText, { color: '#4338CA' }]}>KPIS / REPORTE DE ANALÍTICA</Text>
+            <Text style={[styles.adminBtnText, { color: '#4338CA' }]}>{t('kpis')} / {t('reporte_analitica').toUpperCase()}</Text>
           </Pressable>
         </View>
 
         <View style={styles.headerFixed}>
           <View style={styles.tabRow}>
-            <TabBtn label="CASETA" icon="business" active={activeTab === 'caseta'} on={() => setActiveTab('caseta')} />
-            <TabBtn label="INSPECCIÓN" icon="clipboard" active={activeTab === 'inspeccion'} on={() => setActiveTab('inspeccion')} />
-            <TabBtn label="EMBARQUE" icon="truck-fast" active={activeTab === 'embarque'} on={() => setActiveTab('embarque')} isMCI />
+            <TabBtn label={t('caseta').toUpperCase()} icon="business" active={activeTab === 'caseta'} on={() => setActiveTab('caseta')} />
+            <TabBtn label={t('inspeccion').toUpperCase()} icon="clipboard" active={activeTab === 'inspeccion'} on={() => setActiveTab('inspeccion')} />
+            <TabBtn label={t('embarque').toUpperCase()} icon="truck-fast" active={activeTab === 'embarque'} on={() => setActiveTab('embarque')} isMCI />
           </View>
           <View style={styles.searchCont}>
             <Ionicons name="search" size={20} color={colors.muted} />
             <TextInput
               style={styles.search}
-              placeholder="Placas, compañía, tráiler..."
+              placeholder={t('buscar_placas_placeholder')}
               value={query}
               onChangeText={setQuery}
             />
@@ -510,7 +511,7 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
       <View style={{ flex: 1 }}>
         <Text style={styles.rowTitle}>
           {plates} {item.numero_trailer ? `· ${item.numero_trailer}` : ''}{' '}
-          {item._is_virtual || item._is_pending ? '(HISTÓRICO)' : ''}
+          {item._is_virtual || item._is_pending ? `(${t('historico').toUpperCase()})` : ''}
         </Text>
         <Text style={styles.rowSub}>{subtitle} {company !== '-' ? `· ${company}` : ''}</Text>
 
@@ -529,13 +530,13 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
           >
             <Ionicons name="create-outline" size={14} color="#333" />
             <Text style={styles.actionLinkText}>
-              {type === 'inspeccion' ? 'EDITAR INSPECCIÓN' : type === 'embarque' ? 'EDITAR TICKET' : 'EDITOR CASETA'}
+              {type === 'inspeccion' ? t('editar_inspeccion').toUpperCase() : type === 'embarque' ? t('editar_ticket').toUpperCase() : t('editor_caseta').toUpperCase()}
             </Text>
           </Pressable>
 
           <Pressable style={styles.pdfBtn} onPress={onPdf} disabled={loadingPdf}>
             <Ionicons name="eye-outline" size={16} color="#FFF" />
-            <Text style={styles.pdfBtnText}>VER REPORTE (PDF)</Text>
+            <Text style={styles.pdfBtnText}>{t('ver_reporte_pdf').toUpperCase()}</Text>
             {loadingPdf && <ActivityIndicator size="small" color="#FFF" style={{ marginLeft: 5 }} />}
           </Pressable>
 
@@ -546,7 +547,7 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
             disabled={!canEmail}
           >
             <Ionicons name="mail-outline" size={14} color={canEmail ? '#0A2540' : '#9CA3AF'} />
-            <Text style={[styles.emailBtnText, !canEmail && { color: '#9CA3AF' }]}>ENVIAR CORREO</Text>
+            <Text style={[styles.emailBtnText, !canEmail && { color: '#9CA3AF' }]}>{t('enviar_correo_caps').toUpperCase()}</Text>
           </Pressable>
         </View>
       </View>
@@ -559,11 +560,11 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
             : '#6B7280'
         }]}>
           <Text style={styles.statusChipText}>
-            {steps.exit ? 'SALIÓ' : status === 'INSPECCIONADO' ? 'INSPECCIÓN OK' : status}
+            {steps.exit ? t('salio').toUpperCase() : status === 'INSPECCIONADO' ? t('inspeccion_ok').toUpperCase() : status}
           </Text>
         </View>
         <View style={[styles.statusChip, { backgroundColor: inspectionComplete ? '#10B981' : '#94A3B8', marginTop: 4 }]}>
-          <Text style={styles.statusChipText}>{inspectionComplete ? 'INSP. COMPLETA' : 'SIN INSPECCIÓN'}</Text>
+          <Text style={styles.statusChipText}>{inspectionComplete ? t('insp_completa').toUpperCase() : t('sin_inspeccion').toUpperCase()}</Text>
         </View>
         <Pressable style={styles.deleteBtn}>
           <Ionicons name="trash-outline" size={18} color={colors.error} />

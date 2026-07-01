@@ -116,7 +116,7 @@ export default function CasetaNuevo() {
       // previo duplicado puede devolver un falso "denegado" en algunos
       // dispositivos Android y bloquear el flujo sin mostrar nada.
       const r = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.4,
         base64: true,
       });
@@ -173,12 +173,12 @@ export default function CasetaNuevo() {
       if (mode === 'camera') {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) { alert(t('acceso_restringido')); return; }
-        const r = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.2, base64: true });
+        const r = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.2, base64: true });
         if (!r.canceled && r.assets[0]?.base64) setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
       } else if (mode === 'gallery') {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) { alert(t('acceso_restringido')); return; }
-        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.2, base64: true });
+        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.2, base64: true });
         if (!r.canceled && r.assets[0]?.base64) setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
       } else {
         Alert.prompt(
@@ -308,7 +308,7 @@ export default function CasetaNuevo() {
               <Field label="COMPAÑÍA TRANSPORTISTA" value={compania} onChange={setCompania} testID="caseta-compania" />
               <Field label="NÚMERO TRACTOR" value={tractor} onChange={setTractor} testID="caseta-tractor" />
 
-              <Text style={[styles.declTitle, { marginTop: spacing.lg, marginBottom: spacing.sm }]}>CAJA</Text>
+              <Text style={[styles.declTitle, { marginTop: spacing.lg, marginBottom: spacing.sm }]}>{t('caja').toUpperCase()}</Text>
               <Field label="COMPAÑÍA CAJA" value={companiaCaja} onChange={setCompaniaCaja} testID="caseta-compania-caja" />
               <Field label="NÚMERO CAJA" value={numeroCaja} onChange={setNumeroCaja} testID="caseta-numero-caja" />
 
@@ -625,7 +625,7 @@ function PhotoBox({ label, value, onCamera, onGallery, onUrl, onRemove, t }: any
           </View>
           <Pressable onPress={onUrl} style={[styles.photoActionBtn, { backgroundColor: colors.info, width: '100%' }]}>
             <Ionicons name="link" size={20} color="#FFF" />
-            <Text style={[styles.photoActionText, { color: '#FFF' }]}>URL (DRIVE/WEB)</Text>
+            <Text style={[styles.photoActionText, { color: '#FFF' }]}>{t('url_drive_web').toUpperCase()}</Text>
           </Pressable>
         </View>
       )}
