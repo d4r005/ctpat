@@ -114,3 +114,6 @@ backend/test_sheets_access.py
 backend/list_dbs.py
 build_apk.ps1
 frontend/check_resolve.js
+
+# AI Agent (removed)
+ai-agent/
