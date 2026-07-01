@@ -32,6 +32,12 @@ if (getRNMinorVersion() >= 75) {
 rootProject.name = 'SRIUC'
 
 dependencyResolutionManagement {
+  repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
+  repositories {
+    google()
+    mavenCentral()
+    maven { url = uri("https://www.jitpack.io") }
+  }
   versionCatalogs {
     reactAndroidLibs {
       from(files(new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim(), "../gradle/libs.versions.toml")))
