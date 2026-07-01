@@ -939,10 +939,13 @@ async def _build_report_html(record_id: str) -> tuple:
     return html, placas
 
 
-def send_report_email(record_id: str, extra_emails: List[str] = []):
+async def send_report_email(record_id: str, extra_emails: List[str] = []):
     """
     Envía el reporte consolidado COMPLETO por correo.
     HTML con todas las secciones, fotos y firmas en base64 inline — igual al PDF.
+    Se ejecuta como tarea async nativa de FastAPI BackgroundTasks (mismo event loop
+    que el resto de la app), evitando el error "Future attached to a different loop"
+    que ocurría al crear un event loop nuevo dentro de un hilo del threadpool.
     """
     smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
     smtp_port = int(os.environ.get("SMTP_PORT", "587"))
@@ -954,11 +957,11 @@ def send_report_email(record_id: str, extra_emails: List[str] = []):
         logger.error("send_report_email: credenciales SMTP no configuradas")
         return False, "Credenciales SMTP no configuradas"
 
-    _loop = asyncio.new_event_loop()
     try:
-        rec, inspections, ticket, placas = _loop.run_until_complete(_collect_report_data(record_id))
-    finally:
-        _loop.close()
+        rec, inspections, ticket, placas = await _collect_report_data(record_id)
+    except Exception as e:
+        logger.error("send_report_email: error obteniendo datos del reporte: " + str(e))
+        return False, str(e)
     if not rec:
         return False, "Registro no encontrado"
 
@@ -972,7 +975,9 @@ def send_report_email(record_id: str, extra_emails: List[str] = []):
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:
-        _sync_send_email(smtp_host, smtp_port, smtp_user, smtp_pass, all_recipients, msg)
+        # Envío SMTP es bloqueante (I/O de red) -> se delega a un hilo para no
+        # congelar el event loop principal, pero sin crear un loop nuevo.
+        await asyncio.to_thread(_sync_send_email, smtp_host, smtp_port, smtp_user, smtp_pass, all_recipients, msg)
         logger.info("Reporte completo enviado a " + str(all_recipients) + " unidad " + placas)
         return True, "Reporte completo enviado a " + str(len(all_recipients)) + " destinatario(s)"
     except Exception as e:
