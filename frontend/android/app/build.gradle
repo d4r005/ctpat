@@ -149,6 +149,14 @@ android {
     }
 }
 
+configurations.all {
+    exclude group: "com.android.support", module: "support-compat"
+    exclude group: "com.android.support", module: "support-media-compat"
+    exclude group: "com.android.support", module: "support-core-utils"
+    exclude group: "com.android.support", module: "support-annotations"
+    exclude group: "com.android.support", module: "support-v4"
+}
+
 dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
     // The version of react-native is set by the React Native Gradle Plugin
