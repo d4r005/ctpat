@@ -61,17 +61,17 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
-        name="nueva"
-        options={{
-          title: t('inspeccion'),
-          tabBarIcon: ({ color }) => <Ionicons name="clipboard-sharp" size={22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="caseta/index"
         options={{
           title: t('caseta'),
           tabBarIcon: ({ color }) => <Ionicons name="business-sharp" size={22} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="nueva"
+        options={{
+          title: t('inspeccion'),
+          tabBarIcon: ({ color }) => <Ionicons name="clipboard-sharp" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
