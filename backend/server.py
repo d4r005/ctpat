@@ -502,17 +502,35 @@ async def get_record(rec_id: str, u: Dict[str, Any] = Depends(get_current_user))
 
 @api_router.put("/vehicle-records/{rec_id}")
 async def update_record(rec_id: str, body: Dict[str, Any], u: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Actualiza un registro de forma parcial. IMPORTANTE: "entry" y "exit" se
+    FUSIONAN (merge) con lo ya existente en vez de reemplazar el objeto
+    completo — antes un $set directo con {"entry": {...parcial...}} borraba
+    todos los campos de "entry" que no vinieran en el body (p.ej. editar solo
+    "destino" borraba placas, chofer, fotos, etc.). Esto es crítico para poder
+    editar/completar datos faltantes en registros históricos sin destruir el resto.
+    """
     for k in ["_id", "id", "user_id", "created_at"]:
         if k in body: del body[k]
-    # Limpiar fotos
-    if "entry" in body:
+
+    existing = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Registro no encontrado")
+
+    # Limpiar fotos base64 nuevas antes de fusionar
+    if "entry" in body and body["entry"]:
         for f in ["foto_frente_unidad", "foto_atras_caja", "foto_atras_caja_2", "foto_id_chofer", "firma_operador"]:
-            if body["entry"].get(f) and body["entry"][f].startswith("data:image"):
+            if body["entry"].get(f) and str(body["entry"][f]).startswith("data:image"):
                 body["entry"][f] = ensure_clean_image(body["entry"][f])
+        merged_entry = {**existing.get("entry", {}), **body["entry"]}
+        body["entry"] = merged_entry
+
     if "exit" in body and body["exit"]:
         for f in ["sello_vvtt_foto", "sello_vvtt_foto_2", "firma_guardia"]:
-            if body["exit"].get(f) and body["exit"][f].startswith("data:image"):
+            if body["exit"].get(f) and str(body["exit"][f]).startswith("data:image"):
                 body["exit"][f] = ensure_clean_image(body["exit"][f])
+        merged_exit = {**(existing.get("exit") or {}), **body["exit"]}
+        body["exit"] = merged_exit
 
     await db.vehicle_records.update_one({"id": rec_id}, {"$set": body})
     return {"ok": True}
@@ -734,16 +752,33 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
         + tr("Condición Carga / 货物状态", entry.get("condicion_carga"))
         + tr("Fecha Entrada / 进场时间", _sd(entry.get("fecha_entrada") or rec.get("created_at")))
     )
+    fotos_salida = ""
     if ex:
         caseta_rows += (
             th2("DATOS DE SALIDA / 出场数据")
             + tr("Fecha Salida / 出场时间", _sd(ex.get("fecha_salida")))
+            + tr("Destino / 目的地", ex.get("destino"))
             + tr("Condición Salida", ex.get("condicion_salida"))
+            + tr("Tractor Salida", ex.get("numero_tractor_salida"))
+            + tr("Caja Salida", ex.get("numero_caja_salida"))
             + tr("Sello Salida 1", ex.get("sello_salida"))
         )
         if is_full:
-            caseta_rows += tr("Sello Salida 2", ex.get("sello_salida_2"))
-        caseta_rows += tr("Guardia Salida / 门卫", ex.get("guardia_salida_nombre"))
+            caseta_rows += (
+                tr("Caja Salida 2", ex.get("numero_caja_salida_2"))
+                + tr("Sello Salida 2", ex.get("sello_salida_2"))
+            )
+        caseta_rows += (
+            tr("Cortina (apertura/cierre)", (ex.get("hora_apertura_cortina") or "-") + " / " + (ex.get("hora_cierre_cortina") or "-"))
+            + tr("Cortina Salida", ex.get("cortina_salida"))
+            + tr("Pallets / Cajas / Bultos", (ex.get("pallets") or "-") + " / " + (ex.get("cajas") or "-") + " / " + (ex.get("bultos") or "-"))
+            + tr("Sello VVTT Estado", (ex.get("sello_vvtt_estado") or "-") + (("  |  Sello VVTT 2: " + ex.get("sello_vvtt_estado_2")) if is_full and ex.get("sello_vvtt_estado_2") else ""))
+            + tr("Guardia Salida / 门卫", ex.get("guardia_salida_nombre"))
+        )
+        fotos_salida = (
+            _photo_block(ex.get("sello_vvtt_foto"), "Sello VVTT Salida / VVTT 封条出场")
+            + (_photo_block(ex.get("sello_vvtt_foto_2"), "Sello VVTT Salida 2") if is_full else "")
+        )
 
     fotos_caseta = (
         _photo_block(entry.get("foto_frente_unidad"), "Frente / 前方")
@@ -764,6 +799,11 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
         + '<p style="margin:0 0 6px;font-size:8px;font-weight:bold;color:#374151;text-transform:uppercase;">Aceptado / 已接受 — Firma del Operador / 司机签字</p>'
         + _inline_sig(entry.get("firma_operador", ""), "Firma Operador / 司机签字", entry.get("chofer_nombre", ""))
         + "</div>"
+        + (('<div style="margin-top:10px;">' + fotos_salida + "</div>") if fotos_salida.strip() else "")
+        + (('<div style="margin-top:10px;padding:10px;background:#f9fafb;border:1px solid #e5e7eb;">'
+            + '<p style="margin:0 0 6px;font-size:8px;font-weight:bold;color:#374151;text-transform:uppercase;">Firma Guardia de Salida / 出场警卫签字</p>'
+            + _inline_sig(ex.get("firma_guardia", ""), "Firma Guardia Salida / 出场警卫签字", ex.get("guardia_salida_nombre", ""))
+            + "</div>") if ex and ex.get("firma_guardia") else "")
     )
 
     # ── Sección 2: Inspección ────────────────────────────────────────────────
@@ -789,16 +829,21 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
                 foto_html = ""
                 if pt.get("photo"):
                     p_url = pt["photo"]
-                    p_info = "Cámara"
-                    if "drive.google.com" in p_url or "doc-0s-80-docs.googleusercontent.com" in p_url: p_info = "Drive"
-                    elif p_url.startswith("http"): p_info = "Web"
-
-                    foto_html = (
-                        '<div style="margin-top:4px;border:1px solid #eee;padding:4px;background:#f9fafb;">'
-                        '<p style="margin:0 0 2px 0;font-size:5.5px;color:#888;">INFO FOTO: ' + p_info + '</p>'
-                        '<img src="' + p_url + '" style="max-height:100px;max-width:240px;object-fit:contain;border:1px solid #ddd;"/>'
-                        '</div>'
-                    )
+                    # Resolvemos SIEMPRE a base64 inline (igual que fotos de caseta/embarque):
+                    # un <img src="drive.google.com/..."> crudo no carga sin sesión de Google,
+                    # lo que hacía que los puntos con foto se vieran "incompletos" en el correo.
+                    resolved = _resolve_src_to_b64(p_url)
+                    if resolved:
+                        foto_html = (
+                            '<div style="margin-top:4px;border:1px solid #eee;padding:4px;background:#f9fafb;">'
+                            '<img src="' + resolved + '" style="max-height:100px;max-width:240px;object-fit:contain;border:1px solid #ddd;"/>'
+                            '</div>'
+                        )
+                    else:
+                        foto_html = (
+                            '<div style="margin-top:4px;border:1px dashed #ccc;padding:4px;background:#f9fafb;'
+                            'color:#999;font-size:6px;">Foto no disponible (' + p_url[:40] + ')</div>'
+                        )
                 rows_html += (
                     "<tr>"
                     '<td style="text-align:center;width:28px;">' + str(num) + "</td>"
