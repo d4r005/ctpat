@@ -150,11 +150,14 @@ android {
 }
 
 configurations.all {
-    exclude group: "com.android.support", module: "support-compat"
-    exclude group: "com.android.support", module: "support-media-compat"
-    exclude group: "com.android.support", module: "support-core-utils"
-    exclude group: "com.android.support", module: "support-annotations"
-    exclude group: "com.android.support", module: "support-v4"
+    // Excluir SOLO la support library legacy — NO tocar androidx
+    exclude group: "com.android.support"
+    // Forzar versión de androidx.core para evitar conflictos
+    resolutionStrategy {
+        force "androidx.core:core:1.12.0"
+        force "androidx.core:core-ktx:1.12.0"
+        force "androidx.media:media:1.0.0"
+    }
 }
 
 dependencies {

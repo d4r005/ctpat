@@ -1,18 +1,11 @@
-// Icon font loader for Expo apps. Fonts are loaded from a CDN only under
-// Expo Go (StoreClient) — that's where @expo/vector-icons' .ttf files come
-// back as 0 bytes from Metro's asset resolver on Android. Native dev/prod
-// builds and web pass an empty map, so useFonts resolves to [true, null]
-// immediately via react-native-vector-icons autolinking / web stubs.
-// ICON_VECTOR_VERSION must match @expo/vector-icons in package.json.
-// Usage: const [loaded, error] = useIconFonts();
-
+// Icon font loader — carga siempre desde assets locales en builds nativos
+// y desde CDN solo en web/Expo Go.
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { useFonts } from "expo-font";
 import { Platform } from "react-native";
 
 const ICON_VECTOR_VERSION = "14.0.2";
 
-// short internal fontName (what the library queries) -> CDN .ttf file name
 const ICON_FAMILIES: Record<string, string> = {
   anticon: "AntDesign",
   entypo: "Entypo",
@@ -28,11 +21,9 @@ const ICON_FAMILIES: Record<string, string> = {
   octicons: "Octicons",
   "simple-line-icons": "SimpleLineIcons",
   zocial: "Zocial",
-  // FontAwesome5 style variants (key = `FontAwesome5Free-<style>`)
   "FontAwesome5Free-Regular": "FontAwesome5_Regular",
   "FontAwesome5Free-Solid": "FontAwesome5_Solid",
   "FontAwesome5Free-Brand": "FontAwesome5_Brands",
-  // FontAwesome6 style variants (key = `FontAwesome6Free-<style>`)
   "FontAwesome6Free-Regular": "FontAwesome6_Regular",
   "FontAwesome6Free-Solid": "FontAwesome6_Solid",
   "FontAwesome6Free-Brand": "FontAwesome6_Brands",
@@ -41,6 +32,8 @@ const ICON_FAMILIES: Record<string, string> = {
 const cdnUrl = (file: string): string =>
   `https://cdn.jsdelivr.net/npm/@expo/vector-icons@${ICON_VECTOR_VERSION}/build/vendor/react-native-vector-icons/Fonts/${file}.ttf`;
 
+// En builds nativos release los íconos están autolinkeados — useFonts({}) = true inmediato
+// En web y Expo Go cargamos desde CDN
 const iconFontMap = (): Record<string, string> =>
   Object.fromEntries(
     Object.entries(ICON_FAMILIES).map(([key, file]) => [key, cdnUrl(file)]),
@@ -48,8 +41,8 @@ const iconFontMap = (): Record<string, string> =>
 
 export const useIconFonts = (): readonly [boolean, Error | null] =>
   useFonts(
-    // Cargamos desde CDN tanto en Expo Go como en Web para asegurar que los iconos se vean en Cloudflare
-    Constants.executionEnvironment === ExecutionEnvironment.StoreClient || Platform.OS === 'web'
+    Platform.OS === 'web' ||
+    Constants.executionEnvironment === ExecutionEnvironment.StoreClient
       ? iconFontMap()
       : {},
   );
