@@ -7,6 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
+import { sanitizePlate } from '@/src/utils/text';
 import { useTranslation } from 'react-i18next';
 
 export default function EmbarqueDetail() {
@@ -88,7 +89,7 @@ export default function EmbarqueDetail() {
             <Text style={styles.sectionTitle}>{t('transporte').toUpperCase()}</Text>
           </View>
           <View style={styles.sectionBody}>
-            <EditableRow label={t('placas_unidad')} value={form.placas_unidad} onEdit={editMode ? (v) => setForm({...form, placas_unidad: v}) : null} />
+            <EditableRow label={t('placas_unidad')} value={form.placas_unidad} onEdit={editMode ? (v) => setForm({...form, placas_unidad: sanitizePlate(v)}) : null} />
             <EditableRow label={t('numero_caja_caps')} value={form.numero_caja} onEdit={editMode ? (v) => setForm({...form, numero_caja: v}) : null} />
             <EditableRow label={t('sello')} value={form.numero_sello} onEdit={editMode ? (v) => setForm({...form, numero_sello: v}) : null} />
             <EditableRow label={t('chofer')} value={form.operador} onEdit={editMode ? (v) => setForm({...form, operador: v}) : null} />

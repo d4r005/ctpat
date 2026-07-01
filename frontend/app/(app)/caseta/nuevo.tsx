@@ -12,6 +12,7 @@ import { apiCall } from '@/src/api/client';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
+import { sanitizePlate } from '@/src/utils/text';
 
 import { useTranslation } from 'react-i18next';
 
@@ -141,7 +142,7 @@ export default function CasetaNuevo() {
           else if (res.error === 'UNSUPPORTED_FORMAT_HEIC') Alert.alert('Formato no soportado', 'La foto se guardó en formato HEIC (típico de iPhone). Cambia el ajuste de tu cámara a "Más compatible" (JPEG) en Configuración > Cámara > Formatos, o intenta de nuevo.');
           else Alert.alert('Error', 'No se pudo leer el documento. Intenta de nuevo.');
         } else {
-          if (res.placas_unidad) setPlacas(res.placas_unidad.toUpperCase());
+          if (res.placas_unidad) setPlacas(sanitizePlate(res.placas_unidad));
           if (res.chofer_nombre) setChofer(res.chofer_nombre.toUpperCase());
           if (res.compania_transporte) setCompania(res.compania_transporte.toUpperCase());
           if (res.numero_tractor) setTractor(res.numero_tractor.toUpperCase());
@@ -312,7 +313,7 @@ export default function CasetaNuevo() {
               <Field label={t('sucursal').toUpperCase()} value={sucursal} onChange={setSucursal} testID="caseta-sucursal" />
               <Field label={t('direccion').toUpperCase()} value={direccion} onChange={setDireccion} testID="caseta-direccion" />
               <Field label={t('licencia').toUpperCase()} value={licencia} onChange={setLicencia} testID="caseta-licencia" />
-              <Field label={t('placas_unidad_caps').toUpperCase()} value={placas} onChange={setPlacas} testID="caseta-placas" />
+              <Field label={t('placas_unidad_caps').toUpperCase()} value={placas} onChange={(v: string) => setPlacas(sanitizePlate(v))} testID="caseta-placas" />
               <Field label={t('nombre_chofer').toUpperCase()} value={chofer} onChange={setChofer} testID="caseta-chofer" />
               <Field label={t('compania_transportista_caps').toUpperCase()} value={compania} onChange={setCompania} testID="caseta-compania" />
               <Field label={t('numero_tractor_caps').toUpperCase()} value={tractor} onChange={setTractor} testID="caseta-tractor" />
@@ -320,7 +321,7 @@ export default function CasetaNuevo() {
               <Text style={[styles.declTitle, { marginTop: spacing.lg, marginBottom: spacing.sm }]}>{t('caja').toUpperCase()}</Text>
               <Field label={t('compania_caja').toUpperCase()} value={companiaCaja} onChange={setCompaniaCaja} testID="caseta-compania-caja" />
               <Field label={t('numero_caja_caps').toUpperCase()} value={numeroCaja} onChange={setNumeroCaja} testID="caseta-numero-caja" />
-              <Field label={t('placas_caja_caps').toUpperCase()} value={placasCaja} onChange={setPlacasCaja} testID="caseta-placas-caja" />
+              <Field label={t('placas_caja_caps').toUpperCase()} value={placasCaja} onChange={(v: string) => setPlacasCaja(sanitizePlate(v))} testID="caseta-placas-caja" />
 
               <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
                 <View style={{ flex: 1 }}>
@@ -359,7 +360,7 @@ export default function CasetaNuevo() {
                 <>
                   <Field label={t('compania_escolta').toUpperCase()} value={escoltaCompania} onChange={setEscoltaCompania} testID="caseta-escolta-compania" />
                   <Field label={t('unidad_escolta').toUpperCase()} value={escoltaUnidad} onChange={setEscoltaUnidad} testID="caseta-escolta-unidad" />
-                  <Field label={t('placas_escolta').toUpperCase()} value={escoltaPlacas} onChange={setEscoltaPlacas} testID="caseta-escolta-placas" />
+                  <Field label={t('placas_escolta').toUpperCase()} value={escoltaPlacas} onChange={(v: string) => setEscoltaPlacas(sanitizePlate(v))} testID="caseta-escolta-placas" />
                 </>
               )}
             </View>

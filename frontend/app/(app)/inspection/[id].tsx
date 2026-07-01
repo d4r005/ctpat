@@ -10,6 +10,7 @@ import Signature from '@/src/components/SignaturePad';
 import { useInspections, Inspection, InspectionPoint } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
+import { sanitizePlate } from '@/src/utils/text';
 import { getInspectionPoints } from '@/src/constants/inspectionPoints';
 
 import { useTranslation } from 'react-i18next';
@@ -422,7 +423,7 @@ export default function InspectionDetail() {
             </View>
           )}
           <Row label={t('compania')} value={insp.compania_transportista} isEdit={isEditing} onEdit={(v) => setEditData({...editData, compania_transportista: v})} />
-          <Row label={t('placas')} value={insp.placas_unidad} isEdit={isEditing} onEdit={(v) => setEditData({...editData, placas_unidad: v})} />
+          <Row label={t('placas')} value={insp.placas_unidad} isEdit={isEditing} onEdit={(v) => setEditData({...editData, placas_unidad: sanitizePlate(v)})} />
           <Row label={t('trailer')} value={insp.numero_trailer} isEdit={isEditing} onEdit={(v) => setEditData({...editData, numero_trailer: v})} />
           <Row label={t('precinto')} value={insp.numero_precinto} isEdit={isEditing} onEdit={(v) => setEditData({...editData, numero_precinto: v})} />
           <Row label={t('sello_alta_seguridad_label') || "Sello Alta Seg."} value={insp.sello_alta_seguridad} isEdit={isEditing} onEdit={(v) => setEditData({...editData, sello_alta_seguridad: v})} />

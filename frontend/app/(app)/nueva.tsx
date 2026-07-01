@@ -15,6 +15,7 @@ import ProcessTracker from '@/src/components/ProcessTracker';
 import MainHeader from '@/src/components/MainHeader';
 import { getInspectionPoints } from '@/src/constants/inspectionPoints';
 import BarcodeScanner from '@/src/components/BarcodeScanner';
+import { sanitizePlate } from '@/src/utils/text';
 import Signature from '@/src/components/SignaturePad';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -76,7 +77,7 @@ export default function InspeccionDashboard() {
           // Iniciar inspección con los datos extraídos
           setFormData({
             ...formData,
-            placas: (res.placas_unidad || '').toUpperCase(),
+            placas: sanitizePlate(res.placas_unidad || ''),
             compania: (res.compania_transportista || '').toUpperCase(),
             status_general: res.status_general || 'bueno',
           });
@@ -186,7 +187,7 @@ export default function InspeccionDashboard() {
         numero_caja_2: record.entry.numero_caja_2,
         sello_entrada_2: record.entry.sello_entrada_2,
         compania: record.entry.compania_transporte || '',
-        placas: record.entry.placas_unidad || '',
+        placas: sanitizePlate(record.entry.placas_unidad || ''),
         trailer: (isFull && doneCount === 1) ? (record.entry.numero_caja_2 || '') : (record.entry.numero_caja || ''),
         selloAlta: (isFull && doneCount === 1) ? (record.entry.sello_entrada_2 || '') : (record.entry.sello_entrada || ''),
       });
@@ -522,7 +523,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
 
               <Text style={styles.label}>{t('placas').toUpperCase()}</Text>
               <View style={styles.inputRow}>
-                <TextInput style={[styles.input, { flex: 1 }]} value={data.placas} onChangeText={v => setData({...data, placas: v.toUpperCase()})} />
+                <TextInput style={[styles.input, { flex: 1 }]} value={data.placas} onChangeText={v => setData({...data, placas: sanitizePlate(v)})} />
                 <Pressable style={styles.scanBtn} onPress={() => setScanner({ visible: true, field: 'placas' })}><Ionicons name="barcode" size={24} color="#FFF" /></Pressable>
               </View>
 
@@ -729,7 +730,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
         visible={scanner.visible}
         title={`ESCANEAR ${scanner.field.toUpperCase()}`}
         onClose={() => setScanner({ visible: false, field: '' })}
-        onScan={(val) => { setData({...data, [scanner.field]: val}); setScanner({ visible: false, field: '' }); }}
+        onScan={(val) => { setData({...data, [scanner.field]: scanner.field === 'placas' ? sanitizePlate(val) : val.toUpperCase()}); setScanner({ visible: false, field: '' }); }}
       />
 
       {showSig && (

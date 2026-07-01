@@ -12,6 +12,7 @@ import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { useInspections } from '@/src/context/InspectionContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
+import { sanitizePlate } from '@/src/utils/text';
 import { useTranslation } from 'react-i18next';
 
 export default function CasetaDetail() {
@@ -244,7 +245,7 @@ export default function CasetaDetail() {
             </View>
             <View style={styles.sectionBody}>
               <View style={styles.grid}>
-                <EditableItem label={t('placas')} value={entryForm.placas_unidad} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, placas_unidad: v}) : null} />
+                <EditableItem label={t('placas')} value={entryForm.placas_unidad} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, placas_unidad: sanitizePlate(v)}) : null} />
                 <EditableItem label={t('chofer')} value={entryForm.chofer_nombre} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, chofer_nombre: v}) : null} />
                 <EditableItem label={t('compania')} value={entryForm.compania_transporte} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, compania_transporte: v}) : null} />
                 <EditableItem label={t('tractor')} value={entryForm.numero_tractor} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_tractor: v}) : null} />
@@ -254,7 +255,7 @@ export default function CasetaDetail() {
                 <Text style={styles.subTitle}>{t('caja').toUpperCase()}</Text>
                 <View style={styles.grid}>
                   <EditableItem label={t('numero_caja_caps')} value={entryForm.numero_caja} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_caja: v}) : null} />
-                  <EditableItem label={t('placas_caja_caps')} value={entryForm.placas_caja} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, placas_caja: v}) : null} />
+                  <EditableItem label={t('placas_caja_caps')} value={entryForm.placas_caja} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, placas_caja: sanitizePlate(v)}) : null} />
                   <EditableItem label={t('sello').toUpperCase()} value={entryForm.sello_entrada} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, sello_entrada: v}) : null} />
                 </View>
               </View>

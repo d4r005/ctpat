@@ -10,6 +10,7 @@ import { apiCall } from '@/src/api/client';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
+import { sanitizePlate } from '@/src/utils/text';
 
 export default function EmbarqueNuevo() {
   const router = useRouter();
@@ -84,7 +85,7 @@ export default function EmbarqueNuevo() {
         } else {
           setForm(prev => ({
             ...prev,
-            placas_unidad: (res.placas_unidad || prev.placas_unidad).toUpperCase(),
+            placas_unidad: sanitizePlate(res.placas_unidad || prev.placas_unidad),
             cliente: (res.cliente || prev.cliente).toUpperCase(),
             operador: (res.operador || prev.operador).toUpperCase(),
             numero_caja: (res.numero_caja || prev.numero_caja).toUpperCase(),
@@ -215,9 +216,9 @@ export default function EmbarqueNuevo() {
             <F label={t('operador').toUpperCase()} v={form.operador} on={(t: string) => set('operador', t)} tid="emb-operador" />
             <F label={t('linea_transporte_caps').toUpperCase()} v={form.linea_transporte} on={(t: string) => set('linea_transporte', t)} tid="emb-linea" />
             <F label={t('numero_economico_unidad').toUpperCase()} v={form.numero_economico} on={(t: string) => set('numero_economico', t)} tid="emb-economico" />
-            <F label={t('placas_unidad_caps').toUpperCase()} v={form.placas_unidad} on={(t: string) => set('placas_unidad', t)} tid="emb-placas-unidad" />
+            <F label={t('placas_unidad_caps').toUpperCase()} v={form.placas_unidad} on={(v: string) => set('placas_unidad', sanitizePlate(v))} tid="emb-placas-unidad" />
             <F label={t('numero_caja_caps').toUpperCase()} v={form.numero_caja} on={(t: string) => set('numero_caja', t)} tid="emb-caja" />
-            <F label={t('placas_caja_caps').toUpperCase()} v={form.placas_caja} on={(t: string) => set('placas_caja', t)} tid="emb-placas-caja" />
+            <F label={t('placas_caja_caps').toUpperCase()} v={form.placas_caja} on={(v: string) => set('placas_caja', sanitizePlate(v))} tid="emb-placas-caja" />
           </Section>
 
           <Section title={t('tiempos_y_carga').toUpperCase()}>
