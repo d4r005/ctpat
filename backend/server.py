@@ -609,9 +609,25 @@ async def update_record(rec_id: str, body: Dict[str, Any], u: Dict[str, Any] = D
     return {"ok": True}
 
 @api_router.delete("/vehicle-records/{rec_id}")
-async def delete_record(rec_id: str, u: Dict[str, Any] = Depends(get_current_user)):
+async def delete_record(rec_id: str, background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
     if not is_admin(u): raise HTTPException(403)
+    rec = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "Registro no encontrado")
+    placas = rec.get("entry", {}).get("placas_unidad", "")
+
     await db.vehicle_records.delete_one({"id": rec_id})
+
+    # Cascada: quitar de Google Sheets (fila de entrada y/o salida) y de Drive
+    background_tasks.add_task(_sheet_delete_rows_by_ids, "Entradas_Salidas", [f"{rec_id}:entrada", f"{rec_id}:salida"])
+    background_tasks.add_task(cleanup_drive_evidence, placas, rec)
+
+    background_tasks.add_task(
+        notify_roles, ["supervisor", "admin"],
+        f"🗑️ Registro de caseta eliminado: {placas or 'S/P'}",
+        f"{u['name']} eliminó el registro de caseta de la unidad {placas or 'S/P'} (Mongo, Sheet y evidencia de Drive).",
+        exclude_user_id=u["id"], kind="caseta"
+    )
     return {"ok": True}
 
 
@@ -1261,9 +1277,26 @@ async def update_inspection(insp_id: str, body: Dict[str, Any], u: Dict[str, Any
     return {"ok": True}
 
 @api_router.delete("/inspections/{insp_id}")
-async def delete_inspection(insp_id: str, u: Dict[str, Any] = Depends(get_current_user)):
+async def delete_inspection(insp_id: str, background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
     if not is_admin(u): raise HTTPException(403)
+    insp = await db.inspections.find_one({"id": insp_id}, {"_id": 0})
+    if not insp:
+        raise HTTPException(404, "Inspección no encontrada")
+    placas = insp.get("placas_unidad", "")
+
     await db.inspections.delete_one({"id": insp_id})
+
+    # Cascada: quitar de Google Sheets (9 o 19 puntos, según el tipo) y de Drive
+    background_tasks.add_task(_sheet_delete_rows_by_ids, "Inspecciones_19_Puntos", [insp_id])
+    background_tasks.add_task(_sheet_delete_rows_by_ids, "Inspecciones_9_Puntos", [insp_id])
+    background_tasks.add_task(cleanup_drive_evidence, placas, insp)
+
+    background_tasks.add_task(
+        notify_roles, ["supervisor", "admin"],
+        f"🗑️ Inspección eliminada: {placas or 'S/P'}",
+        f"{u['name']} eliminó la inspección de la unidad {placas or 'S/P'} (Mongo, Sheet y evidencia de Drive).",
+        exclude_user_id=u["id"], kind="inspeccion"
+    )
     return {"ok": True}
 
 @api_router.post("/inspections/{insp_id}/approve", response_model=Inspection)
@@ -1341,6 +1374,34 @@ async def update_ticket(id: str, body: Dict[str, Any], u: Dict[str, Any] = Depen
     for f in ["firma_almacenista", "firma_guardia", "foto_inicio_carga", "foto_media_carga", "foto_final_carga"]:
         if body.get(f) and body[f].startswith("data:image"): body[f] = ensure_clean_image(body[f])
     await db.shipping_tickets.update_one({"id": id}, {"$set": body})
+    return {"ok": True}
+
+@api_router.delete("/shipping-tickets/{id}")
+async def delete_ticket(id: str, background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
+    if not is_admin(u): raise HTTPException(403)
+    ticket = await db.shipping_tickets.find_one({"id": id}, {"_id": 0})
+    if not ticket:
+        raise HTTPException(404, "Ticket de embarque no encontrado")
+    placas = ticket.get("placas_unidad", "")
+
+    await db.shipping_tickets.delete_one({"id": id})
+    # Desvincular del registro de caseta si estaba enlazado
+    if ticket.get("record_id"):
+        await db.vehicle_records.update_one(
+            {"id": ticket["record_id"]},
+            {"$unset": {"shipping_ticket_id": "", "has_shipping_ticket": ""}}
+        )
+
+    # Cascada: quitar de Google Sheets (Tickets_Embarque) y de Drive
+    background_tasks.add_task(_sheet_delete_rows_by_ids, "Tickets_Embarque", [id])
+    background_tasks.add_task(cleanup_drive_evidence, placas, ticket)
+
+    background_tasks.add_task(
+        notify_roles, ["supervisor", "admin"],
+        f"🗑️ Ticket de embarque eliminado: {placas or 'S/P'}",
+        f"{u['name']} eliminó el ticket de embarque de la unidad {placas or 'S/P'} (Mongo, Sheet y evidencia de Drive).",
+        exclude_user_id=u["id"], kind="embarque"
+    )
     return {"ok": True}
 
 # ========== Sincronización Google Sheets (directo, sin webhook) ==========
@@ -1547,6 +1608,179 @@ async def sync_to_google_sheets(tipo: str, payload: Any):
 
     except Exception as e:
         logger.error(f"sync_to_google_sheets [{tipo}] error: {e}")
+
+
+# ========== Eliminación en cascada: Mongo + Google Sheets + Drive ==========
+
+async def _sheet_get_gid(token: str, hoja: str) -> Optional[int]:
+    """Obtiene el sheetId (gid) numérico de una pestaña por su nombre."""
+    try:
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}"
+        r = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: requests.get(
+                url, headers={"Authorization": f"Bearer {token}"},
+                params={"fields": "sheets.properties"}, timeout=10)
+        )
+        for s in r.json().get("sheets", []):
+            props = s.get("properties", {})
+            if props.get("title") == hoja:
+                return props.get("sheetId")
+    except Exception as e:
+        logger.error(f"Error obteniendo gid de {hoja}: {e}")
+    return None
+
+async def _sheet_delete_rows_by_ids(hoja: str, ids: List[str]):
+    """Elimina físicamente las filas de una hoja cuya columna A coincida con algún ID dado."""
+    token = os.environ.get("GOOGLEDRIVE_ACCESS_TOKEN", "")
+    ids = [i for i in ids if i]
+    if not token or not ids:
+        return
+    loop = asyncio.get_event_loop()
+    try:
+        col_a = await _sheet_get_col_a(token, hoja)
+        # Fila real en la hoja = índice de la lista + 2 (la lista arranca en A2)
+        rows_to_delete = [idx + 2 for idx, v in enumerate(col_a) if v in ids]
+        if not rows_to_delete:
+            return
+        gid = await _sheet_get_gid(token, hoja)
+        if gid is None:
+            logger.warning(f"Sheets delete [{hoja}]: no se encontró el gid de la pestaña, se omite el borrado de filas")
+            return
+
+        # Se borra de la fila más alta a la más baja para no desfasar índices
+        batch_requests = [{
+            "deleteDimension": {
+                "range": {
+                    "sheetId": gid,
+                    "dimension": "ROWS",
+                    "startIndex": row_num - 1,
+                    "endIndex": row_num
+                }
+            }
+        } for row_num in sorted(rows_to_delete, reverse=True)]
+
+        def _batch():
+            return requests.post(
+                f"https://sheets.googleapis.com/v4/spreadsheets/{SHEET_ID}:batchUpdate",
+                headers=_sheets_headers(token),
+                json={"requests": batch_requests},
+                timeout=15).json()
+
+        result = await loop.run_in_executor(None, _batch)
+        if "error" in result:
+            logger.error(f"Sheets delete [{hoja}] filas {rows_to_delete} -> error: {result['error']}")
+        else:
+            logger.info(f"Sheets [{hoja}] filas eliminadas: {rows_to_delete}")
+    except Exception as e:
+        logger.error(f"Sheets delete [{hoja}] error: {e}")
+
+
+_DRIVE_ID_RE = re.compile(r"(?:/d/|[?&]id=)([a-zA-Z0-9_-]{15,})")
+
+def _extract_drive_file_ids(obj: Any, found: set = None) -> set:
+    """Recorre recursivamente un dict/list y extrae IDs de archivo de Google Drive de cualquier string."""
+    if found is None:
+        found = set()
+    if isinstance(obj, dict):
+        for v in obj.values():
+            _extract_drive_file_ids(v, found)
+    elif isinstance(obj, list):
+        for v in obj:
+            _extract_drive_file_ids(v, found)
+    elif isinstance(obj, str):
+        if "drive.google.com" in obj or "googleusercontent.com" in obj:
+            for m in _DRIVE_ID_RE.finditer(obj):
+                found.add(m.group(1))
+    return found
+
+async def _drive_delete_file(token: str, file_id: str):
+    loop = asyncio.get_event_loop()
+    try:
+        r = await loop.run_in_executor(
+            None, lambda: requests.delete(
+                f"https://www.googleapis.com/drive/v3/files/{file_id}",
+                headers={"Authorization": f"Bearer {token}"}, timeout=10)
+        )
+        if r.status_code in (200, 204):
+            logger.info(f"Drive: archivo eliminado {file_id}")
+        elif r.status_code == 404:
+            pass  # ya no existe, ignorar
+        else:
+            logger.warning(f"Drive: no se pudo eliminar {file_id} ({r.status_code}): {r.text[:200]}")
+    except Exception as e:
+        logger.error(f"Drive delete file {file_id} error: {e}")
+
+async def _drive_find_folders_by_name(token: str, name: str) -> List[str]:
+    """Busca carpetas de Drive cuyo nombre coincida exactamente con `name`."""
+    loop = asyncio.get_event_loop()
+    try:
+        q = f"name = '{name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+        r = await loop.run_in_executor(
+            None, lambda: requests.get(
+                "https://www.googleapis.com/drive/v3/files",
+                headers={"Authorization": f"Bearer {token}"},
+                params={"q": q, "fields": "files(id,name)"}, timeout=10)
+        )
+        return [f["id"] for f in r.json().get("files", [])]
+    except Exception as e:
+        logger.error(f"Drive buscar carpeta '{name}' error: {e}")
+        return []
+
+async def _drive_delete_folder_recursive(token: str, folder_id: str):
+    """Elimina todo el contenido de una carpeta de Drive y luego la carpeta misma."""
+    loop = asyncio.get_event_loop()
+    try:
+        r = await loop.run_in_executor(
+            None, lambda: requests.get(
+                "https://www.googleapis.com/drive/v3/files",
+                headers={"Authorization": f"Bearer {token}"},
+                params={"q": f"'{folder_id}' in parents and trashed = false", "fields": "files(id,mimeType)"},
+                timeout=10)
+        )
+        for f in r.json().get("files", []):
+            if f.get("mimeType") == "application/vnd.google-apps.folder":
+                await _drive_delete_folder_recursive(token, f["id"])
+            else:
+                await _drive_delete_file(token, f["id"])
+    except Exception as e:
+        logger.error(f"Drive listar contenido de carpeta {folder_id} error: {e}")
+    await _drive_delete_file(token, folder_id)
+
+async def cleanup_drive_evidence(placas: str, *records: Any):
+    """
+    Limpieza best-effort de evidencia en Drive al eliminar un proceso:
+    - Borra cualquier archivo de Drive referenciado directamente en los campos del/los registro(s).
+    - Busca y borra la carpeta de evidencia por número de placa (y variantes sin espacios/guiones).
+    Nunca lanza excepción: un fallo aquí no debe impedir el borrado en Mongo/Sheets.
+    """
+    token = os.environ.get("GOOGLEDRIVE_ACCESS_TOKEN", "")
+    if not token:
+        logger.warning("cleanup_drive_evidence: sin GOOGLEDRIVE_ACCESS_TOKEN configurado, se omite limpieza de Drive")
+        return
+    try:
+        file_ids = set()
+        for rec in records:
+            if rec:
+                file_ids |= _extract_drive_file_ids(rec)
+        for fid in file_ids:
+            await _drive_delete_file(token, fid)
+
+        if placas:
+            clean = re.sub(r"[^A-Z0-9]", "", placas.upper())
+            candidatos = {placas.strip(), placas.strip().upper(), clean}
+            carpetas_vistas = set()
+            for nombre in candidatos:
+                if not nombre:
+                    continue
+                for folder_id in await _drive_find_folders_by_name(token, nombre):
+                    if folder_id not in carpetas_vistas:
+                        carpetas_vistas.add(folder_id)
+                        await _drive_delete_folder_recursive(token, folder_id)
+            if carpetas_vistas:
+                logger.info(f"Drive: {len(carpetas_vistas)} carpeta(s) de evidencia eliminada(s) para placas {placas}")
+    except Exception as e:
+        logger.error(f"cleanup_drive_evidence error (placas={placas}): {e}")
+
 
 async def _trigger_automatic_report(record_id: str):
     url = os.environ.get("GOOGLE_SHEET_WEBHOOK_URL")

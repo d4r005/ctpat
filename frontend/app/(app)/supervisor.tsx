@@ -445,6 +445,9 @@ export default function Supervisor() {
               records={allRecords}
               tickets={allTickets}
               inspections={allInspections}
+              isAdmin={user?.role === 'admin' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '')}
+              token={token}
+              onDeleted={fetchEverything}
             />
           ))}
           {filteredData.length === 0 && !loading && (
@@ -471,7 +474,8 @@ function TabBtn({ label, icon, active, on, isMCI }: any) {
 }
 
 // ─── Master Row ──────────────────────────────────────────────────────────────
-function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records, tickets, inspections }: any) {
+function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records, tickets, inspections, isAdmin, token, onDeleted }: any) {
+  const [deleting, setDeleting] = useState(false);
   const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
   const plates = item.placas_unidad || item.entry?.placas_unidad || 'S/P';
   const normPlates = normalize(plates);
@@ -503,6 +507,49 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
 
   // El botón de email se activa si hay registro real (no virtual/pending)
   const canEmail = !item._is_pending && (!!relatedRecord || (!item._is_virtual && item.entry));
+
+  // El botón de eliminar sólo aplica a registros reales (no filas virtuales/pendientes
+  // armadas en el cliente a partir de otra colección) y sólo lo puede usar un admin.
+  const canDelete = isAdmin && !item._is_virtual && !item._is_pending && !!item.id;
+
+  const deleteEndpoint = type === 'inspeccion'
+    ? `/inspections/${item.id}`
+    : type === 'embarque'
+      ? `/shipping-tickets/${item.id}`
+      : `/vehicle-records/${item.id}`;
+
+  const deleteLabelMap: Record<string, string> = {
+    caseta: t('editor_caseta') || 'este registro de caseta',
+    inspeccion: t('editar_inspeccion') || 'esta inspección',
+    embarque: t('editar_ticket') || 'este ticket de embarque',
+  };
+
+  const handleDelete = () => {
+    if (!canDelete || deleting) return;
+    Alert.alert(
+      t('eliminar_proceso_title') || 'Eliminar proceso',
+      (t('eliminar_proceso_msg', { plates }) as string) ||
+        `¿Seguro que quieres eliminar el proceso de la unidad ${plates}? Esto lo borra de la base de datos, de Google Sheets y de la evidencia en Drive. No se puede deshacer.`,
+      [
+        { text: t('cancelar') || 'Cancelar', style: 'cancel' },
+        {
+          text: t('eliminar') || 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await apiCall(deleteEndpoint, { method: 'DELETE', token });
+              onDeleted?.();
+            } catch (e: any) {
+              Alert.alert(t('error') || 'Error', e.message);
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <View style={styles.row}>
@@ -564,9 +611,15 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
         <View style={[styles.statusChip, { backgroundColor: inspectionComplete ? '#10B981' : '#94A3B8', marginTop: 4 }]}>
           <Text style={styles.statusChipText}>{inspectionComplete ? t('insp_completa').toUpperCase() : t('sin_inspeccion').toUpperCase()}</Text>
         </View>
-        <Pressable style={styles.deleteBtn}>
-          <Ionicons name="trash-outline" size={18} color={colors.error} />
-        </Pressable>
+        {canDelete && (
+          <Pressable style={styles.deleteBtn} onPress={handleDelete} disabled={deleting}>
+            {deleting ? (
+              <ActivityIndicator size="small" color={colors.error} />
+            ) : (
+              <Ionicons name="trash-outline" size={18} color={colors.error} />
+            )}
+          </Pressable>
+        )}
         <Text style={styles.dateText}>{new Date(item.created_at || item.entry?.fecha_entrada).toLocaleDateString()}</Text>
       </View>
     </View>
