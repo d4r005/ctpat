@@ -60,6 +60,11 @@ export interface Notification {
   title: string;
   message: string;
   inspection_id?: string;
+  record_id?: string;
+  ticket_id?: string;
+  chat_room?: string;
+  kind?: string;
+  urgent?: boolean;
   read: boolean;
   created_at: string;
 }
@@ -80,15 +85,21 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const lastIdRef = useRef<string | null>(null);
 
   const triggerLocalAlert = useCallback(async (notif: Notification) => {
-    // 1. Vibration
-    Vibration.vibrate([0, 500, 200, 500]); // Wait, long pulse, short wait, long pulse
+    // Las menciones directas en chat (@nombre) y fallas usan un patrón de vibración
+    // mas largo/insistente para que se note que requiere atención inmediata.
+    const isUrgent = notif.urgent || notif.kind === 'mention' || notif.kind === 'falla';
+    Vibration.vibrate(isUrgent ? [0, 400, 150, 400, 150, 400] : [0, 500, 200, 500]);
 
     // 2. Sound & Visual Alert via Expo Notifications
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: `🚨 ${notif.title}`,
+        title: `${isUrgent ? '🔴' : '🚨'} ${notif.title}`,
         body: notif.message,
-        data: { inspection_id: notif.inspection_id },
+        data: {
+          inspection_id: notif.inspection_id,
+          record_id: notif.record_id,
+          chat_room: notif.chat_room,
+        },
         sound: true, // Uses default system sound
         priority: Notifications.AndroidNotificationPriority.MAX,
       },

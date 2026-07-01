@@ -19,11 +19,17 @@ export default function NotificationsPanel({ visible, onClose }: Props) {
 
   const open = async (n: any) => {
     if (!n.read) await markRead(n.id);
-    if (n.inspection_id) {
-      onClose();
+    onClose();
+    if (n.chat_room) {
+      router.push(`/chat?room=${encodeURIComponent(n.chat_room)}`);
+    } else if (n.inspection_id) {
       router.push(`/inspection/${n.inspection_id}`);
+    } else if (n.record_id) {
+      router.push(`/caseta/${n.record_id}`);
     }
   };
+
+  const hasLink = (n: any) => !!(n.chat_room || n.inspection_id || n.record_id);
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -54,16 +60,16 @@ export default function NotificationsPanel({ visible, onClose }: Props) {
             renderItem={({ item }) => (
               <Pressable
                 testID={`notif-item-${item.id}`}
-                style={[styles.item, !item.read && styles.itemUnread]}
+                style={[styles.item, !item.read && styles.itemUnread, item.urgent && styles.itemUrgent]}
                 onPress={() => open(item)}
               >
-                {!item.read && <View style={styles.unreadDot} />}
+                {!item.read && <View style={[styles.unreadDot, item.urgent && styles.unreadDotUrgent]} />}
                 <View style={{ flex: 1 }}>
                   <Text style={styles.itemTitle}>{item.title}</Text>
                   <Text style={styles.itemMessage}>{item.message}</Text>
                   <Text style={styles.itemDate}>{new Date(item.created_at).toLocaleString('es-MX')}</Text>
                 </View>
-                {item.inspection_id && <Ionicons name="chevron-forward" size={20} color={colors.muted} />}
+                {hasLink(item) && <Ionicons name="chevron-forward" size={20} color={colors.muted} />}
               </Pressable>
             )}
           />
@@ -83,7 +89,9 @@ const styles = StyleSheet.create({
   emptyText: { color: colors.muted, marginTop: spacing.md, fontWeight: '700' },
   item: { backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   itemUnread: { borderColor: colors.brandPrimary, backgroundColor: colors.brandTertiary },
+  itemUrgent: { borderColor: '#D32F2F' },
   unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.brandPrimary },
+  unreadDotUrgent: { backgroundColor: '#D32F2F' },
   itemTitle: { fontWeight: '900', color: colors.onSurface, fontSize: typography.sizes.base },
   itemMessage: { color: colors.onSurfaceTertiary, fontSize: typography.sizes.sm, marginTop: 4 },
   itemDate: { color: colors.muted, fontSize: 11, marginTop: 4 },

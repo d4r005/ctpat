@@ -460,12 +460,10 @@ export default function Supervisor() {
 function TabBtn({ label, icon, active, on, isMCI }: any) {
   return (
     <Pressable style={[styles.tab, active && styles.tabActive]} onPress={on}>
-      {({ pressed }) => (
-        isMCI ? (
-          <MaterialCommunityIcons name={icon as any} size={18} color={active ? '#FFF' : '#333'} />
-        ) : (
-          <Ionicons name={icon as any} size={18} color={active ? '#FFF' : '#333'} />
-        )
+      {isMCI ? (
+        <MaterialCommunityIcons name={icon as any} size={18} color={active ? '#FFF' : '#333'} />
+      ) : (
+        <Ionicons name={icon as any} size={18} color={active ? '#FFF' : '#333'} />
       )}
       <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
     </Pressable>

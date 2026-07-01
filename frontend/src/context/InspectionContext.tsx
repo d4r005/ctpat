@@ -18,17 +18,18 @@ export interface InspectionPoint {
 
 export interface InspectionPayload {
   inspection_type: string;
-  compania_transportista: string;
+  // Campos opcionales: registros históricos reconstruidos pueden no traerlos completos.
+  compania_transportista?: string;
   placas_unidad: string;
   numero_trailer: string;
-  numero_precinto: string;
-  sello_alta_seguridad: string;
+  numero_precinto?: string;
+  sello_alta_seguridad?: string;
   sello_verificado: boolean;
   points: InspectionPoint[];
-  actividad_sospechosa: string;
+  actividad_sospechosa?: string;
   inspector_nombre: string;
   inspector_firma: string;
-  fecha_hora: string;
+  fecha_hora?: string;
   client_uuid: string;
   record_id?: string;
   // Nuevos campos de dimensiones
@@ -56,11 +57,6 @@ export interface Inspection extends InspectionPayload {
   approved_sig?: string;
   approved_by_signature?: string;
   approved_at?: string;
-  compania_transportista?: string;
-  numero_precinto?: string;
-  sello_alta_seguridad?: string;
-  fecha_hora?: string;
-  actividad_sospechosa?: string;
   _pending?: boolean;
 }
 

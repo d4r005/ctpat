@@ -94,7 +94,7 @@ export default function InspeccionDashboard() {
 
           if (res.points && Array.isArray(res.points)) {
             // Guardamos los puntos extraídos temporalmente para que el Wizard los use
-            setFormData(prev => ({ ...prev, _ai_points: res.points }));
+            setFormData((prev: any) => ({ ...prev, _ai_points: res.points }));
           }
 
           // Si el documento traía medidas de la unidad, se precargan y se abre directo en el paso de medidas (9 puntos contenedor)
@@ -772,6 +772,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
+  topHeader: {},
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   headerActions: { flexDirection: 'row', padding: spacing.md, gap: spacing.sm, alignItems: 'center', marginTop: -10 },
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.sm, height: 48 },

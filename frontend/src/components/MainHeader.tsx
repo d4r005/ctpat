@@ -14,9 +14,14 @@ interface MainHeaderProps {
   title?: string;
   subtitle?: string;
   showBack?: boolean;
+  onBack?: () => void;
+  rightAction?: {
+    icon: keyof typeof Ionicons.glyphMap;
+    onPress: () => void;
+  };
 }
 
-const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack }) => {
+const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack, onBack, rightAction }) => {
   const { user } = useAuth();
   const { isOnline } = useInspections();
   const { t } = useTranslation();
@@ -28,7 +33,7 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack }) =>
     <View style={styles.brandHeader}>
       <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
         {showBack && (
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <Pressable onPress={() => (onBack ? onBack() : router.back())} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#FFF" />
           </Pressable>
         )}
@@ -40,6 +45,11 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack }) =>
         </View>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+        {rightAction && (
+          <Pressable onPress={rightAction.onPress} style={styles.headerBtn}>
+            <Ionicons name={rightAction.icon} size={26} color="#FFF" />
+          </Pressable>
+        )}
         <Pressable onPress={() => router.push('/(app)/chat')} style={styles.headerBtn}>
           <Ionicons name="chatbubbles-outline" size={24} color="#FFF" />
         </Pressable>

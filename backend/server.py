@@ -314,6 +314,37 @@ def is_admin(user: Dict[str, Any]) -> bool:
     admins = ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"]
     return user.get("email") in admins or user.get("role") == "admin"
 
+# --- Helpers de notificaciones (alertas de seguimiento del proceso) ---
+async def _insert_notifications(user_ids: List[str], title: str, message: str, **extra):
+    """Inserta una notificación individual por cada user_id (evita auto-notificar duplicados)."""
+    now = datetime.now(timezone.utc).isoformat()
+    docs = []
+    seen = set()
+    for uid in user_ids:
+        if not uid or uid in seen:
+            continue
+        seen.add(uid)
+        d = {"id": str(uuid.uuid4()), "user_id": uid, "global": False, "read": False,
+             "title": title, "message": message, "created_at": now}
+        d.update(extra)
+        docs.append(d)
+    if docs:
+        await db.notifications.insert_many(docs)
+
+async def notify_roles(roles: List[str], title: str, message: str, exclude_user_id: Optional[str] = None, **extra):
+    """Notifica a todos los usuarios activos con alguno de los roles indicados (ej. supervisor/admin)."""
+    admins_emails = ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"]
+    q = {"$or": [{"role": {"$in": roles}}, {"email": {"$in": admins_emails}}]}
+    users = await db.users.find(q, {"_id": 0, "id": 1}).to_list(500)
+    ids = [u["id"] for u in users if u["id"] != exclude_user_id]
+    await _insert_notifications(ids, title, message, **extra)
+
+async def notify_all_except(exclude_user_id: str, title: str, message: str, **extra):
+    """Notifica a todos los usuarios activos excepto al remitente (uso: chat general)."""
+    users = await db.users.find({}, {"_id": 0, "id": 1}).to_list(500)
+    ids = [u["id"] for u in users if u["id"] != exclude_user_id]
+    await _insert_notifications(ids, title, message, **extra)
+
 async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
     try:
         p = pyjwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
@@ -526,6 +557,14 @@ async def create_record(body: VehicleEntry, background_tasks: BackgroundTasks, u
     await db.vehicle_records.insert_one(full_doc)
     # Sincronizar automáticamente al sheet
     background_tasks.add_task(sync_to_google_sheets, "entrada", full_doc)
+    # Alerta de seguimiento: nuevo ingreso en caseta
+    placas = doc.get("placas_unidad", "S/P")
+    background_tasks.add_task(
+        notify_roles, ["supervisor", "admin"],
+        f"🚪 Nuevo ingreso en caseta: {placas}",
+        f"{u['name']} registró el ingreso de la unidad {placas} en caseta.",
+        exclude_user_id=u["id"], record_id=rid, kind="caseta"
+    )
     return VehicleRecord(**full_doc)
 
 @api_router.get("/vehicle-records/{rec_id}", response_model=VehicleRecord)
@@ -1107,10 +1146,17 @@ async def exit_record(rec_id: str, body: VehicleExit, background_tasks: Backgrou
 
         # El proceso está completo si tiene entrada, inspección y salida.
         # El ticket de embarque solo es obligatorio si NO es descarga.
+        placas_salida = entry_data.get("placas_unidad", "S/P")
         if has_entry and has_inspection and has_exit and (is_descarga or has_ticket):
             background_tasks.add_task(send_report_email, rec_id)
             motivo = "Descarga" if is_descarga else "Carga Completa"
             logger.info(f"Reporte automático disparado para record {rec_id} ({motivo})")
+            background_tasks.add_task(
+                notify_roles, ["supervisor", "admin"],
+                f"✅ Proceso completo: {placas_salida}",
+                f"{u['name']} registró la salida de la unidad {placas_salida}. Proceso completo, reporte enviado.",
+                exclude_user_id=u["id"], record_id=rec_id, kind="proceso_completo"
+            )
         else:
             missing = []
             if not has_entry: missing.append("Ingreso")
@@ -1118,6 +1164,12 @@ async def exit_record(rec_id: str, body: VehicleExit, background_tasks: Backgrou
             if not is_descarga and not has_ticket: missing.append("Embarque (Obligatorio para Carga)")
             if not has_exit: missing.append("Salida")
             logger.info(f"Salida registrada para {rec_id} pero proceso incompleto. Faltan: {', '.join(missing)}")
+            background_tasks.add_task(
+                notify_roles, ["supervisor", "admin"],
+                f"🚦 Salida registrada: {placas_salida}",
+                f"{u['name']} registró la salida de la unidad {placas_salida}. Faltan: {', '.join(missing)}." if missing else f"{u['name']} registró la salida de la unidad {placas_salida}.",
+                exclude_user_id=u["id"], record_id=rec_id, kind="salida"
+            )
     return VehicleRecord(**up)
 
 # --- Inspecciones ---
@@ -1158,13 +1210,21 @@ async def create_inspection(body: InspectionCreate, background_tasks: Background
     # Sincronizar automáticamente al sheet
     background_tasks.add_task(sync_to_google_sheets, "inspeccion", doc)
 
-    # Notificar si hay fallas (alerta global para supervisores)
+    # Alerta de seguimiento: toda inspección requiere aprobación de supervisor/admin
+    background_tasks.add_task(
+        notify_roles, ["supervisor", "admin"],
+        f"📋 Inspección pendiente de aprobar: {body.placas_unidad}",
+        f"{u['name']} completó la inspección de la unidad {body.placas_unidad}. Requiere tu aprobación.",
+        exclude_user_id=u["id"], inspection_id=iid, kind="approval_pending"
+    )
+
+    # Notificar si hay fallas (alerta global urgente para todos)
     if doc["status_general"] == "malo":
         await db.notifications.insert_one({
             "id": str(uuid.uuid4()), "user_id": u["id"], "global": True, "read": False,
-            "title": f"FALLA: {body.placas_unidad}",
+            "title": f"🔴 FALLA: {body.placas_unidad}",
             "message": f"Inspección con fallas reportada por {u['name']}.",
-            "inspection_id": iid, "created_at": datetime.now(timezone.utc).isoformat()
+            "inspection_id": iid, "kind": "falla", "created_at": datetime.now(timezone.utc).isoformat()
         })
 
     return Inspection(**doc)
@@ -1217,9 +1277,9 @@ async def approve_insp(insp_id: str, body: ApprovalBody, u: Dict[str, Any] = Dep
     if d:
         await db.notifications.insert_one({
             "id": str(uuid.uuid4()), "user_id": d["user_id"], "global": False, "read": False,
-            "title": "Inspección Aprobada",
+            "title": "✅ Inspección Aprobada",
             "message": f"Tu inspección de la unidad {d.get('placas_unidad')} ha sido aprobada por {u['name']}.",
-            "inspection_id": insp_id, "created_at": datetime.now(timezone.utc).isoformat()
+            "inspection_id": insp_id, "kind": "approved", "created_at": datetime.now(timezone.utc).isoformat()
         })
 
     return Inspection(**d)
@@ -1253,6 +1313,14 @@ async def create_ticket(body: ShippingTicketCreate, background_tasks: Background
                 doc["record_id"] = rec_by_plates["id"]
     # Sincronizar automáticamente al sheet
     background_tasks.add_task(sync_to_google_sheets, "embarque", doc)
+    # Alerta de seguimiento: nuevo ticket de embarque
+    placas_emb = doc.get("placas_unidad", "S/P")
+    background_tasks.add_task(
+        notify_roles, ["supervisor", "admin"],
+        f"📦 Nuevo ticket de embarque: {placas_emb}",
+        f"{u['name']} registró el ticket de embarque de la unidad {placas_emb}.",
+        exclude_user_id=u["id"], record_id=doc.get("record_id"), ticket_id=tid, kind="embarque"
+    )
     return {"id": tid}
 
 @api_router.get("/shipping-tickets", response_model=List[Dict[str, Any]])
@@ -1838,13 +1906,57 @@ async def save_push_token(body: Dict[str, str], u: Dict[str, Any] = Depends(get_
     return {"ok": True}
 
 # --- Chat (Interno Team Chat) ---
+@api_router.get("/users/directory")
+async def users_directory(u: Dict[str, Any] = Depends(get_current_user)):
+    """Directorio ligero (id, nombre, rol) para @mencionar en el chat. Disponible para cualquier usuario autenticado."""
+    users = await db.users.find({"active": {"$ne": False}}, {"_id": 0, "id": 1, "name": 1, "role": 1}).sort("name", 1).to_list(500)
+    return [x for x in users if x.get("id") != u["id"]]
+
+async def _notify_chat_message(msg: Dict[str, Any]):
+    """Alerta de chat: mención directa (@Nombre) con prioridad alta, o mensaje general al resto del equipo."""
+    try:
+        text = msg.get("text", "")
+        room = msg.get("room", "GENERAL")
+        sender_id = msg.get("user_id")
+        sender_name = msg.get("user_name", "Alguien")
+        preview = text if len(text) <= 120 else text[:117] + "..."
+
+        users = await db.users.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(500)
+        text_low = text.lower()
+        mentioned_ids = []
+        for usr in users:
+            if usr["id"] == sender_id:
+                continue
+            nm = (usr.get("name") or "").strip().lower()
+            if nm and f"@{nm}" in text_low:
+                mentioned_ids.append(usr["id"])
+
+        if mentioned_ids:
+            await _insert_notifications(
+                mentioned_ids,
+                f"🔴 {sender_name} te mencionó en el chat",
+                preview,
+                chat_room=room, kind="mention", urgent=True
+            )
+
+        other_ids = [usr["id"] for usr in users if usr["id"] != sender_id and usr["id"] not in mentioned_ids]
+        if other_ids:
+            await _insert_notifications(
+                other_ids,
+                f"💬 {sender_name}",
+                preview,
+                chat_room=room, kind="chat"
+            )
+    except Exception as e:
+        logger.error(f"Error notificando mensaje de chat: {e}")
+
 @api_router.get("/chat/{room}")
 async def get_chat(room: str, u: Dict[str, Any] = Depends(get_current_user)):
     msgs = await db.chat_messages.find({"room": room}).sort("created_at", 1).to_list(200)
     return [{**m, "id": str(m.get("_id"))} for m in msgs]
 
 @api_router.post("/chat/send")
-async def send_chat(body: Dict[str, Any], u: Dict[str, Any] = Depends(get_current_user)):
+async def send_chat(body: Dict[str, Any], background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
     msg = {
         "id": str(uuid.uuid4()),
         "room": body.get("room", "GENERAL"),
@@ -1855,6 +1967,7 @@ async def send_chat(body: Dict[str, Any], u: Dict[str, Any] = Depends(get_curren
     }
     await db.chat_messages.insert_one(msg)
     if "_id" in msg: del msg["_id"]
+    background_tasks.add_task(_notify_chat_message, msg.copy())
     return msg
 
 # --- Actividades ---

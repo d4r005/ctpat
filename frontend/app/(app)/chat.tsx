@@ -9,6 +9,12 @@ import { apiCall } from '@/src/api/client';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import MainHeader from '@/src/components/MainHeader';
 
+interface DirectoryUser {
+  id: string;
+  name: string;
+  role: string;
+}
+
 interface Message {
   id: string;
   user_id: string;
@@ -31,6 +37,32 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+  const [directory, setDirectory] = useState<DirectoryUser[]>([]);
+  const [mentionSuggestions, setMentionSuggestions] = useState<DirectoryUser[]>([]);
+
+  // Cargar directorio de usuarios (inspector/supervisor/administrador) para @mencionar
+  useEffect(() => {
+    if (!token) return;
+    apiCall<DirectoryUser[]>('/users/directory', { token }).then(setDirectory).catch(() => {});
+  }, [token]);
+
+  const handleChangeText = (v: string) => {
+    setText(v);
+    const match = v.match(/@([^\s@]*)$/);
+    if (match) {
+      const prefix = match[1].toLowerCase();
+      const matches = directory.filter((d) => d.name.toLowerCase().includes(prefix)).slice(0, 5);
+      setMentionSuggestions(matches);
+    } else {
+      setMentionSuggestions([]);
+    }
+  };
+
+  const selectMention = (u: DirectoryUser) => {
+    const newText = text.replace(/@([^\s@]*)$/, `@${u.name} `);
+    setText(newText);
+    setMentionSuggestions([]);
+  };
 
   const fetchMessages = async (showLoading = false) => {
     if (!token) return;
@@ -63,6 +95,7 @@ export default function ChatScreen() {
       });
       setMessages(prev => [...prev, newMessage]);
       setText('');
+      setMentionSuggestions([]);
       // Scroll to end
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (e: any) {
@@ -113,11 +146,23 @@ export default function ChatScreen() {
             />
           )}
 
+          {mentionSuggestions.length > 0 && (
+            <View style={styles.mentionBox}>
+              {mentionSuggestions.map((mu) => (
+                <Pressable key={mu.id} style={styles.mentionItem} onPress={() => selectMention(mu)}>
+                  <Ionicons name="at" size={14} color={colors.brandPrimary} />
+                  <Text style={styles.mentionName}>{mu.name}</Text>
+                  <Text style={styles.mentionRole}>{mu.role.toUpperCase()}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
           <View style={styles.inputArea}>
             <TextInput
               style={styles.input}
               value={text}
-              onChangeText={setText}
+              onChangeText={handleChangeText}
               placeholder={t('escribir_mensaje')}
               placeholderTextColor={colors.muted}
               multiline
@@ -184,4 +229,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center'
   },
+  mentionBox: {
+    backgroundColor: colors.surfaceSecondary,
+    borderTopWidth: 2,
+    borderTopColor: colors.borderStrong,
+    paddingVertical: spacing.xs,
+  },
+  mentionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  mentionName: { color: colors.onSurface, fontWeight: '900', fontSize: typography.sizes.sm },
+  mentionRole: { color: colors.muted, fontSize: 10, marginLeft: 'auto', fontWeight: '700' },
 });

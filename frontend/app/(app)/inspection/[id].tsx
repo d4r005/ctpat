@@ -236,7 +236,7 @@ export default function InspectionDetail() {
     <tr><td style="padding:6px;border:1px solid #999;"><b>${t('numero_precinto_caps')}</b></td><td style="padding:6px;border:1px solid #999;">${i.numero_precinto}</td></tr>
     <tr><td style="padding:6px;border:1px solid #999;"><b>${t('sello_alta_seguridad_caps')}</b></td><td style="padding:6px;border:1px solid #999;">${i.sello_alta_seguridad}</td></tr>
     <tr><td style="padding:6px;border:1px solid #999;"><b>${t('sello_verificado_msg')}</b></td><td style="padding:6px;border:1px solid #999;">${i.sello_verificado ? t('si') : t('no')}</td></tr>
-    <tr><td style="padding:6px;border:1px solid #999;"><b>${t('fecha_hora')}</b></td><td style="padding:6px;border:1px solid #999;">${new Date(i.fecha_hora).toLocaleString()}</td></tr>
+    <tr><td style="padding:6px;border:1px solid #999;"><b>${t('fecha_hora')}</b></td><td style="padding:6px;border:1px solid #999;">${new Date(i.fecha_hora || i.created_at).toLocaleString()}</td></tr>
     <tr><td style="padding:6px;border:1px solid #999;"><b>${t('estado')}</b></td><td style="padding:6px;border:1px solid #999;background:${i.status_general === 'bueno' ? '#dcfce7' : '#fee2e2'};font-weight:bold;">${t(i.status_general === 'bueno' ? 'bueno' : 'malo').toUpperCase()}</td></tr>
   </table>
 
@@ -422,13 +422,13 @@ export default function InspectionDetail() {
               </Pressable>
             </View>
           )}
-          <Row label={t('compania')} value={insp.compania_transportista} isEdit={isEditing} onEdit={(v) => setEditData({...editData, compania_transportista: v})} />
+          <Row label={t('compania')} value={insp.compania_transportista || ''} isEdit={isEditing} onEdit={(v) => setEditData({...editData, compania_transportista: v})} />
           <Row label={t('placas')} value={insp.placas_unidad} isEdit={isEditing} onEdit={(v) => setEditData({...editData, placas_unidad: sanitizePlate(v)})} />
           <Row label={t('trailer')} value={insp.numero_trailer} isEdit={isEditing} onEdit={(v) => setEditData({...editData, numero_trailer: v})} />
-          <Row label={t('precinto')} value={insp.numero_precinto} isEdit={isEditing} onEdit={(v) => setEditData({...editData, numero_precinto: v})} />
-          <Row label={t('sello_alta_seguridad_label') || "Sello Alta Seg."} value={insp.sello_alta_seguridad} isEdit={isEditing} onEdit={(v) => setEditData({...editData, sello_alta_seguridad: v})} />
+          <Row label={t('precinto')} value={insp.numero_precinto || ''} isEdit={isEditing} onEdit={(v) => setEditData({...editData, numero_precinto: v})} />
+          <Row label={t('sello_alta_seguridad_label') || "Sello Alta Seg."} value={insp.sello_alta_seguridad || ''} isEdit={isEditing} onEdit={(v) => setEditData({...editData, sello_alta_seguridad: v})} />
           <Row label={t('sello_verificado_label') || "Sello Verificado"} value={insp.sello_verificado ? t('si') : t('no')} />
-          <Row label={t('fecha_hora')} value={new Date(insp.fecha_hora).toLocaleString()} />
+          <Row label={t('fecha_hora')} value={new Date(insp.fecha_hora || insp.created_at).toLocaleString()} />
         </Section>
 
         {insp.box_type ? (

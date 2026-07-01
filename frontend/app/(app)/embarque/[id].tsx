@@ -78,9 +78,9 @@ export default function EmbarqueDetail() {
             <Text style={styles.sectionTitle}>{t('almacen').toUpperCase()}</Text>
           </View>
           <View style={styles.sectionBody}>
-            <EditableRow label={t('almacenista')} value={form.almacenista} onEdit={editMode ? (v) => setForm({...form, almacenista: v}) : null} />
-            <EditableRow label={t('cliente')} value={form.cliente} onEdit={editMode ? (v) => setForm({...form, cliente: v}) : null} />
-            <EditableRow label={t('pallets')} value={form.numero_pallets} onEdit={editMode ? (v) => setForm({...form, numero_pallets: v}) : null} />
+            <EditableRow label={t('almacenista')} value={form.almacenista} onEdit={editMode ? (v: string) => setForm({...form, almacenista: v}) : null} />
+            <EditableRow label={t('cliente')} value={form.cliente} onEdit={editMode ? (v: string) => setForm({...form, cliente: v}) : null} />
+            <EditableRow label={t('pallets')} value={form.numero_pallets} onEdit={editMode ? (v: string) => setForm({...form, numero_pallets: v}) : null} />
           </View>
         </View>
 
@@ -89,10 +89,10 @@ export default function EmbarqueDetail() {
             <Text style={styles.sectionTitle}>{t('transporte').toUpperCase()}</Text>
           </View>
           <View style={styles.sectionBody}>
-            <EditableRow label={t('placas_unidad')} value={form.placas_unidad} onEdit={editMode ? (v) => setForm({...form, placas_unidad: sanitizePlate(v)}) : null} />
-            <EditableRow label={t('numero_caja_caps')} value={form.numero_caja} onEdit={editMode ? (v) => setForm({...form, numero_caja: v}) : null} />
-            <EditableRow label={t('sello')} value={form.numero_sello} onEdit={editMode ? (v) => setForm({...form, numero_sello: v}) : null} />
-            <EditableRow label={t('chofer')} value={form.operador} onEdit={editMode ? (v) => setForm({...form, operador: v}) : null} />
+            <EditableRow label={t('placas_unidad')} value={form.placas_unidad} onEdit={editMode ? (v: string) => setForm({...form, placas_unidad: sanitizePlate(v)}) : null} />
+            <EditableRow label={t('numero_caja_caps')} value={form.numero_caja} onEdit={editMode ? (v: string) => setForm({...form, numero_caja: v}) : null} />
+            <EditableRow label={t('sello')} value={form.numero_sello} onEdit={editMode ? (v: string) => setForm({...form, numero_sello: v}) : null} />
+            <EditableRow label={t('chofer')} value={form.operador} onEdit={editMode ? (v: string) => setForm({...form, operador: v}) : null} />
           </View>
         </View>
 
