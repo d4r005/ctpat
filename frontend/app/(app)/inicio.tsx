@@ -164,12 +164,14 @@ export default function Inicio() {
       <Pressable style={styles.activeUnitCard} onPress={() => router.push(`/caseta/${r.id}`)}>
         <View style={styles.activeUnitLeft}>
            <View style={[styles.statusIndicator, { backgroundColor: r.status === 'entrada' ? colors.warning : colors.info }]} />
-           <View>
-              <Text style={styles.trackingTitle}>{r.entry?.placas_unidad} {isFull ? '(FULL)' : ''}</Text>
-              <Text style={styles.trackingSub}>{r.entry?.chofer_nombre} · {r.entry?.compania_transporte}</Text>
+           <View style={styles.activeUnitTextBlock}>
+              <Text style={styles.trackingTitle} numberOfLines={1}>{r.entry?.placas_unidad} {isFull ? '(FULL)' : ''}</Text>
+              <Text style={styles.trackingSub} numberOfLines={1}>{r.entry?.chofer_nombre} · {r.entry?.compania_transporte}</Text>
            </View>
         </View>
-        <ProcessTracker steps={steps} compact showShipping={showShipping} />
+        <View style={styles.activeUnitTracker}>
+          <ProcessTracker steps={steps} compact showShipping={showShipping} />
+        </View>
       </Pressable>
     );
   };
@@ -229,7 +231,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between'
   },
-  activeUnitLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  activeUnitLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexShrink: 1, flex: 1, marginRight: spacing.sm },
+  activeUnitTextBlock: { flexShrink: 1 },
+  activeUnitTracker: { flexShrink: 0 },
   statusIndicator: { width: 4, height: 40, borderRadius: 2 },
   trackingTitle: { fontWeight: '900', fontSize: 16, color: colors.onSurface, letterSpacing: 0.5 },
   trackingSub: { fontSize: 11, color: colors.muted, marginTop: 2, fontWeight: '600' },
