@@ -32,11 +32,25 @@ if (getRNMinorVersion() >= 75) {
 rootProject.name = 'SRIUC'
 
 dependencyResolutionManagement {
-  repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
+  repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
   repositories {
+    maven {
+      // React Native local — debe estar primero
+      url(new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim(), "../android"))
+    }
+    maven {
+      url(new File(["node", "--print", "require.resolve('jsc-android/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim(), "../dist"))
+    }
     google()
     mavenCentral()
     maven { url = uri("https://www.jitpack.io") }
+    // Excluir snapshots de sonatype — provoca timeout en CI
+    exclusiveContent {
+      forRepository {
+        maven { url = uri("https://oss.sonatype.org/content/repositories/snapshots/") }
+      }
+      filter { includeGroupByRegex(".*NEVER_MATCH.*") }
+    }
   }
   versionCatalogs {
     reactAndroidLibs {
