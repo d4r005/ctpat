@@ -117,7 +117,7 @@ export default function EmbarqueDetail() {
                <TextInput
                  style={styles.obsInput}
                  value={form.observaciones}
-                 onChangeText={(v)=>setForm({...form, observaciones: v})}
+                 onChangeText={(v)=>setForm({...form, observaciones: v.toUpperCase()})}
                  multiline
                  numberOfLines={3}
                />
@@ -136,7 +136,7 @@ function EditableRow({ label, value, onEdit }: any) {
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
       {onEdit ? (
-        <TextInput style={styles.rowInput} value={value} onChangeText={onEdit} />
+        <TextInput style={styles.rowInput} value={value} autoCapitalize="characters" onChangeText={(v) => onEdit(v.toUpperCase())} />
       ) : (
         <Text style={styles.rowValue}>{value || '-'}</Text>
       )}

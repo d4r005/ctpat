@@ -68,6 +68,7 @@ export default function CasetaNuevo() {
   // Caja 1
   const [companiaCaja, setCompaniaCaja] = useState('');
   const [numeroCaja, setNumeroCaja] = useState('');
+  const [placasCaja, setPlacasCaja] = useState('');
   const [selloEntrada, setSelloEntrada] = useState('');
   const [selloEntradaNA, setSelloEntradaNA] = useState(false);
 
@@ -215,6 +216,7 @@ export default function CasetaNuevo() {
         placas_unidad: placas.trim().toUpperCase(), chofer_nombre: chofer.trim().toUpperCase(),
         compania_transporte: compania.trim().toUpperCase(), numero_tractor: tractor.trim().toUpperCase(),
         compania_caja: companiaCaja.trim().toUpperCase(), numero_caja: numeroCaja.trim().toUpperCase(),
+        placas_caja: placasCaja.trim().toUpperCase(),
         sello_entrada: selloEntradaNA ? 'N/A' : selloEntrada.trim().toUpperCase(),
         // Support for FULL (2nd trailer)
         compania_caja_2: tipoUnidad === 'full' ? companiaCaja2.trim().toUpperCase() : '',
@@ -318,6 +320,7 @@ export default function CasetaNuevo() {
               <Text style={[styles.declTitle, { marginTop: spacing.lg, marginBottom: spacing.sm }]}>{t('caja').toUpperCase()}</Text>
               <Field label={t('compania_caja').toUpperCase()} value={companiaCaja} onChange={setCompaniaCaja} testID="caseta-compania-caja" />
               <Field label={t('numero_caja_caps').toUpperCase()} value={numeroCaja} onChange={setNumeroCaja} testID="caseta-numero-caja" />
+              <Field label={t('placas_caja_caps').toUpperCase()} value={placasCaja} onChange={setPlacasCaja} testID="caseta-placas-caja" />
 
               <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
                 <View style={{ flex: 1 }}>

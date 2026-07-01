@@ -83,6 +83,7 @@ class VehicleEntry(BaseModel):
     numero_tractor: str = ""
     compania_caja: str = ""
     numero_caja: str = ""
+    placas_caja: str = ""
     sello_entrada: str = ""
     compania_caja_2: str = ""
     numero_caja_2: str = ""
@@ -771,6 +772,7 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
         + th2("CAJA / 货箱")
         + tr("Empresa Caja / 货箱公司", entry.get("compania_caja"))
         + tr("Caja / 货箱", entry.get("numero_caja"))
+        + tr("Placas Caja / 货箱车牌", entry.get("placas_caja"))
         + tr("Sello Entrada / 进场封条", entry.get("sello_entrada"))
     )
     if is_full:

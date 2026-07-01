@@ -344,6 +344,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
   const [saving, setSaving] = useState(false);
   const [showSig, setShowSig] = useState(false);
   const [sigTarget, setSigTarget] = useState<'inspector' | 'guard'>('inspector');
+  const [inspectorOpcion, setInspectorOpcion] = useState<'MARIO AGUILAR' | 'ADELAIDO SAENZ' | 'OTRO' | ''>('');
   const [scanner, setScanner] = useState<{ visible: boolean, field: string }>({ visible: false, field: '' });
   const sigRef = React.useRef<any>(null);
 
@@ -644,7 +645,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
                       style={styles.failInput}
                       placeholder={t('comentarios_falla')}
                       value={p.comentarios}
-                      onChangeText={v => { const n = [...points]; n[originalIdx].comentarios = v; setPoints(n); }}
+                      onChangeText={v => { const n = [...points]; n[originalIdx].comentarios = v.toUpperCase(); setPoints(n); }}
                     />
                     <Pressable style={styles.photoBtn} onPress={() => pickPointPhoto(originalIdx)}>
                       {p.photo ? (
@@ -673,25 +674,33 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
                 multiline
                 placeholder={t('describa_actividad_sospechosa')}
                 value={data.actSospechosa}
-                onChangeText={v => setData({...data, actSospechosa: v})}
+                onChangeText={v => setData({...data, actSospechosa: v.toUpperCase()})}
               />
 
-              <View style={{ marginBottom: 20, padding: 10, backgroundColor: colors.brandTertiary, borderWidth: 1, borderColor: colors.brandPrimary }}>
-                <Text style={styles.label}>{t('nombre_guardia') || 'NOMBRE DEL GUARDIA'}</Text>
-                <TextInput style={styles.input} value={data.guard_name} onChangeText={v => setData({...data, guard_name: v})} />
-
-                <Text style={styles.label}>{t('firma_guardia') || 'FIRMA DEL GUARDIA'}</Text>
-                <Pressable style={styles.sigArea} onPress={() => { setSigTarget('guard'); setShowSig(true); }}>
-                  {data.guard_signature ? (
-                    <Image source={{ uri: data.guard_signature }} style={{ width: '100%', height: '100%', resizeMode: 'contain' }} />
-                  ) : (
-                    <Text style={{ color: colors.muted, fontWeight: '700' }}>{t('toca_para_firmar')}</Text>
-                  )}
-                </Pressable>
-              </View>
-
               <Text style={styles.label}>{t('nombre_inspector').toUpperCase()}</Text>
-              <TextInput style={styles.input} value={data.inspectorNombre} onChangeText={v => setData({...data, inspectorNombre: v})} />
+              <View style={[styles.optionsRow, { marginBottom: spacing.sm }]}>
+                {(['MARIO AGUILAR', 'ADELAIDO SAENZ', 'OTRO'] as const).map((o) => (
+                  <Pressable
+                    key={o}
+                    onPress={() => {
+                      setInspectorOpcion(o);
+                      if (o !== 'OTRO') setData({ ...data, inspectorNombre: o });
+                      else setData({ ...data, inspectorNombre: '' });
+                    }}
+                    style={[styles.optionChip, inspectorOpcion === o && styles.optionChipActive]}
+                  >
+                    <Text style={[styles.optionText, inspectorOpcion === o && styles.optionTextActive]}>{o}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              {(inspectorOpcion === 'OTRO' || !inspectorOpcion) && (
+                <TextInput
+                  style={styles.input}
+                  value={data.inspectorNombre}
+                  onChangeText={v => setData({...data, inspectorNombre: v.toUpperCase()})}
+                  placeholder={t('nombre_completo_placeholder')}
+                />
+              )}
 
               <Text style={styles.label}>{t('firma_inspector').toUpperCase()}</Text>
               <Pressable style={styles.sigArea} onPress={() => { setSigTarget('inspector'); setShowSig(true); }}>
@@ -726,7 +735,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
       {showSig && (
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{sigTarget === 'inspector' ? t('firma_inspector').toUpperCase() : (t('firma_guardia') || 'FIRMA DEL GUARDIA')}</Text>
+            <Text style={styles.modalTitle}>{t('firma_inspector').toUpperCase()}</Text>
             <View style={styles.sigCanvasCont}>
               <Signature
                 ref={sigRef}
@@ -824,4 +833,9 @@ const styles = StyleSheet.create({
   standardMeasuresBox: { padding: 10, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1', marginBottom: 20 },
   standardTitle: { fontSize: 10, fontWeight: '900', color: '#64748B', marginBottom: 2 },
   standardValue: { fontSize: 13, fontWeight: '900', color: '#1E293B' },
+  optionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  optionChip: { borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, paddingVertical: 8, flexShrink: 0 },
+  optionChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  optionText: { fontWeight: '900', fontSize: 11, color: colors.onSurface, letterSpacing: 1 },
+  optionTextActive: { color: colors.onBrandPrimary },
 });

@@ -83,6 +83,7 @@ class VehicleEntry(BaseModel):
     numero_tractor: str = ""
     compania_caja: str = ""
     numero_caja: str = ""
+    placas_caja: str = ""
     sello_entrada: str = ""
     compania_caja_2: str = ""
     numero_caja_2: str = ""

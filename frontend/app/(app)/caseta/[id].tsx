@@ -254,6 +254,7 @@ export default function CasetaDetail() {
                 <Text style={styles.subTitle}>{t('caja').toUpperCase()}</Text>
                 <View style={styles.grid}>
                   <EditableItem label={t('numero_caja_caps')} value={entryForm.numero_caja} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_caja: v}) : null} />
+                  <EditableItem label={t('placas_caja_caps')} value={entryForm.placas_caja} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, placas_caja: v}) : null} />
                   <EditableItem label={t('sello').toUpperCase()} value={entryForm.sello_entrada} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, sello_entrada: v}) : null} />
                 </View>
               </View>
@@ -285,7 +286,7 @@ export default function CasetaDetail() {
                     <TextInput
                       style={[styles.input, { minHeight: 60, textAlignVertical: 'top' }]}
                       value={entryForm.descripcion_carga || ''}
-                      onChangeText={(v) => setEntryForm({ ...entryForm, descripcion_carga: v })}
+                      onChangeText={(v) => setEntryForm({ ...entryForm, descripcion_carga: v.toUpperCase() })}
                       multiline
                     />
                   ) : (
@@ -500,7 +501,7 @@ function EditableItem({ label, value, onEdit }: any) {
     <View style={styles.infoItem}>
       <Text style={styles.infoLabel}>{label}</Text>
       {onEdit ? (
-        <TextInput style={styles.editInput} value={value} onChangeText={onEdit} />
+        <TextInput style={styles.editInput} value={value} autoCapitalize="characters" onChangeText={(v) => onEdit(v.toUpperCase())} />
       ) : (
         <Text style={styles.infoValue}>{value || '-'}</Text>
       )}

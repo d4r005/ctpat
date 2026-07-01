@@ -361,7 +361,7 @@ export default function InspectionDetail() {
             <TextInput
               style={[styles.noteInput, { minHeight: 48, marginBottom: spacing.md }]}
               value={approvalName}
-              onChangeText={setApprovalName}
+              onChangeText={(v) => setApprovalName(v.toUpperCase())}
               placeholder={t('nombre_supervisor_placeholder')}
             />
 
@@ -372,7 +372,7 @@ export default function InspectionDetail() {
               placeholder={t('nota_placeholder_rechazo')}
               placeholderTextColor={colors.muted}
               value={approvalNote}
-              onChangeText={setApprovalNote}
+              onChangeText={(v) => setApprovalNote(v.toUpperCase())}
               multiline
             />
 
@@ -488,7 +488,7 @@ export default function InspectionDetail() {
               style={[styles.noteInput, { minHeight: 100 }]}
               multiline
               value={editData.actividad_sospechosa || insp.actividad_sospechosa}
-              onChangeText={(v) => setEditData({ ...editData, actividad_sospechosa: v })}
+              onChangeText={(v) => setEditData({ ...editData, actividad_sospechosa: v.toUpperCase() })}
             />
           ) : (
             <Text style={styles.bodyText}>{insp.actividad_sospechosa || t('sin_reporte')}</Text>
@@ -521,7 +521,7 @@ export default function InspectionDetail() {
             <TextInput
               style={[styles.value, { borderBottomWidth: 1, borderBottomColor: colors.border }]}
               value={editData.inspector_nombre || insp.inspector_nombre}
-              onChangeText={(v) => setEditData({ ...editData, inspector_nombre: v })}
+              onChangeText={(v) => setEditData({ ...editData, inspector_nombre: v.toUpperCase() })}
             />
           ) : (
             <Text style={styles.value}>{insp.inspector_nombre}</Text>
@@ -571,7 +571,7 @@ export default function InspectionDetail() {
                 <TextInput
                   style={[styles.value, { borderBottomWidth: 1, borderBottomColor: colors.border }]}
                   value={editData.approved_by_name || insp.approved_by_name}
-                  onChangeText={(v) => setEditData({ ...editData, approved_by_name: v })}
+                  onChangeText={(v) => setEditData({ ...editData, approved_by_name: v.toUpperCase() })}
                 />
               ) : (
                 <Text style={styles.value}>{insp.approved_by_name || '-'}</Text>
