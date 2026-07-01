@@ -111,10 +111,15 @@ export default function CasetaNuevo() {
 
   const handleScanIA = async () => {
     try {
-      // No se hace un pre-chequeo separado de permisos: launchCameraAsync ya
-      // solicita el permiso de cámara internamente si hace falta. Un chequeo
-      // previo duplicado puede devolver un falso "denegado" en algunos
-      // dispositivos Android y bloquear el flujo sin mostrar nada.
+      // Se solicita el permiso de cámara explícitamente antes de abrir el
+      // picker. En web (navegador) launchCameraAsync NO solicita el permiso
+      // por sí solo de forma confiable, así que sin este chequeo el picker
+      // podía fallar en silencio (canceled) sin mostrar ningún error.
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permiso requerido', 'Se necesita acceso a la cámara para escanear con IA.');
+        return;
+      }
       const r = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.4,

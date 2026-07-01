@@ -54,7 +54,15 @@ export default function EmbarqueNuevo() {
 
   const handleScanIA = async () => {
     try {
-      // launchCameraAsync ya solicita el permiso de cámara internamente.
+      // Se solicita el permiso de cámara explícitamente antes de abrir el
+      // picker. En web (navegador) launchCameraAsync NO solicita el permiso
+      // por sí solo de forma confiable, así que sin este chequeo el picker
+      // podía fallar en silencio (canceled) sin mostrar ningún error.
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permiso requerido', 'Se necesita acceso a la cámara para escanear con IA.');
+        return;
+      }
       const r = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.4,

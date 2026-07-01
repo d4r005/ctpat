@@ -59,7 +59,7 @@ export default function EmbarqueList() {
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>{tk.placas_unidad || 'S/P'}</Text>
             <View style={[styles.badge, { backgroundColor: isComplete ? colors.success : colors.warning }]}>
-              <Text style={styles.badgeText}>{isComplete ? 'COMPLETO' : 'EN PROCESO'}</Text>
+              <Text style={styles.badgeText}>{isComplete ? t('completo').toUpperCase() : t('en_proceso').toUpperCase()}</Text>
             </View>
           </View>
 
@@ -70,15 +70,15 @@ export default function EmbarqueList() {
           <View style={styles.detailRow}>
             <View style={styles.detailItem}>
               <Ionicons name="bus-outline" size={12} color={colors.muted} />
-              <Text style={styles.detailText}>Caja: {tk.numero_caja || '-'}</Text>
+              <Text style={styles.detailText}>{t('caja')}: {tk.numero_caja || '-'}</Text>
             </View>
             <View style={styles.detailItem}>
               <Ionicons name="lock-closed-outline" size={12} color={colors.muted} />
-              <Text style={styles.detailText}>Sello: {tk.numero_sello || '-'}</Text>
+              <Text style={styles.detailText}>{t('sello')}: {tk.numero_sello || '-'}</Text>
             </View>
             <View style={styles.detailItem}>
               <Ionicons name="layers-outline" size={12} color={colors.muted} />
-              <Text style={styles.detailText}>Pallets: {tk.numero_pallets || '-'}</Text>
+              <Text style={styles.detailText}>{t('pallets')}: {tk.numero_pallets || '-'}</Text>
             </View>
           </View>
 
@@ -91,7 +91,7 @@ export default function EmbarqueList() {
                 color={hasAlmacenista ? colors.success : colors.muted}
               />
               <Text style={[styles.sigText, { color: hasAlmacenista ? colors.success : colors.muted }]}>
-                Almacenista
+                {t('almacenista')}
               </Text>
             </View>
             <View style={styles.sigChip}>
@@ -101,7 +101,7 @@ export default function EmbarqueList() {
                 color={hasGuardia ? colors.success : colors.muted}
               />
               <Text style={[styles.sigText, { color: hasGuardia ? colors.success : colors.muted }]}>
-                Guardia
+                {t('guardia')}
               </Text>
             </View>
           </View>

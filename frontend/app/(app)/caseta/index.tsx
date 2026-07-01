@@ -74,8 +74,8 @@ export default function CasetaList() {
       colors.warning;
 
     const statusLabel =
-      r.status === 'salida' ? 'SALIÓ' :
-      r.status === 'inspeccionado' ? 'INSPECCIONADO' : 'EN PATIO';
+      r.status === 'salida' ? t('salio').toUpperCase() :
+      r.status === 'inspeccionado' ? t('inspeccionado').toUpperCase() : t('en_patio').toUpperCase();
 
     return (
       <Pressable
@@ -107,10 +107,10 @@ export default function CasetaList() {
   };
 
   const FILTERS: Array<{ key: typeof filter; label: string }> = [
-    { key: 'todos', label: 'TODOS' },
-    { key: 'entrada', label: 'EN PATIO' },
-    { key: 'inspeccionado', label: 'INSPECCIONADO' },
-    { key: 'salida', label: 'SALIÓ' },
+    { key: 'todos', label: t('todos').toUpperCase() },
+    { key: 'entrada', label: t('en_patio').toUpperCase() },
+    { key: 'inspeccionado', label: t('inspeccionado').toUpperCase() },
+    { key: 'salida', label: t('salio').toUpperCase() },
   ];
 
   return (
