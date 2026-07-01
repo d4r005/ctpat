@@ -344,9 +344,30 @@ else:
 class OCRRequest(BaseModel):
     image_b64: str
     context: str # 'entry', 'inspection', 'ticket'
+    mime_type: Optional[str] = None # mime real reportado por el picker del frontend (puede venir vacio/incorrecto en algunos navegadores)
 
 # ========== Ayudantes y Utilidades ==========
-async def analyze_document_ai(image_b64: str, context: str) -> Dict[str, Any]:
+def _detect_image_mime(img_data: bytes, declared: Optional[str] = None) -> str:
+    """Detecta el mime type real a partir de los magic bytes de la imagen.
+    Gemini rechaza la petición completa (400 Unable to process input image) si el
+    mime_type declarado no coincide con los bytes reales, así que no confiamos
+    ciegamente en lo que reporta el picker del frontend (en web a veces viene
+    vacío o incorrecto según el navegador/dispositivo)."""
+    if img_data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if img_data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if img_data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if img_data[:4] == b"RIFF" and img_data[8:12] == b"WEBP":
+        return "image/webp"
+    if img_data[4:12] in (b"ftypheic", b"ftypheix", b"ftyphevc", b"ftypmif1"):
+        return "image/heic"
+    if declared and declared.startswith("image/"):
+        return declared
+    return "image/jpeg"
+
+async def analyze_document_ai(image_b64: str, context: str, mime_type: Optional[str] = None) -> Dict[str, Any]:
     if not ai_model:
         return {"error": "AI_NOT_CONFIGURED"}
 
@@ -354,7 +375,19 @@ async def analyze_document_ai(image_b64: str, context: str) -> Dict[str, Any]:
     if "," in image_b64:
         image_b64 = image_b64.split(",")[1]
 
-    img_data = base64.b64decode(image_b64)
+    try:
+        img_data = base64.b64decode(image_b64)
+    except Exception as e:
+        logger.error(f"Error en AI OCR: base64 inválido - {e}")
+        return {"error": "INVALID_IMAGE_DATA"}
+
+    if not img_data:
+        return {"error": "EMPTY_IMAGE"}
+
+    real_mime = _detect_image_mime(img_data, mime_type)
+    if real_mime == "image/heic":
+        logger.error("Error en AI OCR: formato HEIC no soportado por Gemini")
+        return {"error": "UNSUPPORTED_FORMAT_HEIC"}
 
     prompts = {
         "entry": "Extract data from this vehicle entry log. Return JSON: {placas_unidad, chofer_nombre, compania_transporte, numero_tractor, numero_caja, sello_entrada, destino}",
@@ -367,7 +400,7 @@ async def analyze_document_ai(image_b64: str, context: str) -> Dict[str, Any]:
     try:
         response = ai_model.generate_content([
             prompt,
-            {"mime_type": "image/jpeg", "data": img_data}
+            {"mime_type": real_mime, "data": img_data}
         ])
 
         # Extraer el JSON del texto de respuesta (Gemini suele ponerlo entre ```json ... ```)
@@ -378,13 +411,13 @@ async def analyze_document_ai(image_b64: str, context: str) -> Dict[str, Any]:
             return json.loads(json_match.group())
         return {"error": "JSON_NOT_FOUND", "raw": text}
     except Exception as e:
-        logger.error(f"Error en AI OCR: {e}")
+        logger.error(f"Error en AI OCR (mime={real_mime}, declared={mime_type}, bytes={len(img_data)}): {e}")
         return {"error": str(e)}
 
 @api_router.post("/ocr/analyze")
 async def ocr_analyze(body: OCRRequest, u: Dict[str, Any] = Depends(get_current_user)):
     """Analiza una foto de un documento físico y devuelve los campos rellenos"""
-    data = await analyze_document_ai(body.image_b64, body.context)
+    data = await analyze_document_ai(body.image_b64, body.context, body.mime_type)
     return data
 
 @api_router.post("/auth/login", response_model=TokenResponse)
