@@ -392,7 +392,7 @@ async def analyze_document_ai(image_b64: str, context: str, mime_type: Optional[
 
     prompts = {
         "entry": "Extract data from this vehicle entry log. Return JSON: {placas_unidad, chofer_nombre, compania_transporte, numero_tractor, numero_caja, sello_entrada, destino}",
-        "inspection": "Extract data from this C-TPAT inspection sheet. Return JSON: {placas_unidad, status_general (bueno/malo), points (list of {number, name, estado (bueno/malo), comentarios})}",
+        "inspection": "Extract data from this C-TPAT inspection sheet. Return JSON: {placas_unidad, status_general (bueno/malo), points (list of {number, name, estado (bueno/malo), comentarios}), measures: {alto, ancho, largo, capacidad} — ONLY include this key if the document shows container/unit measurements (height, width, length, capacity in m3); if not present on the document, omit the measures key entirely}",
         "ticket": "Extract data from this shipping ticket. Return JSON: {placas_unidad, cliente, operador, numero_caja, numero_pallets, numero_sello}"
     }
 
