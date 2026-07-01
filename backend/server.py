@@ -336,7 +336,7 @@ except ImportError:
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 if HAS_GOOGLE_AI and GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
-    ai_model = genai.GenerativeModel('gemini-1.5-flash')
+    ai_model = genai.GenerativeModel('gemini-2.5-flash')
 else:
     ai_model = None
 
