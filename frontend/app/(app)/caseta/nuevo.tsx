@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Signature from '@/src/components/SignaturePad';
+import { apiCall } from '@/src/api/client';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -131,11 +132,12 @@ export default function CasetaNuevo() {
         const res = await apiCall('/ocr/analyze', {
           method: 'POST',
           token,
-          body: { image_b64: r.assets[0].base64, context: 'entry' }
+          body: { image_b64: r.assets[0].base64, mime_type: r.assets[0].mimeType || 'image/jpeg', context: 'entry' }
         });
 
         if (res.error) {
           if (res.error === 'AI_NOT_CONFIGURED') Alert.alert('IA no configurada', 'Por favor agrega la GEMINI_API_KEY al backend.');
+          else if (res.error === 'UNSUPPORTED_FORMAT_HEIC') Alert.alert('Formato no soportado', 'La foto se guardó en formato HEIC (típico de iPhone). Cambia el ajuste de tu cámara a "Más compatible" (JPEG) en Configuración > Cámara > Formatos, o intenta de nuevo.');
           else Alert.alert('Error', 'No se pudo leer el documento. Intenta de nuevo.');
         } else {
           if (res.placas_unidad) setPlacas(res.placas_unidad.toUpperCase());

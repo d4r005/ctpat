@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Signature from '@/src/components/SignaturePad';
 import { useTranslation } from 'react-i18next';
+import { apiCall } from '@/src/api/client';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -71,15 +72,15 @@ export default function EmbarqueNuevo() {
 
       if (!r.canceled && r.assets[0]?.base64) {
         setIsScanning(true);
-        const { apiCall } = await import('@/src/api/client');
         const res = await apiCall('/ocr/analyze', {
           method: 'POST',
           token,
-          body: { image_b64: r.assets[0].base64, context: 'ticket' }
+          body: { image_b64: r.assets[0].base64, mime_type: r.assets[0].mimeType || 'image/jpeg', context: 'ticket' }
         });
 
         if (res.error) {
-          Alert.alert('Error', 'No se pudo procesar el ticket físico.');
+          if (res.error === 'UNSUPPORTED_FORMAT_HEIC') Alert.alert('Formato no soportado', 'La foto se guardó en formato HEIC (típico de iPhone). Cambia el ajuste de tu cámara a "Más compatible" (JPEG) en Configuración > Cámara > Formatos, o intenta de nuevo.');
+          else Alert.alert('Error', 'No se pudo procesar el ticket físico.');
         } else {
           setForm(prev => ({
             ...prev,

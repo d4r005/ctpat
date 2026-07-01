@@ -66,11 +66,12 @@ export default function InspeccionDashboard() {
         const res = await apiCall('/ocr/analyze', {
           method: 'POST',
           token,
-          body: { image_b64: r.assets[0].base64, context: 'inspection' }
+          body: { image_b64: r.assets[0].base64, mime_type: r.assets[0].mimeType || 'image/jpeg', context: 'inspection' }
         });
 
         if (res.error) {
-          Alert.alert('Error', 'No se pudo procesar el documento físico.');
+          if (res.error === 'UNSUPPORTED_FORMAT_HEIC') Alert.alert('Formato no soportado', 'La foto se guardó en formato HEIC (típico de iPhone). Cambia el ajuste de tu cámara a "Más compatible" (JPEG) en Configuración > Cámara > Formatos, o intenta de nuevo.');
+          else Alert.alert('Error', 'No se pudo procesar el documento físico.');
         } else {
           // Iniciar inspección con los datos extraídos
           setFormData({
