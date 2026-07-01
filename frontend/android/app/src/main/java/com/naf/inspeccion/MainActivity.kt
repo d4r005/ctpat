@@ -9,12 +9,9 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnable
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 
 import expo.modules.ReactActivityDelegateWrapper
-import expo.modules.splashscreen.SplashScreen
-import expo.modules.splashscreen.SplashScreenImageResizeMode
 
 class MainActivity : ReactActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
-    SplashScreen.show(this, SplashScreenImageResizeMode.CONTAIN, ReactActivity::class.java, false)
     super.onCreate(null)
   }
 
