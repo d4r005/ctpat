@@ -1,4 +1,4 @@
-name: Android Build Release APK
+name: Android Build APK (EAS)
 
 on:
   push:
@@ -9,56 +9,26 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
 
-      - name: Install Dependencies
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Install dependencies
         working-directory: frontend
         run: npm install --legacy-peer-deps
 
-      - name: Setup Java (JDK 17)
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
-      - name: Symlink node_modules para Gradle
+      - name: Build APK with EAS
+        working-directory: frontend
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          ln -s ${{ github.workspace }}/frontend/node_modules \
-                ${{ github.workspace }}/frontend/android/node_modules
-          echo "Symlink creado"
-          ls -la ${{ github.workspace }}/frontend/android/node_modules | head -5
-
-      - name: Build Debug APK (firmado con debug key, sin proguard)
-        working-directory: frontend/android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug -x lint --no-daemon \
-            -Dorg.gradle.project.reactNativeArchitectures="arm64-v8a"
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: SRIUC-Final-APK
-          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 30
+          eas build --profile preview --platform android \
+            --non-interactive --no-wait
+          echo "✅ Build enviado a EAS — revisa https://expo.dev/accounts/north-america-flooring/projects/sriuc/builds"
