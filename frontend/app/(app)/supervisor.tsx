@@ -311,48 +311,47 @@ export default function Supervisor() {
   const handlePdf = async (item: any) => {
     setReportLoading(item.id);
     try {
-      const norm = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
-      const plates = item.placas_unidad || item.entry?.placas_unidad;
-      const normPlates = norm(plates);
-
-      let fullRecord = item.entry && !item._is_virtual ? item : null;
-      let matchTicket = allTickets.find(tk => norm(tk.placas_unidad) === normPlates);
-      let matchInsps = allInspections.filter(i => i.record_id === item.id || norm(i.placas_unidad) === normPlates);
-
-      if (!item._is_virtual && item.id && !item.id.startsWith('p-')) {
-        try {
-          const consolidated = await apiCall<any>(`/report/consolidated/${item.id}`, { token });
-          if (consolidated) {
-            fullRecord = consolidated.caseta || fullRecord;
-            if (consolidated.inspections && consolidated.inspections.length > 0) matchInsps = consolidated.inspections;
-            if (consolidated.embarque) matchTicket = consolidated.embarque;
-          }
-        } catch {
-          if (!fullRecord) fullRecord = await apiCall<any>(`/vehicle-records/${item.id}`, { token }).catch(() => null);
-        }
-      } else if (!fullRecord) {
-        fullRecord = await apiCall<any>(`/vehicle-records/${item.id}`, { token }).catch(() => null);
+      // Usamos el MISMO generador de HTML que el correo (backend), que ya
+      // resuelve fotos y firmas de Google Drive a base64 inline. Antes se
+      // armaba el HTML en el cliente con generateConsolidatedReportHtml()
+      // usando URLs crudas de Drive, que no cargan en el PDF porque no hay
+      // sesión de Google — de ahí que "faltaran" las fotos en el reporte.
+      let recordId = item.id;
+      if (item._is_virtual || !recordId || recordId.startsWith('p-')) {
+        // Registro virtual (solo de inspección/embarque, sin caseta real) —
+        // caemos al generador local como respaldo.
+        const norm = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
+        const plates = item.placas_unidad || item.entry?.placas_unidad;
+        const normPlates = norm(plates);
+        const matchTicket = allTickets.find(tk => norm(tk.placas_unidad) === normPlates);
+        const matchInsps = allInspections.filter(i => i.record_id === item.id || norm(i.placas_unidad) === normPlates);
+        const html = generateConsolidatedReportHtml({
+          inspection: matchInsps[0] || { points: [] } as any,
+          inspections: matchInsps,
+          caseta: item.entry ? item : null,
+          embarque: matchTicket
+        });
+        await outputPdf(html);
+        return;
       }
 
-      const html = generateConsolidatedReportHtml({
-        inspection: matchInsps[0] || { points: [] } as any,
-        inspections: matchInsps,
-        caseta: fullRecord,
-        embarque: matchTicket
-      });
-
-      if (Platform.OS === 'web') {
-        const win = window.open('', '_blank');
-        win?.document.write(html); win?.document.close();
-        setTimeout(() => win?.print(), 500);
-      } else {
-        const { uri } = await Print.printToFileAsync({ html });
-        await Sharing.shareAsync(uri);
-      }
+      const res = await apiCall<{ html: string }>(`/report/html/${recordId}`, { token });
+      await outputPdf(res.html);
     } catch (e: any) {
       Alert.alert("Error", e.message);
     } finally {
       setReportLoading(null);
+    }
+  };
+
+  const outputPdf = async (html: string) => {
+    if (Platform.OS === 'web') {
+      const win = window.open('', '_blank');
+      win?.document.write(html); win?.document.close();
+      setTimeout(() => win?.print(), 500);
+    } else {
+      const { uri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(uri);
     }
   };
 

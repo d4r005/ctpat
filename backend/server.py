@@ -497,7 +497,7 @@ async def create_record(body: VehicleEntry, background_tasks: BackgroundTasks, u
 @api_router.get("/vehicle-records/{rec_id}", response_model=VehicleRecord)
 async def get_record(rec_id: str, u: Dict[str, Any] = Depends(get_current_user)):
     d = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
-    if not d: raise HTTPException(404)
+    if not d: raise HTTPException(404, "Registro no encontrado")
     return VehicleRecord(**(await _ensure_record_links(d)))
 
 @api_router.put("/vehicle-records/{rec_id}")
@@ -1458,6 +1458,20 @@ async def send_email_endpoint(body: SendReportEmailBody, background_tasks: Backg
         "message": f"Reporte de {plates} en cola de envío a {recipients_count} destinatario(s). Llegará en unos momentos.",
         "async": True
     }
+
+@api_router.get("/report/html/{record_id}")
+async def get_report_html(record_id: str, u: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Devuelve el HTML COMPLETO y ya resuelto (fotos y firmas de Drive convertidas
+    a base64 inline) del reporte consolidado — el mismo que se usa para el
+    correo — para que el PDF generado en la app sea idéntico y no dependa de
+    URLs de Drive crudas que no cargan sin sesión de Google.
+    """
+    rec, inspections, ticket, placas = await _collect_report_data(record_id)
+    if not rec:
+        raise HTTPException(404, "Registro no encontrado")
+    html = _build_full_report_html(rec, inspections, ticket, placas)
+    return {"html": html, "placas": placas}
 
 @api_router.get("/report/consolidated/{record_id}")
 async def get_consolidated_report(record_id: str, u: Dict[str, Any] = Depends(get_current_user)):

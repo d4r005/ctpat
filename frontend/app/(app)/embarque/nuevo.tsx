@@ -54,9 +54,7 @@ export default function EmbarqueNuevo() {
 
   const handleScanIA = async () => {
     try {
-      const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) { Alert.alert('Error', 'Se requiere acceso a la cámara.'); return; }
-
+      // launchCameraAsync ya solicita el permiso de cámara internamente.
       const r = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         quality: 0.4,

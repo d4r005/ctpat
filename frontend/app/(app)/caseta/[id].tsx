@@ -24,6 +24,7 @@ export default function CasetaDetail() {
   const [rec, setRec] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<{ notFound: boolean; message: string } | null>(null);
   const [showExit, setShowExit] = useState(false);
   const [editEntry, setEditEntry] = useState(false);
   const [showSig, setShowSig] = useState(false);
@@ -56,6 +57,7 @@ export default function CasetaDetail() {
   const load = async () => {
     if (!token || !id) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await apiCall<any>(`/vehicle-records/${id}`, { token });
       if (data) {
@@ -67,7 +69,17 @@ export default function CasetaDetail() {
         }
       }
     } catch (e: any) {
-      Alert.alert(t('error'), t('error_cargar_datos'));
+      // Distinguimos "el registro realmente no existe" (404 con mensaje claro
+      // del backend) de cualquier otro fallo (red, timeout, Space reiniciando).
+      // Antes ambos casos mostraban la misma pantalla de "no hay registro",
+      // lo cual era engañoso cuando en realidad el registro sí existe pero la
+      // petición falló temporalmente.
+      const msg = e?.message || '';
+      const notFound = msg.includes('Registro no encontrado') || msg.includes('404');
+      setLoadError({ notFound, message: msg || t('error_cargar_datos') });
+      if (notFound) {
+        Alert.alert(t('error'), t('error_cargar_datos'));
+      }
     } finally {
       setLoading(false);
     }
@@ -187,7 +199,21 @@ export default function CasetaDetail() {
 
   if (!rec) return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.center}><Text>{t('no_hay_registros')}</Text></View>
+      <View style={styles.center}>
+        {loadError && !loadError.notFound ? (
+          <>
+            <Ionicons name="cloud-offline-outline" size={40} color={colors.muted} style={{ marginBottom: spacing.md }} />
+            <Text style={{ textAlign: 'center', marginBottom: spacing.md, paddingHorizontal: spacing.lg }}>
+              No se pudo cargar el registro (posible problema de conexión o el servidor está reiniciando).{'\n'}El registro puede seguir existiendo — intenta de nuevo.
+            </Text>
+            <Pressable onPress={load} style={{ backgroundColor: colors.brandPrimary, paddingVertical: 10, paddingHorizontal: 24 }}>
+              <Text style={{ color: '#FFF', fontWeight: '900' }}>{(t('reintentar') || 'REINTENTAR').toUpperCase()}</Text>
+            </Pressable>
+          </>
+        ) : (
+          <Text>{t('no_hay_registros')}</Text>
+        )}
+      </View>
     </SafeAreaView>
   );
 
@@ -241,6 +267,32 @@ export default function CasetaDetail() {
                   </View>
                 </View>
               )}
+
+              {/* DATOS ADICIONALES — frecuentemente vacíos en registros históricos reconstruidos */}
+              <View style={styles.subSection}>
+                <Text style={styles.subTitle}>DATOS ADICIONALES</Text>
+                <View style={styles.grid}>
+                  <EditableItem label="DESTINO" value={entryForm.destino} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, destino: v}) : null} />
+                  <EditableItem label="CONDICIÓN DE CARGA" value={entryForm.condicion_carga} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, condicion_carga: v}) : null} />
+                  <EditableItem label="NUMERO DE GUIA" value={entryForm.numero_guia} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_guia: v}) : null} />
+                  <EditableItem label="NUMERO REQUERIMIENTO" value={entryForm.numero_requerimiento} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_requerimiento: v}) : null} />
+                  <EditableItem label="ORDEN DE COMPRA" value={entryForm.numero_orden_compra} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_orden_compra: v}) : null} />
+                  <EditableItem label="LICENCIA CONDUCTOR" value={entryForm.licencia_conductor} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, licencia_conductor: v}) : null} />
+                </View>
+                <View style={{ marginTop: spacing.sm }}>
+                  <Text style={styles.infoLabel}>DESCRIPCIÓN DE CARGA</Text>
+                  {editEntry ? (
+                    <TextInput
+                      style={[styles.input, { minHeight: 60, textAlignVertical: 'top' }]}
+                      value={entryForm.descripcion_carga || ''}
+                      onChangeText={(v) => setEntryForm({ ...entryForm, descripcion_carga: v })}
+                      multiline
+                    />
+                  ) : (
+                    <Text style={styles.infoValue}>{entryForm.descripcion_carga || '-'}</Text>
+                  )}
+                </View>
+              </View>
 
               {/* FOTOS ENTRADA */}
               <View style={styles.subSection}>
