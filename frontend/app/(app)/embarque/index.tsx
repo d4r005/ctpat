@@ -142,19 +142,19 @@ export default function EmbarqueList() {
       <View style={styles.statsBar}>
         <View style={styles.stat}>
           <Text style={styles.statNum}>{tickets.length}</Text>
-          <Text style={styles.statLabel}>TOTAL</Text>
+          <Text style={styles.statLabel}>{t('total').toUpperCase()}</Text>
         </View>
         <View style={styles.stat}>
           <Text style={[styles.statNum, { color: colors.success }]}>
             {tickets.filter(tk => !!tk.firma_guardia && !!tk.almacenista).length}
           </Text>
-          <Text style={styles.statLabel}>COMPLETOS</Text>
+          <Text style={styles.statLabel}>{t('completos').toUpperCase()}</Text>
         </View>
         <View style={styles.stat}>
           <Text style={[styles.statNum, { color: colors.warning }]}>
             {tickets.filter(tk => !tk.firma_guardia || !tk.almacenista).length}
           </Text>
-          <Text style={styles.statLabel}>PENDIENTES</Text>
+          <Text style={styles.statLabel}>{t('pendientes').toUpperCase()}</Text>
         </View>
       </View>
 
@@ -170,7 +170,7 @@ export default function EmbarqueList() {
           !loading ? (
             <View style={styles.empty}>
               <Ionicons name="bus-outline" size={48} color={colors.muted} />
-              <Text style={styles.emptyText}>Sin tickets de embarque</Text>
+              <Text style={styles.emptyText}>{t('sin_tickets_embarque')}</Text>
             </View>
           ) : null
         }

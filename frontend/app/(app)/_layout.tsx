@@ -86,6 +86,7 @@ export default function AppLayout() {
         options={{
           title: 'MAESTRO',
           tabBarIcon: ({ color }) => <Ionicons name="shield-checkmark-sharp" size={22} color={color} />,
+          href: isAdminOrSup ? undefined : null,
         }}
       />
 

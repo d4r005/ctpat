@@ -393,7 +393,11 @@ async def login(body: UserLogin):
         u = await db.users.find_one({"email": body.email.lower()})
         if not u:
             raise HTTPException(401, "Usuario no encontrado")
-        if not bcrypt.checkpw(body.password.encode(), u["password_hash"]):
+        if not u.get("active", True):
+            raise HTTPException(403, "Usuario desactivado. Contacta a un administrador.")
+        ph = u["password_hash"]
+        ph_bytes = ph.encode("utf-8") if isinstance(ph, str) else bytes(ph)
+        if not bcrypt.checkpw(body.password.encode("utf-8"), ph_bytes):
             raise HTTPException(401, "Contraseña incorrecta")
         token = pyjwt.encode({"sub": u["id"], "exp": datetime.now(timezone.utc) + timedelta(days=30)}, JWT_SECRET)
         return TokenResponse(access_token=token, user=UserPublic(**u))
@@ -1636,6 +1640,84 @@ async def mark_read(id: str, u: Dict[str, Any] = Depends(get_current_user)):
 @api_router.post("/notifications/read-all")
 async def read_all(u: Dict[str, Any] = Depends(get_current_user)):
     await db.notifications.update_many({"user_id": u["id"]}, {"$set": {"read": True}})
+    return {"ok": True}
+
+class UserCreateInspector(BaseModel):
+    email: str
+    password: str
+    name: str
+    role: str = "inspector"
+
+class UserUpdateBody(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    role: Optional[str] = None
+    password: Optional[str] = None
+
+@api_router.get("/users", response_model=List[UserPublic])
+async def list_users(u: Dict[str, Any] = Depends(get_current_user)):
+    if u.get("role") not in ("admin", "supervisor") and not is_admin(u):
+        raise HTTPException(403, "No autorizado")
+    users = await db.users.find({}, {"_id": 0, "password_hash": 0}).sort("name", 1).to_list(500)
+    return [UserPublic(**usr) for usr in users]
+
+@api_router.post("/users/create-inspector", response_model=UserPublic)
+async def create_inspector(body: UserCreateInspector, u: Dict[str, Any] = Depends(get_current_user)):
+    if not is_admin(u):
+        raise HTTPException(403, "Solo administradores pueden crear usuarios")
+    existing = await db.users.find_one({"email": body.email.lower()})
+    if existing:
+        raise HTTPException(400, "Ya existe un usuario con ese correo")
+    pw_hash = bcrypt.hashpw(body.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    new_user = {
+        "id": str(uuid.uuid4()),
+        "email": body.email.lower(),
+        "name": body.name,
+        "role": body.role,
+        "active": True,
+        "password_hash": pw_hash,
+    }
+    await db.users.insert_one(new_user)
+    return UserPublic(**{k: v for k, v in new_user.items() if k != "password_hash"})
+
+@api_router.patch("/users/{user_id}", response_model=UserPublic)
+async def update_user(user_id: str, body: UserUpdateBody, u: Dict[str, Any] = Depends(get_current_user)):
+    if not is_admin(u):
+        raise HTTPException(403, "Solo administradores pueden editar usuarios")
+    updates: Dict[str, Any] = {}
+    if body.name is not None: updates["name"] = body.name
+    if body.email is not None: updates["email"] = body.email.lower()
+    if body.role is not None: updates["role"] = body.role
+    if body.password: updates["password_hash"] = bcrypt.hashpw(body.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    if updates:
+        await db.users.update_one({"id": user_id}, {"$set": updates})
+    updated = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    if not updated:
+        raise HTTPException(404, "Usuario no encontrado")
+    return UserPublic(**updated)
+
+@api_router.post("/users/{user_id}/toggle-active")
+async def toggle_user_active(user_id: str, u: Dict[str, Any] = Depends(get_current_user)):
+    if not is_admin(u):
+        raise HTTPException(403, "Solo administradores pueden cambiar el estado de usuarios")
+    if user_id == u.get("id"):
+        raise HTTPException(400, "No puedes desactivarte a ti mismo")
+    target = await db.users.find_one({"id": user_id})
+    if not target:
+        raise HTTPException(404, "Usuario no encontrado")
+    new_status = not target.get("active", True)
+    await db.users.update_one({"id": user_id}, {"$set": {"active": new_status}})
+    return {"ok": True, "active": new_status}
+
+@api_router.delete("/users/{user_id}")
+async def delete_user(user_id: str, u: Dict[str, Any] = Depends(get_current_user)):
+    if not is_admin(u):
+        raise HTTPException(403, "Solo administradores pueden eliminar usuarios")
+    if user_id == u.get("id"):
+        raise HTTPException(400, "No puedes eliminarte a ti mismo")
+    result = await db.users.delete_one({"id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(404, "Usuario no encontrado")
     return {"ok": True}
 
 @api_router.post("/users/push-token")

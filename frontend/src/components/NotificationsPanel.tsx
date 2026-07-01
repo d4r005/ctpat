@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useNotifications } from '@/src/context/NotificationsContext';
+import { useTranslation } from 'react-i18next';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
 
 export default function NotificationsPanel({ visible, onClose }: Props) {
   const { notifications, markRead, markAllRead, unreadCount } = useNotifications();
+  const { t } = useTranslation();
   const router = useRouter();
 
   const open = async (n: any) => {
@@ -28,11 +30,11 @@ export default function NotificationsPanel({ visible, onClose }: Props) {
       <View style={styles.overlay}>
         <SafeAreaView style={styles.sheet} edges={['top', 'bottom']}>
           <View style={styles.header}>
-            <Text style={styles.title}>Notificaciones</Text>
+            <Text style={styles.title}>{t('notificaciones')}</Text>
             <View style={{ flexDirection: 'row', gap: spacing.sm }}>
               {unreadCount > 0 && (
                 <Pressable testID="notif-mark-all" onPress={markAllRead}>
-                  <Text style={styles.markAll}>MARCAR TODO</Text>
+                  <Text style={styles.markAll}>{t('marcar_todo').toUpperCase()}</Text>
                 </Pressable>
               )}
               <Pressable testID="notif-close" onPress={onClose}><Ionicons name="close" size={28} color={colors.onSurface} /></Pressable>
@@ -46,7 +48,7 @@ export default function NotificationsPanel({ visible, onClose }: Props) {
             ListEmptyComponent={
               <View style={styles.empty}>
                 <Ionicons name="notifications-off-outline" size={48} color={colors.muted} />
-                <Text style={styles.emptyText}>Sin notificaciones</Text>
+                <Text style={styles.emptyText}>{t('sin_notificaciones')}</Text>
               </View>
             }
             renderItem={({ item }) => (

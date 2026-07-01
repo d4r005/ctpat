@@ -119,7 +119,7 @@ export default function CasetaDetail() {
           text: t('camara'),
           onPress: async () => {
             const result = await ImagePicker.launchCameraAsync({
-              mediaTypes: 'images',
+              mediaTypes: ['images'],
               quality: 0.3,
               base64: true,
             });
@@ -134,7 +134,7 @@ export default function CasetaDetail() {
           text: t('galeria'),
           onPress: async () => {
             const result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: 'images',
+              mediaTypes: ['images'],
               quality: 0.3,
               base64: true,
             });

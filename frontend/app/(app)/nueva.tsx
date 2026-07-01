@@ -50,7 +50,7 @@ export default function InspeccionDashboard() {
       if (!perm.granted) { Alert.alert(t('error'), 'Se requiere acceso a la cámara.'); return; }
 
       const r = await ImagePicker.launchCameraAsync({
-        mediaTypes: 'images',
+        mediaTypes: ['images'],
         quality: 0.4,
         base64: true,
       });
@@ -434,7 +434,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
           onPress: async () => {
             const perm = await ImagePicker.requestCameraPermissionsAsync();
             if (!perm.granted) { alert(t('acceso_restringido')); return; }
-            const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.2, base64: true });
+            const r = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.2, base64: true });
             if (!r.canceled && r.assets[0]?.base64) {
               const n = [...points];
               n[idx].photo = `data:image/jpeg;base64,${r.assets[0].base64}`;
@@ -447,7 +447,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
           onPress: async () => {
             const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (!perm.granted) { alert(t('acceso_restringido')); return; }
-            const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.2, base64: true });
+            const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.2, base64: true });
             if (!r.canceled && r.assets[0]?.base64) {
               const n = [...points];
               n[idx].photo = `data:image/jpeg;base64,${r.assets[0].base64}`;

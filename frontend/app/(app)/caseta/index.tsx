@@ -166,7 +166,7 @@ export default function CasetaList() {
           !loading ? (
             <View style={styles.empty}>
               <Ionicons name="business-outline" size={48} color={colors.muted} />
-              <Text style={styles.emptyText}>Sin registros</Text>
+              <Text style={styles.emptyText}>{t('sin_registros')}</Text>
             </View>
           ) : null
         }

@@ -58,7 +58,7 @@ export default function EmbarqueNuevo() {
       if (!perm.granted) { Alert.alert('Error', 'Se requiere acceso a la cámara.'); return; }
 
       const r = await ImagePicker.launchCameraAsync({
-        mediaTypes: 'images',
+        mediaTypes: ['images'],
         quality: 0.4,
         base64: true,
       });
@@ -99,12 +99,12 @@ export default function EmbarqueNuevo() {
       if (mode === 'camera') {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) { alert(t('acceso_restringido')); return; }
-        const r = await ImagePicker.launchCameraAsync({ mediaTypes: 'images', quality: 0.2, base64: true });
+        const r = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.2, base64: true });
         if (!r.canceled && r.assets[0]?.base64) set(field, `data:image/jpeg;base64,${r.assets[0].base64}`);
       } else if (mode === 'gallery') {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) { alert(t('acceso_restringido')); return; }
-        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 0.2, base64: true });
+        const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.2, base64: true });
         if (!r.canceled && r.assets[0]?.base64) set(field, `data:image/jpeg;base64,${r.assets[0].base64}`);
       } else {
         Alert.prompt(
@@ -268,7 +268,7 @@ export default function EmbarqueNuevo() {
                   </Pressable>
                 </>
               ) : (
-                <Text style={styles.firmaCta}>FIRMA ALMACENISTA</Text>
+                <Text style={styles.firmaCta}>{t('firma_almacenista').toUpperCase()}</Text>
               )}
             </Pressable>
             <Pressable testID="emb-firma-guardia" style={styles.signatureBox} onPress={() => setSigTarget('guardia')}>
@@ -280,7 +280,7 @@ export default function EmbarqueNuevo() {
                   </Pressable>
                 </>
               ) : (
-                <Text style={styles.firmaCta}>FIRMA GUARDIA</Text>
+                <Text style={styles.firmaCta}>{t('firma_guardia').toUpperCase()}</Text>
               )}
             </Pressable>
           </Section>

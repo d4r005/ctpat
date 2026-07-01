@@ -46,7 +46,7 @@ export default function EmbarqueDetail() {
 
   const pickPhoto = async (field: string) => {
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: 'images',
+      mediaTypes: ['images'],
       quality: 0.3,
       base64: true,
     });

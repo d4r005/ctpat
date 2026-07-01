@@ -6,6 +6,13 @@ const resources = {
   es: {
     translation: {
       "app_name": "SRIUC",
+      "unidad": "Unidad",
+      "completos": "Completos",
+      "firma": "Firma",
+      "firma_almacenista": "Firma almacenista",
+      "sin_registros": "Sin registros",
+      "sin_registros_mostrar": "Sin registros para mostrar",
+      "sin_tickets_embarque": "Sin tickets de embarque",
       "inicio": "Inicio",
       "historico": "Histórico",
       "caseta": "Caseta",
@@ -410,6 +417,13 @@ const resources = {
   en: {
     translation: {
       "app_name": "SRIUC",
+      "unidad": "Unit",
+      "completos": "Completed",
+      "firma": "Signature",
+      "firma_almacenista": "Warehouse signature",
+      "sin_registros": "No records",
+      "sin_registros_mostrar": "No records to display",
+      "sin_tickets_embarque": "No shipping tickets",
       "inicio": "Home",
       "historico": "History",
       "caseta": "Gate",
@@ -813,6 +827,14 @@ const resources = {
   zh: {
     translation: {
       "app_name": "SRIUC",
+      "unidad": "车辆",
+      "completos": "已完成",
+      "firma": "签名",
+      "firma_almacenista": "仓库员签名",
+      "firma_guardia": "警卫签名",
+      "sin_registros": "暂无记录",
+      "sin_registros_mostrar": "暂无可显示的记录",
+      "sin_tickets_embarque": "暂无出货单",
       "inicio": "首页",
       "historico": "历史",
       "caseta": "门卫室",

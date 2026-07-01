@@ -102,7 +102,7 @@ function EmailModal({
           <View style={styles.modalBody}>
             {/* Unidad */}
             <View style={styles.modalInfo}>
-              <Text style={styles.modalInfoLabel}>Unidad</Text>
+              <Text style={styles.modalInfoLabel}>{t('unidad')}</Text>
               <Text style={styles.modalInfoValue}>{plates || 'N/A'}</Text>
             </View>
 
@@ -194,6 +194,20 @@ export default function Supervisor() {
   const router = useRouter();
   const { allInspections, refreshAll: refreshInspections, loading: inspLoading } = useInspections();
   const { t } = useTranslation();
+
+  const isAdminOrSup = user?.role === 'admin' || user?.role === 'supervisor' ||
+    ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+
+  // Bloquear acceso directo (deep link) de roles sin permiso al panel maestro
+  React.useEffect(() => {
+    if (user && !isAdminOrSup) {
+      router.replace('/inicio');
+    }
+  }, [user, isAdminOrSup, router]);
+
+  if (user && !isAdminOrSup) {
+    return null;
+  }
 
   const [activeTab, setActiveTab] = useState<TabType>('caseta');
   const [allRecords, setAllRecords] = useState<any[]>([]);
@@ -434,7 +448,7 @@ export default function Supervisor() {
             />
           ))}
           {filteredData.length === 0 && !loading && (
-            <Text style={styles.empty}>Sin registros para mostrar</Text>
+            <Text style={styles.empty}>{t('sin_registros_mostrar')}</Text>
           )}
         </View>
       </ScrollView>
