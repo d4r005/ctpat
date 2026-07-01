@@ -986,13 +986,30 @@ async def send_report_email(record_id: str, extra_emails: List[str] = []):
 
 
 def _sync_send_email(host, port, user, password, recipients, msg):
-    """Envío SMTP síncrono (se ejecuta en executor)."""
+    """
+    Envío SMTP síncrono (se ejecuta en un hilo aparte, no en el event loop).
+    Fuerza resolución IPv4 porque el contenedor de HuggingFace Spaces no tiene
+    ruta de salida IPv6, y smtp.gmail.com puede resolver a una IP v6 que
+    produce "Network is unreachable" (errno 101).
+    """
     import smtplib
-    with smtplib.SMTP(host, port) as s:
-        s.ehlo()
-        s.starttls()
-        s.login(user, password)
-        s.sendmail(user, recipients, msg.as_string())
+    import socket
+
+    _orig_getaddrinfo = socket.getaddrinfo
+    def _ipv4_only_getaddrinfo(*args, **kwargs):
+        results = _orig_getaddrinfo(*args, **kwargs)
+        ipv4 = [r for r in results if r[0] == socket.AF_INET]
+        return ipv4 if ipv4 else results
+
+    socket.getaddrinfo = _ipv4_only_getaddrinfo
+    try:
+        with smtplib.SMTP(host, port, timeout=30) as s:
+            s.ehlo()
+            s.starttls()
+            s.login(user, password)
+            s.sendmail(user, recipients, msg.as_string())
+    finally:
+        socket.getaddrinfo = _orig_getaddrinfo
 
 @api_router.patch("/vehicle-records/{rec_id}/exit", response_model=VehicleRecord)
 async def exit_record(rec_id: str, body: VehicleExit, background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
