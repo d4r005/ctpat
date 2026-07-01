@@ -194,7 +194,7 @@ export default function Supervisor() {
   const { user, token } = useAuth();
   const router = useRouter();
   const { allInspections, refreshAll: refreshInspections, loading: inspLoading } = useInspections();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const isAdminOrSup = user?.role === 'admin' || user?.role === 'supervisor' ||
     ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
@@ -294,7 +294,7 @@ export default function Supervisor() {
           id: `p-${i.id}`,
           _is_pending: true,
           placas_unidad: i.placas_unidad,
-          cliente: 'PENDIENTE DE DESPACHO',
+          cliente: t('pendiente_despacho').toUpperCase(),
           operador: i.inspector_nombre,
           created_at: i.created_at
         }));
@@ -307,7 +307,7 @@ export default function Supervisor() {
       const name = (item.chofer_nombre || item.entry?.chofer_nombre || item.inspector_nombre || item.cliente || '').toLowerCase();
       return plates.includes(q) || name.includes(q);
     });
-  }, [activeTab, query, allRecords, allInspections, allTickets]);
+  }, [activeTab, query, allRecords, allInspections, allTickets, i18n.language]);
 
   const handlePdf = async (item: any) => {
     setReportLoading(item.id);
@@ -560,7 +560,7 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
             : '#6B7280'
         }]}>
           <Text style={styles.statusChipText}>
-            {steps.exit ? t('salio').toUpperCase() : status === 'INSPECCIONADO' ? t('inspeccion_ok').toUpperCase() : status}
+            {steps.exit ? t('salio').toUpperCase() : status === 'INSPECCIONADO' ? t('inspeccion_ok').toUpperCase() : status === 'ENTRADA' ? t('entrada').toUpperCase() : status}
           </Text>
         </View>
         <View style={[styles.statusChip, { backgroundColor: inspectionComplete ? '#10B981' : '#94A3B8', marginTop: 4 }]}>
