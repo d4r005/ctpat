@@ -112,3 +112,5 @@ backend/test_webhook_read.py
 backend/test_webhook_get.py
 backend/test_sheets_access.py
 backend/list_dbs.py
+build_apk.ps1
+frontend/check_resolve.js
