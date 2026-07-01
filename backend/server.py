@@ -389,10 +389,19 @@ async def ocr_analyze(body: OCRRequest, u: Dict[str, Any] = Depends(get_current_
 
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(body: UserLogin):
-    u = await db.users.find_one({"email": body.email.lower()})
-    if not u or not bcrypt.checkpw(body.password.encode(), u["password_hash"]): raise HTTPException(401, "Credenciales inválidas")
-    token = pyjwt.encode({"sub": u["id"], "exp": datetime.now(timezone.utc) + timedelta(days=30)}, JWT_SECRET)
-    return TokenResponse(access_token=token, user=UserPublic(**u))
+    try:
+        u = await db.users.find_one({"email": body.email.lower()})
+        if not u:
+            raise HTTPException(401, "Usuario no encontrado")
+        if not bcrypt.checkpw(body.password.encode(), u["password_hash"]):
+            raise HTTPException(401, "Contraseña incorrecta")
+        token = pyjwt.encode({"sub": u["id"], "exp": datetime.now(timezone.utc) + timedelta(days=30)}, JWT_SECRET)
+        return TokenResponse(access_token=token, user=UserPublic(**u))
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        raise HTTPException(500, f"Error interno: {str(e)} | {traceback.format_exc()[-300:]}")
 
 @api_router.get("/auth/me", response_model=UserPublic)
 async def me(u: Dict[str, Any] = Depends(get_current_user)): return UserPublic(**u)
