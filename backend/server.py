@@ -578,39 +578,43 @@ def _sd(d) -> str:
         return str(d)
 
 
-def _img_tag(src_val: str, style: str = "max-height:56px;max-width:150px;object-fit:contain;") -> str:
-    """Maneja imágenes para el correo, convirtiendo URLs de Drive a base64 si es necesario."""
-    if not src_val:
-        return '<div style="width:120px;height:55px;background:#f5f5f5;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:7px;border:1px dashed #ccc;">Sin firma</div>'
-
-    final_src = src_val
-
-    # Si es una URL de Google Drive (común cuando se sincroniza con Sheets)
-    if "drive.google.com" in src_val or "doc-0s-80-docs.googleusercontent.com" in src_val:
-        try:
-            # Intentar extraer el ID del archivo
-            import re
-            file_id_match = re.search(r'id=([a-zA-Z0-9_-]+)', src_val)
-            if not file_id_match:
-                file_id_match = re.search(r'file/d/([a-zA-Z0-9_-]+)', src_val)
-
-            if file_id_match:
-                file_id = file_id_match.group(1)
+def _resolve_src_to_b64(src: str) -> str:
+    """Convierte cualquier src de imagen a data URI base64 para embeber en correo HTML."""
+    if not src:
+        return ""
+    if src.startswith("data:image"):
+        return src
+    if not src.startswith("http"):
+        return ""
+    try:
+        if "drive.google.com" in src or "googleusercontent.com" in src:
+            m = re.search(r"id=([a-zA-Z0-9_-]+)", src) or re.search(r"file/d/([a-zA-Z0-9_-]+)", src)
+            if m:
                 token = os.environ.get("GOOGLEDRIVE_ACCESS_TOKEN", "")
                 if token:
-                    download_url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media"
-                    r = requests.get(download_url, headers={"Authorization": f"Bearer {token}"}, timeout=10)
+                    dl_url = "https://www.googleapis.com/drive/v3/files/" + m.group(1) + "?alt=media"
+                    r = requests.get(dl_url, headers={"Authorization": "Bearer " + token}, timeout=15)
                     if r.status_code == 200:
-                        b64 = base64.b64encode(r.content).decode()
-                        mime = r.headers.get("Content-Type", "image/jpeg")
-                        final_src = f"data:{mime};base64,{b64}"
-        except Exception as e:
-            logger.error(f"Error convirtiendo imagen de Drive a b64: {e}")
+                        ct = r.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
+                        return "data:" + ct + ";base64," + base64.b64encode(r.content).decode()
+        r = requests.get(src, timeout=15)
+        if r.status_code == 200:
+            ct = r.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
+            if "image" not in ct:
+                ct = "image/jpeg"
+            return "data:" + ct + ";base64," + base64.b64encode(r.content).decode()
+    except Exception as exc:
+        logger.warning("_resolve_src_to_b64 error (%s): %s", src[:60], exc)
+    return ""
 
-    if final_src.startswith("data:image") or final_src.startswith("http"):
-        return '<img src="' + final_src + '" style="' + style + '" />'
 
-    return '<div style="width:120px;height:55px;background:#f5f5f5;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:7px;border:1px dashed #ccc;">Error imagen</div>'
+def _img_tag(src_val: str, style: str = "max-height:56px;max-width:150px;object-fit:contain;") -> str:
+    """Convierte cualquier src a base64 inline para correos HTML."""
+    resolved = _resolve_src_to_b64(src_val)
+    if resolved:
+        return '<img src="' + resolved + '" style="' + style + '" />'
+    return '<div style="width:120px;height:55px;background:#f5f5f5;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:7px;border:1px dashed #ccc;">Sin firma</div>'
+
 
 
 def _inline_sig(src_val: str, label: str, name: str = "") -> str:
@@ -630,22 +634,17 @@ def _inline_sig(src_val: str, label: str, name: str = "") -> str:
 def _photo_block(url: str, label: str) -> str:
     if not url:
         return ""
-
-    # Determinar información de la foto
-    info = "Cámara/Local"
-    if "drive.google.com" in url or "doc-0s-80-docs.googleusercontent.com" in url:
-        info = "Google Drive"
-    elif url.startswith("http"):
-        info = "Enlace Web"
-
+    resolved = _resolve_src_to_b64(url)
+    if not resolved:
+        return ""
     return (
         '<div style="display:inline-block;width:30%;margin:1%;vertical-align:top;'
         'border:1px solid #eee;padding:5px;background:#FFF;text-align:center;">'
-        '<p style="margin:0 0 2px 0;font-size:6.5px;font-weight:bold;color:#666;text-transform:uppercase;">' + label + "</p>"
-        '<p style="margin:0 0 4px 0;font-size:5.5px;color:#999;">Origen: ' + info + '</p>'
-        '<img src="' + url + '" style="width:100%;height:100px;object-fit:cover;border:1px solid #ddd;" />'
+        '<p style="margin:0 0 4px 0;font-size:7px;font-weight:bold;color:#666;text-transform:uppercase;">' + label + "</p>"
+        '<img src="' + resolved + '" style="width:100%;height:100px;object-fit:cover;border:1px solid #ddd;" />'
         "</div>"
     )
+
 
 
 def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -> str:
@@ -927,7 +926,7 @@ async def _build_report_html(record_id: str) -> tuple:
     return html, placas
 
 
-async def send_report_email(record_id: str, extra_emails: List[str] = []):
+def send_report_email(record_id: str, extra_emails: List[str] = []):
     """
     Envía el reporte consolidado COMPLETO por correo.
     HTML con todas las secciones, fotos y firmas en base64 inline — igual al PDF.
@@ -942,7 +941,11 @@ async def send_report_email(record_id: str, extra_emails: List[str] = []):
         logger.error("send_report_email: credenciales SMTP no configuradas")
         return False, "Credenciales SMTP no configuradas"
 
-    rec, inspections, ticket, placas = await _collect_report_data(record_id)
+    _loop = asyncio.new_event_loop()
+    try:
+        rec, inspections, ticket, placas = _loop.run_until_complete(_collect_report_data(record_id))
+    finally:
+        _loop.close()
     if not rec:
         return False, "Registro no encontrado"
 
@@ -956,10 +959,7 @@ async def send_report_email(record_id: str, extra_emails: List[str] = []):
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, lambda: _sync_send_email(
-            smtp_host, smtp_port, smtp_user, smtp_pass, all_recipients, msg
-        ))
+        _sync_send_email(smtp_host, smtp_port, smtp_user, smtp_pass, all_recipients, msg)
         logger.info("Reporte completo enviado a " + str(all_recipients) + " unidad " + placas)
         return True, "Reporte completo enviado a " + str(len(all_recipients)) + " destinatario(s)"
     except Exception as e:

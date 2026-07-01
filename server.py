@@ -154,17 +154,17 @@ class Measures(BaseModel):
     capacidad: str = ""
 
 class InspectionCreate(BaseModel):
-    inspection_type: str
-    compania_transportista: str
-    placas_unidad: str
-    numero_trailer: str
-    numero_precinto: str
-    sello_alta_seguridad: str
-    sello_verificado: bool
-    points: List[InspectionPoint]
+    inspection_type: str = ""
+    compania_transportista: str = ""
+    placas_unidad: str = ""
+    numero_trailer: str = ""
+    numero_precinto: str = ""
+    sello_alta_seguridad: str = ""
+    sello_verificado: bool = False
+    points: List[InspectionPoint] = []
     actividad_sospechosa: str = ""
-    inspector_nombre: str
-    inspector_firma: str
+    inspector_nombre: str = ""
+    inspector_firma: str = ""
     record_id: Optional[str] = None
     # Nuevos campos
     box_type: str = ""
@@ -174,16 +174,16 @@ class InspectionCreate(BaseModel):
 
 class Inspection(BaseModel):
     id: str
-    user_id: str
-    created_at: str
-    inspection_type: str
+    user_id: str = ""
+    created_at: str = ""
+    inspection_type: str = ""
     compania_transportista: str = ""
-    placas_unidad: str
+    placas_unidad: str = ""
     numero_trailer: str = ""
     numero_precinto: str = ""
     sello_alta_seguridad: str = ""
     sello_verificado: bool = False
-    status_general: str
+    status_general: str = "bueno"
     approval_status: str = "pendiente"
     approval_note: str = ""
     approved_by: str = ""
@@ -191,7 +191,7 @@ class Inspection(BaseModel):
     approved_by_signature: str = ""
     approved_sig: str = ""
     approved_at: str = ""
-    inspector_nombre: str = "Admin"
+    inspector_nombre: str = ""
     inspector_firma: str = ""
     fecha_hora: str = ""
     actividad_sospechosa: str = ""
@@ -237,7 +237,16 @@ def ensure_clean_image(b64: str) -> str:
     if not b64 or not b64.startswith("data:image"): return b64
     try:
         header, data = b64.split(",", 1)
-        img = Image.open(io.BytesIO(base64.b64decode(data))).convert("RGB")
+        img = Image.open(io.BytesIO(base64.b64decode(data)))
+        if img.mode in ("RGBA", "P"):
+            bg = Image.new("RGB", img.size, (255, 255, 255))
+            if img.mode == "RGBA":
+                bg.paste(img, mask=img.split()[3])
+            else:
+                bg.paste(img)
+            img = bg
+        else:
+            img = img.convert("RGB")
         img.thumbnail((1200, 1200))
         out = io.BytesIO()
         img.save(out, format="JPEG", quality=75)
@@ -248,7 +257,16 @@ def add_watermark(b64: str) -> str:
     if not b64 or not b64.startswith("data:image"): return b64
     try:
         header, data = b64.split(",", 1)
-        img = Image.open(io.BytesIO(base64.b64decode(data))).convert("RGB")
+        img = Image.open(io.BytesIO(base64.b64decode(data)))
+        if img.mode in ("RGBA", "P"):
+            bg = Image.new("RGB", img.size, (255, 255, 255))
+            if img.mode == "RGBA":
+                bg.paste(img, mask=img.split()[3])
+            else:
+                bg.paste(img)
+            img = bg
+        else:
+            img = img.convert("RGB")
         draw = ImageDraw.Draw(img)
         txt = f"NAF - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         draw.text((10, 10), txt, fill=(255, 0, 0))
@@ -560,39 +578,43 @@ def _sd(d) -> str:
         return str(d)
 
 
-def _img_tag(src_val: str, style: str = "max-height:56px;max-width:150px;object-fit:contain;") -> str:
-    """Maneja imágenes para el correo, convirtiendo URLs de Drive a base64 si es necesario."""
-    if not src_val:
-        return '<div style="width:120px;height:55px;background:#f5f5f5;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:7px;border:1px dashed #ccc;">Sin firma</div>'
-
-    final_src = src_val
-
-    # Si es una URL de Google Drive (común cuando se sincroniza con Sheets)
-    if "drive.google.com" in src_val or "doc-0s-80-docs.googleusercontent.com" in src_val:
-        try:
-            # Intentar extraer el ID del archivo
-            import re
-            file_id_match = re.search(r'id=([a-zA-Z0-9_-]+)', src_val)
-            if not file_id_match:
-                file_id_match = re.search(r'file/d/([a-zA-Z0-9_-]+)', src_val)
-
-            if file_id_match:
-                file_id = file_id_match.group(1)
+def _resolve_src_to_b64(src: str) -> str:
+    """Convierte cualquier src de imagen a data URI base64 para embeber en correo HTML."""
+    if not src:
+        return ""
+    if src.startswith("data:image"):
+        return src
+    if not src.startswith("http"):
+        return ""
+    try:
+        if "drive.google.com" in src or "googleusercontent.com" in src:
+            m = re.search(r"id=([a-zA-Z0-9_-]+)", src) or re.search(r"file/d/([a-zA-Z0-9_-]+)", src)
+            if m:
                 token = os.environ.get("GOOGLEDRIVE_ACCESS_TOKEN", "")
                 if token:
-                    download_url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media"
-                    r = requests.get(download_url, headers={"Authorization": f"Bearer {token}"}, timeout=10)
+                    dl_url = "https://www.googleapis.com/drive/v3/files/" + m.group(1) + "?alt=media"
+                    r = requests.get(dl_url, headers={"Authorization": "Bearer " + token}, timeout=15)
                     if r.status_code == 200:
-                        b64 = base64.b64encode(r.content).decode()
-                        mime = r.headers.get("Content-Type", "image/jpeg")
-                        final_src = f"data:{mime};base64,{b64}"
-        except Exception as e:
-            logger.error(f"Error convirtiendo imagen de Drive a b64: {e}")
+                        ct = r.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
+                        return "data:" + ct + ";base64," + base64.b64encode(r.content).decode()
+        r = requests.get(src, timeout=15)
+        if r.status_code == 200:
+            ct = r.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
+            if "image" not in ct:
+                ct = "image/jpeg"
+            return "data:" + ct + ";base64," + base64.b64encode(r.content).decode()
+    except Exception as exc:
+        logger.warning("_resolve_src_to_b64 error (%s): %s", src[:60], exc)
+    return ""
 
-    if final_src.startswith("data:image") or final_src.startswith("http"):
-        return '<img src="' + final_src + '" style="' + style + '" />'
 
-    return '<div style="width:120px;height:55px;background:#f5f5f5;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:7px;border:1px dashed #ccc;">Error imagen</div>'
+def _img_tag(src_val: str, style: str = "max-height:56px;max-width:150px;object-fit:contain;") -> str:
+    """Convierte cualquier src a base64 inline para correos HTML."""
+    resolved = _resolve_src_to_b64(src_val)
+    if resolved:
+        return '<img src="' + resolved + '" style="' + style + '" />'
+    return '<div style="width:120px;height:55px;background:#f5f5f5;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:7px;border:1px dashed #ccc;">Sin firma</div>'
+
 
 
 def _inline_sig(src_val: str, label: str, name: str = "") -> str:
@@ -610,15 +632,19 @@ def _inline_sig(src_val: str, label: str, name: str = "") -> str:
 
 
 def _photo_block(url: str, label: str) -> str:
-    if not url or (not url.startswith("data:image") and not url.startswith("http")):
+    if not url:
+        return ""
+    resolved = _resolve_src_to_b64(url)
+    if not resolved:
         return ""
     return (
         '<div style="display:inline-block;width:30%;margin:1%;vertical-align:top;'
         'border:1px solid #eee;padding:5px;background:#FFF;text-align:center;">'
         '<p style="margin:0 0 4px 0;font-size:7px;font-weight:bold;color:#666;text-transform:uppercase;">' + label + "</p>"
-        '<img src="' + url + '" style="width:100%;height:100px;object-fit:cover;border:1px solid #ddd;" />'
+        '<img src="' + resolved + '" style="width:100%;height:100px;object-fit:cover;border:1px solid #ddd;" />'
         "</div>"
     )
+
 
 
 def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -> str:
@@ -678,14 +704,14 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
         + tr("Licencia / 驾驶证", entry.get("licencia_conductor") or entry.get("numero_licencia"))
         + tr("Compañía / 运输公司", entry.get("compania_transporte"))
         + tr("Tractor / 牵引车", entry.get("numero_tractor"))
-        + th2("CAJA 1 / 货箱 1")
+        + th2("CAJA / 货箱")
         + tr("Empresa Caja / 货箱公司", entry.get("compania_caja"))
         + tr("Caja / 货箱", entry.get("numero_caja"))
         + tr("Sello Entrada / 进场封条", entry.get("sello_entrada"))
     )
     if is_full:
         caseta_rows += (
-            th2("CAJA 2 / 货箱 2")
+            th2("CAJA / 货箱 2")
             + tr("Empresa Caja 2", entry.get("compania_caja_2"))
             + tr("Caja 2 / 货箱 2", entry.get("numero_caja_2"))
             + tr("Sello Entrada 2", entry.get("sello_entrada_2"))
@@ -704,7 +730,7 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
         )
         if is_full:
             caseta_rows += tr("Sello Salida 2", ex.get("sello_salida_2"))
-        caseta_rows += tr("Guardia Salida", ex.get("guardia_salida_nombre"))
+        caseta_rows += tr("Guardia Salida / 门卫", ex.get("guardia_salida_nombre"))
 
     fotos_caseta = (
         _photo_block(entry.get("foto_frente_unidad"), "Frente / 前方")
@@ -748,8 +774,18 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
                 cls   = "g" if estado == "bueno" else "b" if estado == "malo" else ""
                 est_label = "BUENO / 良好" if estado == "bueno" else ("FALLA / 故障" if estado == "malo" else "N/A")
                 foto_html = ""
-                if pt.get("photo") and (pt["photo"].startswith("data:image") or pt["photo"].startswith("http")):
-                    foto_html = '<br/><img src="' + pt["photo"] + '" style="max-height:90px;max-width:220px;object-fit:contain;border:1px solid #ddd;margin-top:3px;"/>'
+                if pt.get("photo"):
+                    p_url = pt["photo"]
+                    p_info = "Cámara"
+                    if "drive.google.com" in p_url or "doc-0s-80-docs.googleusercontent.com" in p_url: p_info = "Drive"
+                    elif p_url.startswith("http"): p_info = "Web"
+
+                    foto_html = (
+                        '<div style="margin-top:4px;border:1px solid #eee;padding:4px;background:#f9fafb;">'
+                        '<p style="margin:0 0 2px 0;font-size:5.5px;color:#888;">INFO FOTO: ' + p_info + '</p>'
+                        '<img src="' + p_url + '" style="max-height:100px;max-width:240px;object-fit:contain;border:1px solid #ddd;"/>'
+                        '</div>'
+                    )
                 rows_html += (
                     "<tr>"
                     '<td style="text-align:center;width:28px;">' + str(num) + "</td>"
@@ -890,7 +926,7 @@ async def _build_report_html(record_id: str) -> tuple:
     return html, placas
 
 
-async def send_report_email(record_id: str, extra_emails: List[str] = []):
+def send_report_email(record_id: str, extra_emails: List[str] = []):
     """
     Envía el reporte consolidado COMPLETO por correo.
     HTML con todas las secciones, fotos y firmas en base64 inline — igual al PDF.
@@ -905,7 +941,11 @@ async def send_report_email(record_id: str, extra_emails: List[str] = []):
         logger.error("send_report_email: credenciales SMTP no configuradas")
         return False, "Credenciales SMTP no configuradas"
 
-    rec, inspections, ticket, placas = await _collect_report_data(record_id)
+    _loop = asyncio.new_event_loop()
+    try:
+        rec, inspections, ticket, placas = _loop.run_until_complete(_collect_report_data(record_id))
+    finally:
+        _loop.close()
     if not rec:
         return False, "Registro no encontrado"
 
@@ -919,10 +959,7 @@ async def send_report_email(record_id: str, extra_emails: List[str] = []):
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     try:
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, lambda: _sync_send_email(
-            smtp_host, smtp_port, smtp_user, smtp_pass, all_recipients, msg
-        ))
+        _sync_send_email(smtp_host, smtp_port, smtp_user, smtp_pass, all_recipients, msg)
         logger.info("Reporte completo enviado a " + str(all_recipients) + " unidad " + placas)
         return True, "Reporte completo enviado a " + str(len(all_recipients)) + " destinatario(s)"
     except Exception as e:
