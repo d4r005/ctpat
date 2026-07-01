@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { colors, spacing } from '@/src/constants/theme';
 
 interface ProcessTrackerProps {
@@ -16,6 +17,7 @@ interface ProcessTrackerProps {
 }
 
 export default function ProcessTracker({ steps, compact = false, showShipping = true, showLabels = false }: ProcessTrackerProps) {
+  const { t } = useTranslation();
   const Step = ({ icon, completed, label, last = false }: any) => (
     <View style={[styles.stepWrapper, compact && styles.stepWrapperCompact]}>
       <View style={styles.stepContainer}>
@@ -38,10 +40,10 @@ export default function ProcessTracker({ steps, compact = false, showShipping = 
 
   return (
     <View style={[styles.container, compact && styles.containerCompact]}>
-      <Step icon="car-outline" completed={steps.entry} label="Entrada" />
-      <Step icon="clipboard-outline" completed={steps.inspection} label="Inspección" />
-      {showShipping && <Step icon="cube-outline" completed={steps.shipping} label="Embarque" />}
-      <Step icon="exit-outline" completed={steps.exit} label="Salida" last />
+      <Step icon="car-outline" completed={steps.entry} label={t('entrada')} />
+      <Step icon="clipboard-outline" completed={steps.inspection} label={t('inspeccion')} />
+      {showShipping && <Step icon="cube-outline" completed={steps.shipping} label={t('embarque')} />}
+      <Step icon="exit-outline" completed={steps.exit} label={t('salida')} last />
     </View>
   );
 }

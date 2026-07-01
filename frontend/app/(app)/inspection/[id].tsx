@@ -284,7 +284,7 @@ export default function InspectionDetail() {
         }
       } else {
         if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Compartir Inspección NAF' });
+          await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: t('compartir_inspeccion_naf') });
         }
       }
     } catch (e: any) {

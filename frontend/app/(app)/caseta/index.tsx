@@ -117,7 +117,7 @@ export default function CasetaList() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <MainHeader
         title="NAF"
-        subtitle="CASETA: REGISTRO DE MOVIMIENTOS"
+        subtitle={`${t('caseta').toUpperCase()}: ${t('registro_movimientos').toUpperCase()}`}
         rightAction={isAdmin ? {
           icon: 'add-circle',
           onPress: () => router.push('/caseta/nuevo'),
@@ -128,7 +128,7 @@ export default function CasetaList() {
         <Ionicons name="search" size={18} color={colors.muted} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Placas, chofer, compañía..."
+          placeholder={t('buscar_placeholder_caseta')}
           placeholderTextColor={colors.muted}
           value={query}
           onChangeText={setQuery}

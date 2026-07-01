@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
+import { useTranslation } from 'react-i18next';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export default function BarcodeScanner({ visible, title, onClose, onScan }: Props) {
+  const { t } = useTranslation();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
 
@@ -33,8 +35,7 @@ export default function BarcodeScanner({ visible, title, onClose, onScan }: Prop
         <View style={styles.center}>
           <Ionicons name="information-circle" size={48} color={colors.warning} />
           <Text style={styles.infoText}>
-            El escáner de cámara está optimizado para dispositivos móviles.{'\n'}
-            En navegador, ingresa el código manualmente.
+            {t('scanner_web_hint')}
           </Text>
         </View>
       );
@@ -50,7 +51,7 @@ export default function BarcodeScanner({ visible, title, onClose, onScan }: Prop
       return (
         <View style={styles.center}>
           <Ionicons name="videocam-off" size={48} color={colors.muted} />
-          <Text style={styles.infoText}>Se necesita acceso a la cámara para escanear códigos.</Text>
+          <Text style={styles.infoText}>{t('scanner_permiso_camara')}</Text>
           <Pressable
             testID="scanner-grant-permission"
             style={styles.primaryBtn}
@@ -61,7 +62,7 @@ export default function BarcodeScanner({ visible, title, onClose, onScan }: Prop
               }
             }}
           >
-            <Text style={styles.primaryBtnText}>PERMITIR CÁMARA</Text>
+            <Text style={styles.primaryBtnText}>{t('permitir_camara')}</Text>
           </Pressable>
         </View>
       );
@@ -93,7 +94,7 @@ export default function BarcodeScanner({ visible, title, onClose, onScan }: Prop
       </View>
       <View style={{ flex: 1, backgroundColor: '#000' }}>{renderBody()}</View>
       <View style={styles.footer}>
-        <Text style={styles.footerHint}>Apunta la cámara al código de barras o QR</Text>
+        <Text style={styles.footerHint}>{t('scanner_footer_hint')}</Text>
       </View>
     </View>
   );

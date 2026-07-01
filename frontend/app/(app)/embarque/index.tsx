@@ -120,14 +120,14 @@ export default function EmbarqueList() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <MainHeader
         title="NAF"
-        subtitle="EMBARQUE: TICKETS DE CARGA"
+        subtitle={`${t('embarque').toUpperCase()}: ${t('tickets_embarque').toUpperCase()}`}
       />
 
       <View style={styles.searchRow}>
         <Ionicons name="search" size={18} color={colors.muted} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Placas, cliente, almacenista..."
+          placeholder={t('buscar_placeholder_embarque')}
           placeholderTextColor={colors.muted}
           value={query}
           onChangeText={setQuery}

@@ -204,7 +204,7 @@ export default function CasetaDetail() {
           <>
             <Ionicons name="cloud-offline-outline" size={40} color={colors.muted} style={{ marginBottom: spacing.md }} />
             <Text style={{ textAlign: 'center', marginBottom: spacing.md, paddingHorizontal: spacing.lg }}>
-              No se pudo cargar el registro (posible problema de conexión o el servidor está reiniciando).{'\n'}El registro puede seguir existiendo — intenta de nuevo.
+              {t('no_pudo_cargar_registro')}
             </Text>
             <Pressable onPress={load} style={{ backgroundColor: colors.brandPrimary, paddingVertical: 10, paddingHorizontal: 24 }}>
               <Text style={{ color: '#FFF', fontWeight: '900' }}>{(t('reintentar') || 'REINTENTAR').toUpperCase()}</Text>
@@ -253,8 +253,8 @@ export default function CasetaDetail() {
               <View style={styles.subSection}>
                 <Text style={styles.subTitle}>{t('caja').toUpperCase()}</Text>
                 <View style={styles.grid}>
-                  <EditableItem label="NUMERO CAJA" value={entryForm.numero_caja} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_caja: v}) : null} />
-                  <EditableItem label="SELLO" value={entryForm.sello_entrada} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, sello_entrada: v}) : null} />
+                  <EditableItem label={t('numero_caja_caps')} value={entryForm.numero_caja} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_caja: v}) : null} />
+                  <EditableItem label={t('sello').toUpperCase()} value={entryForm.sello_entrada} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, sello_entrada: v}) : null} />
                 </View>
               </View>
 
@@ -262,8 +262,8 @@ export default function CasetaDetail() {
                 <View style={styles.subSection}>
                   <Text style={styles.subTitle}>{t('caja').toUpperCase()}</Text>
                   <View style={styles.grid}>
-                    <EditableItem label="NUMERO CAJA" value={entryForm.numero_caja_2} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_caja_2: v}) : null} />
-                    <EditableItem label="SELLO" value={entryForm.sello_entrada_2} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, sello_entrada_2: v}) : null} />
+                    <EditableItem label={t('numero_caja_caps')} value={entryForm.numero_caja_2} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_caja_2: v}) : null} />
+                    <EditableItem label={t('sello').toUpperCase()} value={entryForm.sello_entrada_2} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, sello_entrada_2: v}) : null} />
                   </View>
                 </View>
               )}

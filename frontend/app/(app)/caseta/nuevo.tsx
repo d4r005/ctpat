@@ -271,11 +271,11 @@ export default function CasetaNuevo() {
       }
     } catch (e: any) {
       console.error('Error saving vehicle record:', e);
-      let errorMsg = e.message || 'Error desconocido';
+      let errorMsg = e.message || t('error_desconocido');
       if (errorMsg === 'Failed to fetch') {
-        errorMsg = 'Error de conexión con el servidor. Posiblemente las fotos son muy pesadas o el internet es inestable. Intenta de nuevo.';
+        errorMsg = t('error_conexion_fotos_pesadas');
       }
-      alert(`Ocurrió un problema: ${errorMsg}`);
+      alert(`${t('ocurrio_un_problema')}: ${errorMsg}`);
     }
     finally { setSaving(false); }
   };
@@ -305,21 +305,21 @@ export default function CasetaNuevo() {
                 ))}
               </View>
 
-              <Field label="SUCURSAL" value={sucursal} onChange={setSucursal} testID="caseta-sucursal" />
-              <Field label="DIRECCIÓN" value={direccion} onChange={setDireccion} testID="caseta-direccion" />
-              <Field label="LICENCIA" value={licencia} onChange={setLicencia} testID="caseta-licencia" />
-              <Field label="PLACAS UNIDAD" value={placas} onChange={setPlacas} testID="caseta-placas" />
-              <Field label="NOMBRE CHOFER" value={chofer} onChange={setChofer} testID="caseta-chofer" />
-              <Field label="COMPAÑÍA TRANSPORTISTA" value={compania} onChange={setCompania} testID="caseta-compania" />
-              <Field label="NÚMERO TRACTOR" value={tractor} onChange={setTractor} testID="caseta-tractor" />
+              <Field label={t('sucursal').toUpperCase()} value={sucursal} onChange={setSucursal} testID="caseta-sucursal" />
+              <Field label={t('direccion').toUpperCase()} value={direccion} onChange={setDireccion} testID="caseta-direccion" />
+              <Field label={t('licencia').toUpperCase()} value={licencia} onChange={setLicencia} testID="caseta-licencia" />
+              <Field label={t('placas_unidad_caps').toUpperCase()} value={placas} onChange={setPlacas} testID="caseta-placas" />
+              <Field label={t('nombre_chofer').toUpperCase()} value={chofer} onChange={setChofer} testID="caseta-chofer" />
+              <Field label={t('compania_transportista_caps').toUpperCase()} value={compania} onChange={setCompania} testID="caseta-compania" />
+              <Field label={t('numero_tractor_caps').toUpperCase()} value={tractor} onChange={setTractor} testID="caseta-tractor" />
 
               <Text style={[styles.declTitle, { marginTop: spacing.lg, marginBottom: spacing.sm }]}>{t('caja').toUpperCase()}</Text>
-              <Field label="COMPAÑÍA CAJA" value={companiaCaja} onChange={setCompaniaCaja} testID="caseta-compania-caja" />
-              <Field label="NÚMERO CAJA" value={numeroCaja} onChange={setNumeroCaja} testID="caseta-numero-caja" />
+              <Field label={t('compania_caja').toUpperCase()} value={companiaCaja} onChange={setCompaniaCaja} testID="caseta-compania-caja" />
+              <Field label={t('numero_caja_caps').toUpperCase()} value={numeroCaja} onChange={setNumeroCaja} testID="caseta-numero-caja" />
 
               <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
                 <View style={{ flex: 1 }}>
-                  <Field label="NÚMERO PRECINTO" value={selloEntrada} onChange={setSelloEntrada} testID="caseta-sello-entrada" disabled={selloEntradaNA} />
+                  <Field label={t('numero_precinto_caps').toUpperCase()} value={selloEntrada} onChange={setSelloEntrada} testID="caseta-sello-entrada" disabled={selloEntradaNA} />
                 </View>
                 <Pressable onPress={() => setSelloEntradaNA(!selloEntradaNA)} style={styles.naBox}>
                   <View style={[styles.naCheck, selloEntradaNA && styles.naCheckOn]}>
@@ -332,12 +332,12 @@ export default function CasetaNuevo() {
               {tipoUnidad === 'full' && (
                 <>
                   <Text style={[styles.declTitle, { marginTop: spacing.xl, marginBottom: spacing.sm }]}>CAJA 2 (FULL)</Text>
-                  <Field label="COMPAÑÍA CAJA 2" value={companiaCaja2} onChange={setCompaniaCaja2} testID="caseta-compania-caja-2" />
-                  <Field label="NÚMERO CAJA 2" value={numeroCaja2} onChange={setNumeroCaja2} testID="caseta-numero-caja-2" />
+                  <Field label={`${t('compania_caja').toUpperCase()} 2`} value={companiaCaja2} onChange={setCompaniaCaja2} testID="caseta-compania-caja-2" />
+                  <Field label={`${t('numero_caja_caps').toUpperCase()} 2`} value={numeroCaja2} onChange={setNumeroCaja2} testID="caseta-numero-caja-2" />
 
                   <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
                     <View style={{ flex: 1 }}>
-                      <Field label="NÚMERO PRECINTO 2" value={selloEntrada2} onChange={setSelloEntrada2} testID="caseta-sello-entrada-2" disabled={selloEntradaNA2} />
+                      <Field label={`${t('numero_precinto_caps').toUpperCase()} 2`} value={selloEntrada2} onChange={setSelloEntrada2} testID="caseta-sello-entrada-2" disabled={selloEntradaNA2} />
                     </View>
                     <Pressable onPress={() => setSelloEntradaNA2(!selloEntradaNA2)} style={styles.naBox}>
                       <View style={[styles.naCheck, selloEntradaNA2 && styles.naCheckOn]}>
@@ -456,11 +456,11 @@ export default function CasetaNuevo() {
                 ))}
               </View>
 
-              <Field label="DESCRIPCIÓN DE CARGA" value={descripcionCarga} onChange={setDescripcionCarga} testID="caseta-desc-carga" multiline />
+              <Field label={t('descripcion_carga').toUpperCase()} value={descripcionCarga} onChange={setDescripcionCarga} testID="caseta-desc-carga" multiline />
 
               <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
                 <View style={{ flex: 1 }}>
-                  <Field label="GUIA" value={numGuia} onChange={setNumGuia} testID="caseta-guia" disabled={numGuiaNA} />
+                  <Field label={t('guia_caps').toUpperCase()} value={numGuia} onChange={setNumGuia} testID="caseta-guia" disabled={numGuiaNA} />
                 </View>
                 <Pressable onPress={() => setNumGuiaNA(!numGuiaNA)} style={styles.naBox}>
                   <View style={[styles.naCheck, numGuiaNA && styles.naCheckOn]}>
@@ -472,7 +472,7 @@ export default function CasetaNuevo() {
 
               <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
                 <View style={{ flex: 1 }}>
-                  <Field label="REQUERIMIENTO" value={numReq} onChange={setNumReq} testID="caseta-requerimiento" disabled={numReqNA} />
+                  <Field label={t('requerimiento_caps').toUpperCase()} value={numReq} onChange={setNumReq} testID="caseta-requerimiento" disabled={numReqNA} />
                 </View>
                 <Pressable onPress={() => setNumReqNA(!numReqNA)} style={styles.naBox}>
                   <View style={[styles.naCheck, numReqNA && styles.naCheckOn]}>
@@ -484,10 +484,10 @@ export default function CasetaNuevo() {
 
               <ToggleRow label={t('orden_compra_pregunta')} value={ordenCompra} onChange={setOrdenCompra} testID="caseta-orden-compra" t={t} />
               {ordenCompra && (
-                <Field label={`# ORDEN DE COMPRA`} value={numOrdenCompra} onChange={setNumOrdenCompra} testID="caseta-num-orden-compra" />
+                <Field label={`# ${t('orden_compra').toUpperCase()}`} value={numOrdenCompra} onChange={setNumOrdenCompra} testID="caseta-num-orden-compra" />
               )}
 
-              <Field label="DESTINO" value={destino} onChange={setDestino} testID="caseta-destino" />
+              <Field label={t('destino_caps').toUpperCase()} value={destino} onChange={setDestino} testID="caseta-destino" />
             </View>
           )}
 

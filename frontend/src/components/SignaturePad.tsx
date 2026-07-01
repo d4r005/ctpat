@@ -1,6 +1,7 @@
 import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import { View, Platform, StyleSheet } from 'react-native';
 import SignatureScreen from 'react-native-signature-canvas';
+import i18n from '@/src/i18n';
 
 // Importación condicional para Web
 let ReactSignatureCanvas: any;
@@ -73,7 +74,7 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
       <SignatureScreen
         ref={signatureRef}
         onOK={props.onOK}
-        descriptionText={props.descriptionText || 'Firme aquí'}
+        descriptionText={props.descriptionText || i18n.t('firme_dentro_desc')}
         webStyle={props.webStyle || defaultWebStyle}
         autoClear={props.autoClear ?? false}
         imageType={props.imageType || 'image/png'}
