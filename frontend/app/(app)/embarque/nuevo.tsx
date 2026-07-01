@@ -48,6 +48,7 @@ export default function EmbarqueNuevo() {
     // If params change, we could update form, but usually initial state is enough for 'nuevo'
   }, [params]);
   const [sigTarget, setSigTarget] = useState<'almacenista' | 'guardia' | null>(null);
+  const [almacenistaOpcion, setAlmacenistaOpcion] = useState<'CARLOS CANIBALES' | 'CYNTHIA SAUCEDA' | 'OTRO' | ''>('');
 
   const set = (k: string, v: any) => setForm({ ...form, [k]: v });
 
@@ -190,7 +191,25 @@ export default function EmbarqueNuevo() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Section title={t('almacen').toUpperCase()}>
-            <F label={`${t('almacenista_caps').toUpperCase()} *`} v={form.almacenista} on={(t: string) => set('almacenista', t)} tid="emb-almacenista" />
+            <Text style={styles.label}>{`${t('almacenista_caps').toUpperCase()} *`}</Text>
+            <View style={[styles.optionsRow, { marginBottom: spacing.md }]}>
+              {(['CARLOS CANIBALES', 'CYNTHIA SAUCEDA', 'OTRO'] as const).map((o) => (
+                <Pressable
+                  key={o}
+                  onPress={() => {
+                    setAlmacenistaOpcion(o);
+                    if (o !== 'OTRO') set('almacenista', o);
+                    else set('almacenista', '');
+                  }}
+                  style={[styles.optionChip, almacenistaOpcion === o && styles.optionChipActive]}
+                >
+                  <Text style={[styles.optionText, almacenistaOpcion === o && styles.optionTextActive]}>{o}</Text>
+                </Pressable>
+              ))}
+            </View>
+            {(almacenistaOpcion === 'OTRO' || !almacenistaOpcion) && (
+              <F label={t('nombre_completo').toUpperCase()} v={form.almacenista} on={(t: string) => set('almacenista', t)} tid="emb-almacenista" placeholder={t('nombre_completo_placeholder')} />
+            )}
             <F label={t('area').toUpperCase()} v={form.area} on={(t: string) => set('area', t)} tid="emb-area" />
             <F label={t('sellos').toUpperCase()} v={form.sellos} on={(t: string) => set('sellos', t)} tid="emb-sellos" />
           </Section>
