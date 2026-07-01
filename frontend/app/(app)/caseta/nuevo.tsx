@@ -256,7 +256,7 @@ export default function CasetaNuevo() {
       }).toString();
 
       if (Platform.OS === 'web') {
-        const proceed = window.confirm(t('inspeccion_guardada') + " \n\n" + t('desea_generar_ticket'));
+        const proceed = window.confirm(t('registro_caseta_guardado') + " \n\n" + t('desea_iniciar_inspeccion'));
         if (proceed) {
           router.replace(`/(app)/nueva?${nextParams}`);
         } else {
@@ -265,11 +265,11 @@ export default function CasetaNuevo() {
         }
       } else {
         Alert.alert(
-          t('inspeccion_guardada'),
-          t('desea_generar_ticket'),
+          t('registro_caseta_guardado'),
+          t('desea_iniciar_inspeccion'),
           [
             { text: t('atras'), onPress: () => router.replace('/(app)/caseta') },
-            { text: t('si_generar_ticket_caps'), onPress: () => router.replace(`/(app)/nueva?${nextParams}`) }
+            { text: t('si_iniciar_inspeccion_caps'), onPress: () => router.replace(`/(app)/nueva?${nextParams}`) }
           ]
         );
       }
