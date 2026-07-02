@@ -222,6 +222,7 @@ export default function Supervisor() {
   const [emailModal, setEmailModal] = useState<{ visible: boolean; recordId: string; plates: string }>({
     visible: false, recordId: '', plates: '',
   });
+  const [duplicatesModalVisible, setDuplicatesModalVisible] = useState(false);
 
   // Asegurar recarga al cambiar a pestaña inspección
   React.useEffect(() => {
@@ -391,6 +392,13 @@ export default function Supervisor() {
         onClose={() => setEmailModal({ visible: false, recordId: '', plates: '' })}
       />
 
+      <DuplicatesModal
+        visible={duplicatesModalVisible}
+        token={token || ''}
+        onClose={() => setDuplicatesModalVisible(false)}
+        onMerged={fetchEverything}
+      />
+
       <ScrollView
         stickyHeaderIndices={[1]}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchEverything} />}
@@ -408,6 +416,10 @@ export default function Supervisor() {
               <Text style={styles.adminBtnText}>{t('usuarios_caps').toUpperCase()}</Text>
             </Pressable>
           </View>
+          <Pressable style={[styles.adminBtn, { marginTop: 8, backgroundColor: '#FEF3C7' }]} onPress={() => setDuplicatesModalVisible(true)}>
+            <Ionicons name="git-merge-outline" size={16} color="#92400E" />
+            <Text style={[styles.adminBtnText, { color: '#92400E' }]}>DUPLICADOS POR OCR (FUSIONAR)</Text>
+          </Pressable>
           <Pressable style={[styles.adminBtn, { marginTop: 8, backgroundColor: '#E0E7FF' }]} onPress={() => router.push('/(app)/analitica')}>
             <Ionicons name="stats-chart" size={16} color="#4338CA" />
             <Text style={[styles.adminBtnText, { color: '#4338CA' }]}>{t('kpis')} / {t('reporte_analitica').toUpperCase()}</Text>
@@ -456,6 +468,101 @@ export default function Supervisor() {
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+// ─── Modal de Duplicados por OCR ────────────────────────────────────────────
+function DuplicatesModal({ visible, token, onClose, onMerged }: {
+  visible: boolean; token: string; onClose: () => void; onMerged: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [groups, setGroups] = useState<any[]>([]);
+  const [merging, setMerging] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const res = await apiCall<any>('/admin/duplicate-plates', { token });
+      setGroups(res.groups || []);
+    } catch (e: any) {
+      Alert.alert('Error', e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  React.useEffect(() => { if (visible) load(); }, [visible, load]);
+
+  const handleMerge = (keepId: string, removeId: string, keepPlates: string, removePlates: string) => {
+    Alert.alert(
+      'Fusionar registros',
+      `Se conservará "${keepPlates}" y se le pasarán todas las inspecciones y el ticket de "${removePlates}". El duplicado "${removePlates}" se eliminará. ¿Continuar?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Fusionar', style: 'destructive', onPress: async () => {
+            setMerging(removeId);
+            try {
+              await apiCall('/admin/merge-vehicle-records', {
+                method: 'POST', token, body: { keep_id: keepId, remove_id: removeId }
+              });
+              await load();
+              onMerged();
+            } catch (e: any) {
+              Alert.alert('Error', e.message);
+            } finally {
+              setMerging(null);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', padding: spacing.md, borderBottomWidth: 1, borderColor: '#EEE' }}>
+          <Pressable onPress={onClose} style={{ marginRight: spacing.sm }}><Ionicons name="arrow-back" size={24} /></Pressable>
+          <Text style={{ fontSize: 17, fontWeight: '700', flex: 1 }}>Posibles duplicados por OCR</Text>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: spacing.md }}>
+          <Text style={{ color: '#666', marginBottom: spacing.md, fontSize: 13 }}>
+            Se agrupan registros cuya placa difiere solo en un carácter fácilmente confundido por OCR
+            (Z/2, O/0, I/1, S/5, B/8, G/6). Elige cuál placa conservar — el otro registro se fusiona en ese
+            y se elimina.
+          </Text>
+          {loading && <ActivityIndicator style={{ marginTop: 20 }} />}
+          {!loading && groups.length === 0 && (
+            <Text style={{ textAlign: 'center', color: '#999', marginTop: 30 }}>No se encontraron duplicados por confusión de OCR 🎉</Text>
+          )}
+          {groups.map((g) => (
+            <View key={g.canon} style={{ borderWidth: 1, borderColor: '#EEE', borderRadius: 10, padding: spacing.sm, marginBottom: spacing.md }}>
+              {g.records.map((r: any) => (
+                <View key={r.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderColor: '#F5F5F5' }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontWeight: '700', fontSize: 15 }}>{r.placas}</Text>
+                    <Text style={{ color: '#666', fontSize: 12 }}>{r.chofer || '-'} · {r.status} · {r.inspection_count} insp. · {r.has_shipping_ticket ? 'con ticket' : 'sin ticket'}</Text>
+                    <Text style={{ color: '#999', fontSize: 11 }}>{new Date(r.created_at).toLocaleString()}</Text>
+                  </View>
+                  <Pressable
+                    disabled={merging === r.id}
+                    style={{ backgroundColor: colors.brandPrimary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}
+                    onPress={() => {
+                      const other = g.records.find((x: any) => x.id !== r.id);
+                      if (other) handleMerge(r.id, other.id, r.placas, other.placas);
+                    }}
+                  >
+                    {merging === r.id ? <ActivityIndicator size={12} color="#FFF" /> : <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>Conservar este</Text>}
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          ))}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
   );
 }
 

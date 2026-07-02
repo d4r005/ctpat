@@ -276,6 +276,36 @@ def add_watermark(b64: str) -> str:
         return f"data:image/jpeg;base64,{base64.b64encode(out.getvalue()).decode()}"
     except: return b64
 
+# Mapa de confusiones comunes de OCR/lectura de placas (mismo caracter visualmente
+# ambiguo leido distinto en distintos escaneos: Z/2, O/0, I/1, S/5, B/8, G/6).
+# Se usa SOLO para vincular/buscar registros existentes -- nunca para lo que se
+# guarda o se muestra, que siempre conserva la placa tal como fue capturada.
+_PLATE_OCR_CLASSES = {
+    'Z': '[Z2]', '2': '[Z2]',
+    'O': '[O0]', '0': '[O0]',
+    'I': '[I1]', '1': '[I1]',
+    'S': '[S5]', '5': '[S5]',
+    'B': '[B8]', '8': '[B8]',
+    'G': '[G6]', '6': '[G6]',
+}
+_PLATE_OCR_CANON = {
+    'Z': '2', 'O': '0', 'I': '1', 'S': '5', 'B': '8', 'G': '6',
+}
+
+def _plate_regex_pattern(plates: str) -> str:
+    """Construye un patron regex tolerante a confusiones de OCR para buscar una
+    placa en Mongo, permitiendo ademas caracteres intermedios (subcadena)."""
+    pl = re.sub(r'[^A-Z0-9]', '', (plates or '').upper())
+    parts = [_PLATE_OCR_CLASSES.get(ch, re.escape(ch)) for ch in pl]
+    return ".*".join(parts)
+
+def _canon_plate(plates: str) -> str:
+    """Normaliza una placa a una forma canonica (colapsando caracteres
+    ambiguos de OCR) para agrupar/comparar en memoria, ej. para diccionarios."""
+    pl = re.sub(r'[^A-Z0-9]', '', (plates or '').upper())
+    return "".join(_PLATE_OCR_CANON.get(ch, ch) for ch in pl)
+
+
 async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
     if not record: return record
     placas = record.get("entry", {}).get("placas_unidad", "").strip().upper()
@@ -284,7 +314,7 @@ async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
     if not pl_norm: return record
 
     try:
-        regex = ".*".join(list(pl_norm))
+        regex = _plate_regex_pattern(placas)
         # 1. Vincular Inspecciones
         insps = await db.inspections.find({"placas_unidad": {"$regex": f".*{regex}.*", "$options": "i"}}).to_list(10)
         if insps:
@@ -547,7 +577,7 @@ async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Op
     all_tickets = await db.shipping_tickets.find({}, {"_id": 0, "id": 1, "placas_unidad": 1, "record_id": 1}).to_list(5000)
 
     # Índice por placas normalizadas
-    def norm(s): return re.sub(r"[^A-Z0-9]", "", (s or "").upper())
+    def norm(s): return _canon_plate(s)
 
     insp_by_plates: Dict[str, List[str]] = {}
     insp_by_record: Dict[str, List[str]] = {}
@@ -747,19 +777,19 @@ async def _collect_report_data(record_id: str):
         insp = await db.inspections.find_one({"id": iid}, {"_id": 0})
         if insp: inspections.append(insp)
     if not inspections and placas:
-        pl = re.sub(r"[^A-Z0-9]", "", placas.upper())
-        if pl:
+        pat = _plate_regex_pattern(placas)
+        if pat:
             inspections = await db.inspections.find(
-                {"placas_unidad": {"$regex": pl, "$options": "i"}},
+                {"placas_unidad": {"$regex": f".*{pat}.*", "$options": "i"}},
                 {"_id": 0}).sort("created_at", -1).to_list(10)
     ticket = None
     if rec.get("shipping_ticket_id"):
         ticket = await db.shipping_tickets.find_one({"id": rec["shipping_ticket_id"]}, {"_id": 0})
     if not ticket and placas:
-        pl = re.sub(r"[^A-Z0-9]", "", placas.upper())
-        if pl:
+        pat = _plate_regex_pattern(placas)
+        if pat:
             ticket = await db.shipping_tickets.find_one(
-                {"placas_unidad": {"$regex": pl, "$options": "i"}},
+                {"placas_unidad": {"$regex": f".*{pat}.*", "$options": "i"}},
                 sort=[("created_at", -1)])
             if ticket and "_id" in ticket: del ticket["_id"]
     return rec, inspections, ticket, placas
@@ -1310,7 +1340,7 @@ async def create_inspection(body: InspectionCreate, background_tasks: Background
         )
     else:
         # Auto-vincular por placas si no viene record_id
-        pl = re.sub(r"[^A-Z0-9]", "", (body.placas_unidad or "").upper())
+        pl = _plate_regex_pattern(body.placas_unidad or "")
         if pl:
             rec_by_plates = await db.vehicle_records.find_one(
                 {"entry.placas_unidad": {"$regex": pl, "$options": "i"}, "status": {"$ne": "salida"}},
@@ -1424,7 +1454,7 @@ async def approve_insp(insp_id: str, body: ApprovalBody, background_tasks: Backg
         if d.get("record_id"):
             rec = await db.vehicle_records.find_one({"id": d["record_id"]}, {"_id": 0})
         if not rec:
-            pl = re.sub(r"[^A-Z0-9]", "", (placas_d or "").upper())
+            pl = _plate_regex_pattern(placas_d or "")
             if pl:
                 rec = await db.vehicle_records.find_one(
                     {"entry.placas_unidad": {"$regex": pl, "$options": "i"}},
@@ -1464,7 +1494,7 @@ async def create_ticket(body: ShippingTicketCreate, background_tasks: Background
         # mostrando el proceso como incompleto para siempre. Ahora se
         # prioriza el registro más reciente de esa placa que AÚN NO tenga
         # ticket, sin importar si ya salió o no.
-        pl = re.sub(r"[^A-Z0-9]", "", (body.placas_unidad or "").upper())
+        pl = _plate_regex_pattern(body.placas_unidad or "")
         if pl:
             rec_by_plates = await db.vehicle_records.find_one(
                 {"entry.placas_unidad": {"$regex": pl, "$options": "i"}, "has_shipping_ticket": {"$ne": True}},
@@ -2020,8 +2050,7 @@ async def get_consolidated_report(record_id: str, u: Dict[str, Any] = Depends(ge
     if not inspections:
         plates = rec.get("entry", {}).get("placas_unidad", "").strip().upper()
         if plates:
-            pl_norm = re.sub(r"[^A-Z0-9]", "", plates)
-            regex = ".*".join(list(pl_norm))
+            regex = _plate_regex_pattern(plates)
             found = await db.inspections.find(
                 {"placas_unidad": {"$regex": f".*{regex}.*", "$options": "i"}},
                 {"_id": 0}
@@ -2035,8 +2064,7 @@ async def get_consolidated_report(record_id: str, u: Dict[str, Any] = Depends(ge
     if not ticket:
         plates = rec.get("entry", {}).get("placas_unidad", "").strip().upper()
         if plates:
-            pl_norm = re.sub(r"[^A-Z0-9]", "", plates)
-            regex = ".*".join(list(pl_norm))
+            regex = _plate_regex_pattern(plates)
             ticket = await db.shipping_tickets.find_one(
                 {"placas_unidad": {"$regex": f".*{regex}.*", "$options": "i"}},
                 sort=[("created_at", -1)]
@@ -2053,6 +2081,154 @@ async def get_consolidated_report(record_id: str, u: Dict[str, Any] = Depends(ge
     }
 
 # --- Admin / Reparación ---
+@api_router.get("/admin/duplicate-plates")
+async def find_duplicate_plates(u: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Detecta registros de caseta que probablemente son la MISMA unidad pero
+    quedaron separados por una confusion de OCR al leer la placa (ej. Z vs 2,
+    O vs 0). Agrupa por placa canonica y devuelve solo los grupos con mas de
+    un registro, para que el admin decida cual conservar y fusionar.
+    """
+    if not is_admin(u): raise HTTPException(403)
+
+    all_records = await db.vehicle_records.find({}, {"_id": 0}).to_list(5000)
+    all_insps = await db.inspections.find({}, {"_id": 0, "id": 1, "record_id": 1, "placas_unidad": 1}).to_list(5000)
+    all_tickets = await db.shipping_tickets.find({}, {"_id": 0, "id": 1, "placas_unidad": 1}).to_list(5000)
+
+    insp_count_by_record: Dict[str, int] = {}
+    for i in all_insps:
+        rid = i.get("record_id")
+        if rid: insp_count_by_record[rid] = insp_count_by_record.get(rid, 0) + 1
+
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for r in all_records:
+        plates = r.get("entry", {}).get("placas_unidad", "")
+        canon = _canon_plate(plates)
+        if not canon: continue
+        groups.setdefault(canon, []).append(r)
+
+    result = []
+    for canon, recs in groups.items():
+        # Solo interesa si hay placas EXACTAS distintas mapeando al mismo canonico
+        exact_plates = {r.get("entry", {}).get("placas_unidad", "").strip().upper() for r in recs}
+        if len(recs) < 2 or len(exact_plates) < 2:
+            continue
+        items = []
+        for r in recs:
+            items.append({
+                "id": r["id"],
+                "placas": r.get("entry", {}).get("placas_unidad", ""),
+                "status": r.get("status"),
+                "created_at": r.get("created_at"),
+                "chofer": r.get("entry", {}).get("chofer_nombre", ""),
+                "inspection_count": insp_count_by_record.get(r["id"], 0),
+                "has_shipping_ticket": bool(r.get("has_shipping_ticket") or r.get("shipping_ticket_id")),
+            })
+        items.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+        result.append({"canon": canon, "records": items})
+
+    result.sort(key=lambda g: max(r.get("created_at") or "" for r in g["records"]), reverse=True)
+    return {"groups": result, "count": len(result)}
+
+
+class MergeRecordsBody(BaseModel):
+    keep_id: str
+    remove_id: str
+
+@api_router.post("/admin/merge-vehicle-records")
+async def merge_vehicle_records(body: MergeRecordsBody, u: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Fusiona dos registros de caseta que son la MISMA unidad fisica pero quedaron
+    separados (tipicamente por una confusion de OCR al leer la placa: Z/2, O/0,
+    etc.). Todas las inspecciones y el ticket de embarque del registro
+    'remove_id' se re-vinculan a 'keep_id', los datos de entrada/salida se
+    completan con lo que falte, y el duplicado se elimina.
+    """
+    if not is_admin(u): raise HTTPException(403)
+    if body.keep_id == body.remove_id:
+        raise HTTPException(400, "Los dos registros deben ser distintos")
+
+    keep = await db.vehicle_records.find_one({"id": body.keep_id}, {"_id": 0})
+    remove = await db.vehicle_records.find_one({"id": body.remove_id}, {"_id": 0})
+    if not keep or not remove:
+        raise HTTPException(404, "Alguno de los dos registros no existe")
+
+    # 1. Re-vincular inspecciones del duplicado al registro que se conserva
+    moved_insp_ids = [i["id"] async for i in db.inspections.find({"record_id": body.remove_id}, {"_id": 0, "id": 1})]
+    if moved_insp_ids:
+        await db.inspections.update_many({"record_id": body.remove_id}, {"$set": {"record_id": body.keep_id}})
+
+    merged_insp_ids = list(set(
+        (keep.get("inspection_ids") or []) + (remove.get("inspection_ids") or []) + moved_insp_ids
+    ))
+    merged_insp_ids = [x for x in merged_insp_ids if x]
+
+    # 2. Re-vincular ticket(s) de embarque del duplicado
+    keep_ticket_id = keep.get("shipping_ticket_id")
+    remove_ticket_id = remove.get("shipping_ticket_id")
+    final_ticket_id = keep_ticket_id or remove_ticket_id
+    has_ticket = bool(keep.get("has_shipping_ticket") or remove.get("has_shipping_ticket") or final_ticket_id)
+    # Si el duplicado tenia tickets con su placa propia (sin shipping_ticket_id vinculado),
+    # tambien se re-etiquetan para que apunten al registro que se conserva.
+    dup_plate = remove.get("entry", {}).get("placas_unidad", "")
+    if dup_plate:
+        pat = _plate_regex_pattern(dup_plate)
+        if pat:
+            loose_tickets = await db.shipping_tickets.find(
+                {"placas_unidad": {"$regex": f".*{pat}.*", "$options": "i"}}, {"_id": 0, "id": 1}
+            ).to_list(10)
+            if loose_tickets:
+                has_ticket = True
+                if not final_ticket_id:
+                    final_ticket_id = loose_tickets[0]["id"]
+
+    # 3. Fusionar entry/exit -- lo que ya tenga 'keep' tiene prioridad, se
+    # completa con lo que exista en 'remove' solo para campos vacios/faltantes.
+    def _merge_dict(base: Dict[str, Any], extra: Dict[str, Any]) -> Dict[str, Any]:
+        out = dict(extra or {})
+        out.update({k: v for k, v in (base or {}).items() if v not in (None, "", [], {})})
+        return out
+
+    merged_entry = _merge_dict(keep.get("entry") or {}, remove.get("entry") or {})
+    merged_exit = _merge_dict(keep.get("exit") or {}, remove.get("exit") or {})
+
+    # 4. Status final -- el mas avanzado de los dos
+    order = ["entrada", "inspeccionado", "embarcado", "salida"]
+    def _rank(s): return order.index(s) if s in order else 0
+    final_status = keep.get("status") if _rank(keep.get("status")) >= _rank(remove.get("status")) else remove.get("status")
+    if merged_exit:
+        final_status = "salida"
+    elif has_ticket and _rank(final_status) < _rank("embarcado"):
+        final_status = "embarcado"
+    elif merged_insp_ids and _rank(final_status) < _rank("inspeccionado"):
+        final_status = "inspeccionado"
+
+    update_doc = {
+        "entry": merged_entry,
+        "inspection_ids": merged_insp_ids,
+        "inspection_id": merged_insp_ids[-1] if merged_insp_ids else keep.get("inspection_id"),
+        "shipping_ticket_id": final_ticket_id,
+        "has_shipping_ticket": has_ticket,
+        "status": final_status,
+    }
+    if merged_exit:
+        update_doc["exit"] = merged_exit
+
+    await db.vehicle_records.update_one({"id": body.keep_id}, {"$set": update_doc})
+    await db.vehicle_records.delete_one({"id": body.remove_id})
+
+    logger.info(f"Fusion de registros: {body.remove_id} ({dup_plate}) -> {body.keep_id} por {u.get('email')}")
+
+    return {
+        "ok": True,
+        "kept_id": body.keep_id,
+        "removed_id": body.remove_id,
+        "moved_inspections": len(moved_insp_ids),
+        "final_status": final_status,
+        "has_shipping_ticket": has_ticket,
+    }
+
+
 @api_router.post("/admin/repair-links")
 async def repair_links(u: Dict[str, Any] = Depends(get_current_user)):
     if not is_admin(u): raise HTTPException(403)
@@ -2064,23 +2240,26 @@ async def repair_links(u: Dict[str, Any] = Depends(get_current_user)):
     all_tickets = await db.shipping_tickets.find({}, {"_id": 0}).to_list(5000)
     all_records = await db.vehicle_records.find({}, {"_id": 0}).to_list(5000)
 
-    existing_plates = {re.sub(r'[^A-Z0-9]', '', r.get("entry", {}).get("placas_unidad", "")).upper() for r in all_records}
+    # Se usa la forma canonica (tolerante a confusiones de OCR: Z/2, O/0, I/1,
+    # S/5, B/8, G/6) para decidir si una placa "ya existe", evitando crear un
+    # registro duplicado quando la misma unidad fue leida con un caracter distinto.
+    existing_plates = {_canon_plate(r.get("entry", {}).get("placas_unidad", "")) for r in all_records}
 
     created_count = 0
 
     # Recolectar todas las placas que aparecen en inspecciones o tickets pero no en registros
-    missing_plates_data = {} # norm_plates -> {plates, type, date, data}
+    missing_plates_data = {} # canon_plates -> {plates, type, date, data}
 
     for insp in all_insps:
         p = insp.get("placas_unidad", "").strip().upper()
-        norm = re.sub(r'[^A-Z0-9]', '', p)
+        norm = _canon_plate(p)
         if norm and norm not in existing_plates:
             if norm not in missing_plates_data:
                 missing_plates_data[norm] = {"p": p, "date": insp.get("created_at"), "company": insp.get("compania_transportista"), "box": insp.get("numero_trailer"), "sello": insp.get("numero_precinto"), "driver": insp.get("inspector_nombre")}
 
     for tick in all_tickets:
         p = tick.get("placas_unidad", "").strip().upper()
-        norm = re.sub(r'[^A-Z0-9]', '', p)
+        norm = _canon_plate(p)
         if norm and norm not in existing_plates:
             if norm not in missing_plates_data:
                 missing_plates_data[norm] = {"p": p, "date": tick.get("created_at"), "company": tick.get("linea_transporte"), "box": tick.get("numero_caja"), "sello": tick.get("numero_sello"), "driver": tick.get("operador")}
