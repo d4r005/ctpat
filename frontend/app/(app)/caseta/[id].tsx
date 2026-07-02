@@ -607,9 +607,9 @@ export default function CasetaDetail() {
                 </Pressable>
 
                 <Pressable
-                  style={[styles.saveBtn, (saving || (rec.status === 'salida' && !isAdmin)) && { opacity: 0.5 }]}
+                  style={[styles.saveBtn, saving && { opacity: 0.5 }]}
                   onPress={handleSaveExit}
-                  disabled={saving || (rec.status === 'salida' && !isAdmin)}
+                  disabled={saving}
                 >
                   {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveBtnText}>{t('guardar_salida').toUpperCase()}</Text>}
                 </Pressable>

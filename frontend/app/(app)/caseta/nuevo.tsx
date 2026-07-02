@@ -96,10 +96,6 @@ export default function CasetaNuevo() {
   const [guardiaOpcion, setGuardiaOpcion] = useState<'MARIO AGUILAR' | 'ADELAIDO SAENZ' | 'OTRO' | ''>('');
   const [condicionCarga, setCondicionCarga] = useState<'vacia' | 'consolidada' | 'otra' | 'descarga' | ''>('');
   const [descripcionCarga, setDescripcionCarga] = useState('');
-  const [numGuia, setNumGuia] = useState('');
-  const [numGuiaNA, setNumGuiaNA] = useState(false);
-  const [numReq, setNumReq] = useState('');
-  const [numReqNA, setNumReqNA] = useState(false);
   const [ordenCompra, setOrdenCompra] = useState(false);
   const [numOrdenCompra, setNumOrdenCompra] = useState('');
   const [destino, setDestino] = useState('');
@@ -235,8 +231,6 @@ export default function CasetaNuevo() {
         foto_id_chofer: fotoId,
         cortina_asignada: cortina.trim().toUpperCase(), guardia_caseta_nombre: guardiaCaseta.trim().toUpperCase(),
         condicion_carga: condicionCarga, descripcion_carga: descripcionCarga.trim().toUpperCase(),
-        numero_guia: numGuiaNA ? 'N/A' : numGuia.trim().toUpperCase(),
-        numero_requerimiento: numReqNA ? 'N/A' : numReq.trim().toUpperCase(),
         orden_compra: ordenCompra,
         numero_orden_compra: ordenCompra ? numOrdenCompra.trim().toUpperCase() : '',
         destino: destino.trim().toUpperCase(),
@@ -463,30 +457,6 @@ export default function CasetaNuevo() {
               </View>
 
               <Field label={t('descripcion_carga').toUpperCase()} value={descripcionCarga} onChange={setDescripcionCarga} testID="caseta-desc-carga" multiline />
-
-              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
-                <View style={{ flex: 1 }}>
-                  <Field label={t('guia_caps').toUpperCase()} value={numGuia} onChange={setNumGuia} testID="caseta-guia" disabled={numGuiaNA} />
-                </View>
-                <Pressable onPress={() => setNumGuiaNA(!numGuiaNA)} style={styles.naBox}>
-                  <View style={[styles.naCheck, numGuiaNA && styles.naCheckOn]}>
-                    {numGuiaNA && <Ionicons name="checkmark" size={14} color="#FFF" />}
-                  </View>
-                  <Text style={styles.naText}>N/A</Text>
-                </Pressable>
-              </View>
-
-              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
-                <View style={{ flex: 1 }}>
-                  <Field label={t('requerimiento_caps').toUpperCase()} value={numReq} onChange={setNumReq} testID="caseta-requerimiento" disabled={numReqNA} />
-                </View>
-                <Pressable onPress={() => setNumReqNA(!numReqNA)} style={styles.naBox}>
-                  <View style={[styles.naCheck, numReqNA && styles.naCheckOn]}>
-                    {numReqNA && <Ionicons name="checkmark" size={14} color="#FFF" />}
-                  </View>
-                  <Text style={styles.naText}>N/A</Text>
-                </Pressable>
-              </View>
 
               <ToggleRow label={t('orden_compra_pregunta')} value={ordenCompra} onChange={setOrdenCompra} testID="caseta-orden-compra" t={t} />
               {ordenCompra && (
