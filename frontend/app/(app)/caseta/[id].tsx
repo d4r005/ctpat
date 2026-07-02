@@ -37,6 +37,10 @@ export default function CasetaDetail() {
   // del GUARDIA en su lugar -- por eso 'no se podía cambiar' la del chofer.
   const [sigTarget, setSigTarget] = useState<'entry' | 'exit'>('entry');
   const sigRef = React.useRef<any>(null);
+  // Botones rapidos de nombre para el guardia que registra la SALIDA --
+  // mismo patron ya usado para el guardia de caseta (entrada) y el de
+  // embarque, para no tener que escribir el nombre a mano cada vez.
+  const [guardiaSalidaOpcion, setGuardiaSalidaOpcion] = useState<'MARIO AGUILAR' | 'ADELAIDO SAENZ' | 'OTRO' | ''>('');
 
   const isAdmin = user?.role === 'admin' || user?.role === 'supervisor' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
   // Borrar sólo la salida (deshacer) es una acción destructiva reservada a
@@ -459,12 +463,28 @@ export default function CasetaDetail() {
             {showExit && (
               <View style={styles.sectionBody}>
                 <Text style={styles.fieldLabel}>{t('nombre_guardia_caseta')} *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={exitData.guardia_salida_nombre}
-                  onChangeText={(v) => setExitData((prev: any) => ({ ...prev, guardia_salida_nombre: v.toUpperCase() }))}
-                  placeholder={t('nombre_guardia').toUpperCase()}
-                />
+                <View style={[styles.optionsRow, { marginBottom: spacing.sm }]}>
+                  {(['MARIO AGUILAR', 'ADELAIDO SAENZ', 'OTRO'] as const).map((o) => (
+                    <Pressable
+                      key={o}
+                      onPress={() => {
+                        setGuardiaSalidaOpcion(o);
+                        setExitData((prev: any) => ({ ...prev, guardia_salida_nombre: o !== 'OTRO' ? o : '' }));
+                      }}
+                      style={[styles.optionChip, guardiaSalidaOpcion === o && styles.optionChipActive]}
+                    >
+                      <Text style={[styles.optionText, guardiaSalidaOpcion === o && styles.optionTextActive]}>{o}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                {(guardiaSalidaOpcion === 'OTRO' || !guardiaSalidaOpcion) && (
+                  <TextInput
+                    style={styles.input}
+                    value={exitData.guardia_salida_nombre}
+                    onChangeText={(v) => setExitData((prev: any) => ({ ...prev, guardia_salida_nombre: v.toUpperCase() }))}
+                    placeholder={t('nombre_guardia').toUpperCase()}
+                  />
+                )}
 
                 <Text style={styles.fieldLabel}>{t('condicion_salida_label')} *</Text>
                 <View style={styles.optionsRow}>
