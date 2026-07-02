@@ -506,7 +506,7 @@ export default function CasetaDetail() {
 
                 <View style={styles.grid}>
                    <View style={{ flex: 1 }}>
-                      <Text style={styles.fieldLabel}>{t('sello_salida_label')} 1</Text>
+                      <Text style={styles.fieldLabel}>{t('sello_salida_label')}{isFull ? ' 1' : ''}</Text>
                       <TextInput
                         style={styles.input}
                         value={exitData.sello_salida}
@@ -575,7 +575,7 @@ export default function CasetaDetail() {
                 <Text style={styles.fieldLabel}>{t('inspeccion_sellos_vvtt')}</Text>
                 <View style={styles.grid}>
                    <View style={{ flex: 1 }}>
-                      <Text style={styles.fieldLabel}>Sello VVTT Estado 1</Text>
+                      <Text style={styles.fieldLabel}>Sello VVTT Estado{isFull ? ' 1' : ''}</Text>
                       <TextInput
                         style={styles.input}
                         value={exitData.sello_vvtt_estado}
@@ -598,8 +598,11 @@ export default function CasetaDetail() {
                    )}
                 </View>
                 <View style={styles.photoGrid}>
-                  <PhotoThumbnail label={t('foto_sello_vvtt')+" 1"} uri={exitData.sello_vvtt_foto} onPick={()=>pickPhoto('exit', 'sello_vvtt_foto')} onRemove={()=>removePhoto('exit', 'sello_vvtt_foto')} />
-                  {isFull && <PhotoThumbnail label={t('foto_sello_vvtt')+" 2"} uri={exitData.sello_vvtt_foto_2} onPick={()=>pickPhoto('exit', 'sello_vvtt_foto_2')} onRemove={()=>removePhoto('exit', 'sello_vvtt_foto_2')} />}
+                  {/* Una descarga siempre termina SIN el sello VVTT intacto (se rompe
+                      para poder abrir la caja) -- la evidencia esperada en ese caso es
+                      la foto del SELLO ROTO, no "sello VVTT" (que implicaría intacto). */}
+                  <PhotoThumbnail label={(entryForm?.condicion_carga === 'descarga' ? t('foto_sello_roto') : t('foto_sello_vvtt')) + (isFull ? " 1" : "")} uri={exitData.sello_vvtt_foto} onPick={()=>pickPhoto('exit', 'sello_vvtt_foto')} onRemove={()=>removePhoto('exit', 'sello_vvtt_foto')} />
+                  {isFull && <PhotoThumbnail label={(entryForm?.condicion_carga === 'descarga' ? t('foto_sello_roto') : t('foto_sello_vvtt')) + " 2"} uri={exitData.sello_vvtt_foto_2} onPick={()=>pickPhoto('exit', 'sello_vvtt_foto_2')} onRemove={()=>removePhoto('exit', 'sello_vvtt_foto_2')} />}
                 </View>
 
                 <Text style={styles.fieldLabel}>{t('firma_guardia')}</Text>

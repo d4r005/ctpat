@@ -1097,14 +1097,20 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
         cierre = tk.get("hora_cierre_cortina") or ex.get("hora_cierre_cortina") or "-"
         pallets = tk.get("numero_pallets") or ex.get("pallets") or "-"
         sello_vvtt = tk.get("numero_sello") or ex.get("sello_vvtt_estado") or "-"
+        # Una descarga siempre sale SIN el sello VVTT intacto (se rompe para
+        # poder abrir la caja) -- en ese caso el reporte debe hablar de "Sello
+        # Roto", no "Sello VVTT Estado" (que da a entender que sigue intacto).
+        es_descarga = (entry.get("condicion_carga") or "").strip().lower() == "descarga"
+        label_sello_estado = "Sello Roto" if es_descarga else "Sello VVTT Estado"
+        label_sello_foto = "Sello Roto Salida / 断封条出场" if es_descarga else "Sello VVTT Salida / VVTT 封条出场"
         caseta_rows += (
             tr("Cortina (apertura/cierre)", apertura + " / " + cierre)
             + tr("Pallets / Cajas / Bultos", pallets + " / " + (ex.get("cajas") or "-") + " / " + (ex.get("bultos") or "-"))
-            + tr("Sello VVTT Estado", sello_vvtt + (("  |  Sello VVTT 2: " + ex.get("sello_vvtt_estado_2")) if is_full and ex.get("sello_vvtt_estado_2") else ""))
+            + tr(label_sello_estado, sello_vvtt + (("  |  Sello VVTT 2: " + ex.get("sello_vvtt_estado_2")) if is_full and ex.get("sello_vvtt_estado_2") else ""))
             + tr("Guardia Salida / 门卫", ex.get("guardia_salida_nombre"))
         )
         fotos_salida = (
-            _photo_block(ex.get("sello_vvtt_foto"), "Sello VVTT Salida / VVTT 封条出场")
+            _photo_block(ex.get("sello_vvtt_foto"), label_sello_foto)
             + (_photo_block(ex.get("sello_vvtt_foto_2"), "Sello VVTT Salida 2") if is_full else "")
         )
 
