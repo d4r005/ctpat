@@ -10,6 +10,7 @@ import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { AuthProvider } from "@/src/context/AuthContext";
 import { InspectionProvider } from "@/src/context/InspectionContext";
 import { NotificationsProvider } from "@/src/context/NotificationsContext";
+import { WebAlertHost } from "@/src/components/WebAlertHost";
 import "@/src/i18n";
 
 LogBox.ignoreAllLogs(true);
@@ -35,6 +36,11 @@ export default function RootLayout() {
           <InspectionProvider>
             <NotificationsProvider>
               <StatusBar style="dark" />
+              {/* En web, Alert.alert/Alert.prompt de React Native no hacen
+                  nada (react-native-web las deja como no-op). Este host
+                  parchea ambas SOLO en web para que muestren un modal real,
+                  sin tener que tocar cada pantalla que ya las usa. */}
+              <WebAlertHost />
               <Stack screenOptions={{ headerShown: false }} />
             </NotificationsProvider>
           </InspectionProvider>
