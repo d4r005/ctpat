@@ -323,17 +323,35 @@ export default function CasetaNuevo() {
               <Field label={t('numero_caja_caps').toUpperCase()} value={numeroCaja} onChange={setNumeroCaja} testID="caseta-numero-caja" />
               <Field label={t('placas_caja_caps').toUpperCase()} value={placasCaja} onChange={(v: string) => setPlacasCaja(sanitizePlate(v))} testID="caseta-placas-caja" />
 
-              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
-                <View style={{ flex: 1 }}>
-                  <Field label={t('numero_precinto_caps').toUpperCase()} value={selloEntrada} onChange={setSelloEntrada} testID="caseta-sello-entrada" disabled={selloEntradaNA} />
-                </View>
-                <Pressable onPress={() => setSelloEntradaNA(!selloEntradaNA)} style={styles.naBox}>
+              <Text style={styles.fieldLabel}>{(t('tipo_sello_caps') || 'TIPO DE SELLO')}</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm }}>
+                <Pressable
+                  onPress={() => { setSelloEntradaNA(false); setTipoSelloEntrada(tipoSelloEntrada === 'precinto' ? null : 'precinto'); }}
+                  style={[styles.optionChip, tipoSelloEntrada === 'precinto' && styles.optionChipActive]}
+                >
+                  <Text style={[styles.optionText, tipoSelloEntrada === 'precinto' && styles.optionTextActive]}>{t('precinto').toUpperCase()}</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => { setSelloEntradaNA(false); setTipoSelloEntrada(tipoSelloEntrada === 'alta_seguridad' ? null : 'alta_seguridad'); }}
+                  style={[styles.optionChip, tipoSelloEntrada === 'alta_seguridad' && styles.optionChipActive]}
+                >
+                  <Text style={[styles.optionText, tipoSelloEntrada === 'alta_seguridad' && styles.optionTextActive]}>{t('sello_alta_seguridad').toUpperCase()}</Text>
+                </Pressable>
+                <Pressable onPress={() => { setSelloEntradaNA(!selloEntradaNA); setTipoSelloEntrada(null); setSelloEntrada(''); }} style={styles.naBox}>
                   <View style={[styles.naCheck, selloEntradaNA && styles.naCheckOn]}>
                     {selloEntradaNA && <Ionicons name="checkmark" size={14} color="#FFF" />}
                   </View>
                   <Text style={styles.naText}>N/A</Text>
                 </Pressable>
               </View>
+              {!selloEntradaNA && tipoSelloEntrada && (
+                <Field
+                  label={(tipoSelloEntrada === 'precinto' ? t('numero_precinto_caps') : t('sello_alta_seguridad')).toUpperCase()}
+                  value={selloEntrada}
+                  onChange={setSelloEntrada}
+                  testID="caseta-sello-entrada"
+                />
+              )}
 
               {tipoUnidad === 'full' && (
                 <>
