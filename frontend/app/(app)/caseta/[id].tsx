@@ -79,8 +79,18 @@ export default function CasetaDetail() {
         setRec(data);
         setEntryForm(JSON.parse(JSON.stringify(data.entry)));
         if (data.exit) {
-          setExitData({ ...exitData, ...data.exit });
+          // En una descarga el sello VVTT se rompe por definición para poder
+          // abrir la caja y descargar la mercancía -- se autocompleta "SELLO
+          // ROTO" para no obligar al guardia a escribirlo a mano cada vez.
+          // Sólo se autocompleta si el campo aún está vacío (no pisa un valor
+          // ya capturado manualmente).
+          const autoSello = data.entry?.condicion_carga === 'descarga' && !data.exit?.sello_vvtt_estado
+            ? { sello_vvtt_estado: 'SELLO ROTO' }
+            : {};
+          setExitData({ ...exitData, ...data.exit, ...autoSello });
           setShowExit(true);
+        } else if (data.entry?.condicion_carga === 'descarga') {
+          setExitData({ ...exitData, sello_vvtt_estado: 'SELLO ROTO' });
         }
       }
     } catch (e: any) {
