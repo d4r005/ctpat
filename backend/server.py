@@ -269,6 +269,26 @@ def ensure_clean_image(b64: str) -> str:
         return f"data:image/jpeg;base64,{base64.b64encode(out.getvalue()).decode()}"
     except: return b64
 
+def is_signature_broken(b64: str) -> bool:
+    """Detecta una firma capturada como un cuadro de color solido (ej. negro),
+    causado historicamente por una condicion de carrera al exportar el canvas
+    en Android (lee la textura GPU antes de que el cambio de capa hardware ->
+    software surta efecto). Una firma real siempre tiene variacion de pixeles
+    (el trazo negro sobre fondo blanco); un bloque solido no. Se usa para NO
+    aceptar/guardar una firma rota encima de una buena ya existente."""
+    if not b64 or not b64.startswith("data:image"):
+        return False
+    try:
+        header, data = b64.split(",", 1)
+        img = Image.open(io.BytesIO(base64.b64decode(data))).convert("L")
+        img.thumbnail((100, 100))
+        extrema = img.getextrema()
+        # getextrema() en escala de grises da (min, max) del bloque; si min==max
+        # (o casi) es un color plano solido -- no hay ningun trazo dibujado.
+        return (extrema[1] - extrema[0]) < 8
+    except Exception:
+        return False
+
 def add_watermark(b64: str) -> str:
     if not b64 or not b64.startswith("data:image"): return b64
     try:
@@ -729,19 +749,33 @@ async def update_record(rec_id: str, body: Dict[str, Any], background_tasks: Bac
     if not existing:
         raise HTTPException(404, "Registro no encontrado")
 
-    # Limpiar fotos base64 nuevas antes de fusionar
+    # Limpiar fotos base64 nuevas antes de fusionar. Si una firma llega rota
+    # (cuadro solido, ver is_signature_broken) y ya existia una buena, se
+    # descarta la nueva y se conserva la anterior en vez de pisarla.
     if "entry" in body and body["entry"]:
+        existing_entry = existing.get("entry", {}) or {}
         for f in ["foto_frente_unidad", "foto_atras_caja", "foto_atras_caja_2", "foto_id_chofer", "firma_operador"]:
-            if body["entry"].get(f) and str(body["entry"][f]).startswith("data:image"):
-                body["entry"][f] = ensure_clean_image(body["entry"][f])
-        merged_entry = {**existing.get("entry", {}), **body["entry"]}
+            v = body["entry"].get(f)
+            if v and str(v).startswith("data:image"):
+                if f == "firma_operador" and is_signature_broken(v) and existing_entry.get(f):
+                    logger.warning(f"Firma rota detectada en entry {rec_id}: se conserva la version anterior")
+                    body["entry"][f] = existing_entry[f]
+                else:
+                    body["entry"][f] = ensure_clean_image(v)
+        merged_entry = {**existing_entry, **body["entry"]}
         body["entry"] = merged_entry
 
     if "exit" in body and body["exit"]:
+        existing_exit = existing.get("exit") or {}
         for f in ["sello_vvtt_foto", "sello_vvtt_foto_2", "firma_guardia"]:
-            if body["exit"].get(f) and str(body["exit"][f]).startswith("data:image"):
-                body["exit"][f] = ensure_clean_image(body["exit"][f])
-        merged_exit = {**(existing.get("exit") or {}), **body["exit"]}
+            v = body["exit"].get(f)
+            if v and str(v).startswith("data:image"):
+                if f == "firma_guardia" and is_signature_broken(v) and existing_exit.get(f):
+                    logger.warning(f"Firma rota detectada en exit {rec_id}: se conserva la version anterior")
+                    body["exit"][f] = existing_exit[f]
+                else:
+                    body["exit"][f] = ensure_clean_image(v)
+        merged_exit = {**existing_exit, **body["exit"]}
         body["exit"] = merged_exit
 
     await db.vehicle_records.update_one({"id": rec_id}, {"$set": body})
@@ -1408,6 +1442,11 @@ async def exit_record(rec_id: str, body: VehicleExit, background_tasks: Backgrou
     for f in ["firma_guardia", "sello_vvtt_foto", "sello_vvtt_foto_2"]:
         if not x.get(f) and existing_exit.get(f):
             x[f] = existing_exit[f]
+        elif x.get(f) and is_signature_broken(x[f]) and existing_exit.get(f):
+            # Captura rota (cuadro solido, ver is_signature_broken) -- no pisar
+            # una firma buena ya guardada con basura.
+            logger.warning(f"Firma/foto rota detectada en salida {rec_id}, campo {f}: se conserva la version anterior")
+            x[f] = existing_exit[f]
         elif x.get(f):
             x[f] = ensure_clean_image(x[f])
     await db.vehicle_records.update_one({"id": rec_id}, {"$set": {"exit": x, "status": "salida"}})
@@ -1527,13 +1566,17 @@ async def get_insp(insp_id: str, u: Dict[str, Any] = Depends(get_current_user)):
 async def update_inspection(insp_id: str, body: Dict[str, Any], u: Dict[str, Any] = Depends(get_current_user)):
     for k in ["_id", "id", "user_id", "created_at"]:
         if k in body: del body[k]
-    # Limpiar fotos
-    if body.get("inspector_firma") and body["inspector_firma"].startswith("data:image"):
-        body["inspector_firma"] = ensure_clean_image(body["inspector_firma"])
-    if body.get("guard_signature") and body["guard_signature"].startswith("data:image"):
-        body["guard_signature"] = ensure_clean_image(body["guard_signature"])
-    if body.get("approved_by_signature") and body["approved_by_signature"].startswith("data:image"):
-        body["approved_by_signature"] = ensure_clean_image(body["approved_by_signature"])
+    existing = await db.inspections.find_one({"id": insp_id}, {"_id": 0}) or {}
+    # Limpiar fotos. Si una firma llega rota (cuadro solido, ver
+    # is_signature_broken) y ya existia una buena, se descarta la nueva.
+    for f in ["inspector_firma", "guard_signature", "approved_by_signature"]:
+        v = body.get(f)
+        if v and str(v).startswith("data:image"):
+            if is_signature_broken(v) and existing.get(f):
+                logger.warning(f"Firma rota detectada en inspection {insp_id} campo {f}: se conserva la version anterior")
+                body[f] = existing[f]
+            else:
+                body[f] = ensure_clean_image(v)
     if "points" in body:
         for p in body["points"]:
             if p.get("photo") and p["photo"].startswith("data:image"):
@@ -1694,8 +1737,15 @@ async def get_ticket(id: str, u: Dict[str, Any] = Depends(get_current_user)):
 async def update_ticket(id: str, body: Dict[str, Any], background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
     for k in ["_id", "id", "user_id", "created_at"]:
         if k in body: del body[k]
+    existing = await db.shipping_tickets.find_one({"id": id}, {"_id": 0}) or {}
     for f in ["firma_almacenista", "firma_guardia", "foto_inicio_carga", "foto_media_carga", "foto_final_carga"]:
-        if body.get(f) and body[f].startswith("data:image"): body[f] = ensure_clean_image(body[f])
+        v = body.get(f)
+        if v and str(v).startswith("data:image"):
+            if f in ("firma_almacenista", "firma_guardia") and is_signature_broken(v) and existing.get(f):
+                logger.warning(f"Firma rota detectada en ticket {id} campo {f}: se conserva la version anterior")
+                body[f] = existing[f]
+            else:
+                body[f] = ensure_clean_image(v)
     await db.shipping_tickets.update_one({"id": id}, {"$set": body})
     background_tasks.add_task(sync_orden_compra, None, id)
     return {"ok": True}

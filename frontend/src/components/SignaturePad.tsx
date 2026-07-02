@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import { View, Platform, StyleSheet } from 'react-native';
 import SignatureScreen from 'react-native-signature-canvas';
 import i18n from '@/src/i18n';
@@ -23,15 +23,6 @@ interface SignaturePadProps {
 export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
   const signatureRef = useRef<any>(null);
   const webCanvasRef = useRef<any>(null);
-  // "hardware" (por defecto de la librería) da la mejor detección de dedo/pluma
-  // mientras se dibuja — es lo que usa el WebView para pintar cada trazo en
-  // tiempo real. El problema es que al exportar (toDataURL) desde una capa
-  // de hardware, Android a veces lee la textura de la GPU vacía y el PNG sale
-  // en negro. La capa "software" exporta bien pero se siente más lenta/pierde
-  // trazos mientras se dibuja. Por eso NO la dejamos fija: sólo se activa el
-  // instante justo de la captura y se revierte a "hardware" enseguida para
-  // que el siguiente trazo se sienta normal otra vez.
-  const [captureLayer, setCaptureLayer] = useState(false);
 
   useImperativeHandle(ref, () => ({
     readSignature: () => {
@@ -44,19 +35,7 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
         props.onOK(sig);
         return;
       }
-      if (Platform.OS === 'android') {
-        // Cambiamos momentáneamente a capa de software sólo para la captura,
-        // dejamos un frame para que el WebView aplique el cambio de capa
-        // nativo, y ahí sí pedimos la firma ya renderizada sobre fondo blanco.
-        setCaptureLayer(true);
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            signatureRef.current?.readSignature();
-          }, 80);
-        });
-      } else {
-        signatureRef.current?.readSignature();
-      }
+      signatureRef.current?.readSignature();
     },
     clear: () => {
       if (Platform.OS === 'web' && webCanvasRef.current) {
@@ -66,18 +45,6 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
       }
     }
   }));
-
-  const handleOK = (sig: string) => {
-    // Volvemos a capa de hardware para que el próximo trazo (si el usuario
-    // vuelve a firmar/corrige) se sienta fluido y con buena detección táctil.
-    if (Platform.OS === 'android') setCaptureLayer(false);
-    props.onOK(sig);
-  };
-
-  const handleEmpty = () => {
-    if (Platform.OS === 'android') setCaptureLayer(false);
-    props.onEmpty?.();
-  };
 
   if (Platform.OS === 'web') {
     return (
@@ -112,20 +79,30 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
     <View style={{ flex: 1, minHeight: 280 }}>
       <SignatureScreen
         ref={signatureRef}
-        onOK={handleOK}
-        onEmpty={handleEmpty}
+        onOK={props.onOK}
+        onEmpty={props.onEmpty}
         descriptionText={props.descriptionText || i18n.t('firme_dentro_desc')}
         webStyle={props.webStyle || defaultWebStyle}
         autoClear={props.autoClear ?? false}
         imageType={props.imageType || 'image/png'}
         // Fondo blanco explícito en el propio canvas (no solo CSS): sin esto,
-        // el buffer del canvas queda transparente y al exportar (sobre todo en
-        // JPEG, y en algunos Android también en PNG) el área vacía se rellena
-        // de NEGRO en vez de blanco — eso es lo que se veía como "firma en negro".
+        // el buffer del canvas queda transparente y al exportar el área vacía
+        // se rellena de NEGRO en vez de blanco.
         backgroundColor="#FFFFFF"
-        // Sólo Android alterna hardware/software (ver comentario arriba). iOS
-        // no tiene este bug de captura y se queda siempre en el default.
-        androidLayerType={Platform.OS === 'android' ? (captureLayer ? 'software' : 'hardware') : undefined}
+        // FIX DEFINITIVO firma en negro (Android): antes esto alternaba
+        // dinámicamente entre 'hardware' (mientras se dibuja, mejor
+        // sensación táctil) y 'software' (sólo el instante de capturar,
+        // vía un truco de requestAnimationFrame + setTimeout(80ms) para dar
+        // tiempo a que el WebView aplicara el cambio de capa nativo antes de
+        // pedir la firma). Ese timing NO es garantizado por el sistema —
+        // en dispositivos más lentos o bajo carga, la captura llegaba a
+        // ocurrir ANTES de que el cambio de capa surtiera efecto, y
+        // entonces sí se leía la textura de GPU vacía -> PNG negro sólido.
+        // Eliminamos la condición de carrera de raíz: 'software' siempre,
+        // en todo momento. Es marginalmente menos fluido mientras se dibuja
+        // pero garantiza que la exportación SIEMPRE sea correcta, lo cual
+        // es lo que importa en una firma de cumplimiento/seguridad.
+        androidLayerType={Platform.OS === 'android' ? 'software' : undefined}
       />
     </View>
   );
