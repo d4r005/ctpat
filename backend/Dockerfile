@@ -26,5 +26,14 @@ COPY . .
 # Puerto estándar de Hugging Face
 EXPOSE 7860
 
-# Ejecutar con workers optimizados para evitar bloqueos
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "2", "--timeout-keep-alive", "60"]
+# IMPORTANTE: un solo worker.
+# Con --workers 2 cada worker es un PROCESO separado con su propia memoria
+# (os.environ). El refresco de GMAIL_ACCESS_TOKEN/GOOGLEDRIVE_ACCESS_TOKEN
+# (vía /api/admin/refresh-*-token, llamado por la automatización cada ~45 min)
+# sólo actualiza el proceso que atendió esa petición HTTP -- el otro worker
+# se queda con el token viejo/expirado en memoria, y HF reparte las peticiones
+# al azar entre ambos, así que ~50% de los envíos de correo fallaban con
+# "401 invalid authentication credentials" de forma intermitente, dando la
+# falsa impresión de que Gmail fallaba al azar. Un solo worker (async, ya usa
+# BackgroundTasks/asyncio.to_thread para no bloquear) elimina el problema de raíz.
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "7860", "--workers", "1", "--timeout-keep-alive", "60"]
