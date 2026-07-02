@@ -87,10 +87,10 @@ export default function CasetaDetail() {
           const autoSello = data.entry?.condicion_carga === 'descarga' && !data.exit?.sello_vvtt_estado
             ? { sello_vvtt_estado: 'SELLO ROTO' }
             : {};
-          setExitData({ ...exitData, ...data.exit, ...autoSello });
+          setExitData((prev: any) => ({ ...prev, ...data.exit, ...autoSello }));
           setShowExit(true);
         } else if (data.entry?.condicion_carga === 'descarga') {
-          setExitData({ ...exitData, sello_vvtt_estado: 'SELLO ROTO' });
+          setExitData((prev: any) => ({ ...prev, sello_vvtt_estado: 'SELLO ROTO' }));
         }
       }
     } catch (e: any) {
@@ -195,8 +195,8 @@ export default function CasetaDetail() {
             });
             if (!result.canceled && result.assets[0].base64) {
               const b64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
-              if (section === 'entry') setEntryForm({ ...entryForm, [field]: b64 });
-              else setExitData({ ...exitData, [field]: b64 });
+              if (section === 'entry') setEntryForm((prev: any) => ({ ...prev, [field]: b64 }));
+              else setExitData((prev: any) => ({ ...prev, [field]: b64 }));
             }
           }
         },
@@ -210,8 +210,8 @@ export default function CasetaDetail() {
             });
             if (!result.canceled && result.assets[0].base64) {
               const b64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
-              if (section === 'entry') setEntryForm({ ...entryForm, [field]: b64 });
-              else setExitData({ ...exitData, [field]: b64 });
+              if (section === 'entry') setEntryForm((prev: any) => ({ ...prev, [field]: b64 }));
+              else setExitData((prev: any) => ({ ...prev, [field]: b64 }));
             }
           }
         },
@@ -227,8 +227,8 @@ export default function CasetaDetail() {
                   text: t('agregar'),
                   onPress: (url) => {
                     if (url) {
-                      if (section === 'entry') setEntryForm({ ...entryForm, [field]: url });
-                      else setExitData({ ...exitData, [field]: url });
+                      if (section === 'entry') setEntryForm((prev: any) => ({ ...prev, [field]: url }));
+                      else setExitData((prev: any) => ({ ...prev, [field]: url }));
                     }
                   }
                 }
@@ -243,9 +243,9 @@ export default function CasetaDetail() {
 
   const removePhoto = (section: 'entry' | 'exit', field: string) => {
     if (section === 'entry') {
-      setEntryForm({ ...entryForm, [field]: '' });
+      setEntryForm((prev: any) => ({ ...prev, [field]: '' }));
     } else {
-      setExitData({ ...exitData, [field]: '' });
+      setExitData((prev: any) => ({ ...prev, [field]: '' }));
     }
   };
 
@@ -302,18 +302,18 @@ export default function CasetaDetail() {
             </View>
             <View style={styles.sectionBody}>
               <View style={styles.grid}>
-                <EditableItem label={t('placas')} value={entryForm.placas_unidad} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, placas_unidad: sanitizePlate(v)}) : null} />
-                <EditableItem label={t('chofer')} value={entryForm.chofer_nombre} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, chofer_nombre: v}) : null} />
-                <EditableItem label={t('compania')} value={entryForm.compania_transporte} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, compania_transporte: v}) : null} />
-                <EditableItem label={t('tractor')} value={entryForm.numero_tractor} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_tractor: v}) : null} />
+                <EditableItem label={t('placas')} value={entryForm.placas_unidad} onEdit={editEntry ? (v:any)=>setEntryForm((prev: any) => ({ ...prev, placas_unidad: sanitizePlate(v) })) : null} />
+                <EditableItem label={t('chofer')} value={entryForm.chofer_nombre} onEdit={editEntry ? (v:any)=>setEntryForm((prev: any) => ({ ...prev, chofer_nombre: v })) : null} />
+                <EditableItem label={t('compania')} value={entryForm.compania_transporte} onEdit={editEntry ? (v:any)=>setEntryForm((prev: any) => ({ ...prev, compania_transporte: v })) : null} />
+                <EditableItem label={t('tractor')} value={entryForm.numero_tractor} onEdit={editEntry ? (v:any)=>setEntryForm((prev: any) => ({ ...prev, numero_tractor: v })) : null} />
               </View>
 
               <View style={styles.subSection}>
                 <Text style={styles.subTitle}>{t('caja').toUpperCase()}</Text>
                 <View style={styles.grid}>
-                  <EditableItem label={t('numero_caja_caps')} value={entryForm.numero_caja} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_caja: v}) : null} />
-                  <EditableItem label={t('placas_caja_caps')} value={entryForm.placas_caja} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, placas_caja: sanitizePlate(v)}) : null} />
-                  <EditableItem label={t('sello').toUpperCase()} value={entryForm.sello_entrada} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, sello_entrada: v}) : null} />
+                  <EditableItem label={t('numero_caja_caps')} value={entryForm.numero_caja} onEdit={editEntry ? (v:any)=>setEntryForm((prev: any) => ({ ...prev, numero_caja: v })) : null} />
+                  <EditableItem label={t('placas_caja_caps')} value={entryForm.placas_caja} onEdit={editEntry ? (v:any)=>setEntryForm((prev: any) => ({ ...prev, placas_caja: sanitizePlate(v) })) : null} />
+                  <EditableItem label={t('sello').toUpperCase()} value={entryForm.sello_entrada} onEdit={editEntry ? (v:any)=>setEntryForm((prev: any) => ({ ...prev, sello_entrada: v })) : null} />
                 </View>
               </View>
 
@@ -321,8 +321,8 @@ export default function CasetaDetail() {
                 <View style={styles.subSection}>
                   <Text style={styles.subTitle}>{t('caja').toUpperCase()}</Text>
                   <View style={styles.grid}>
-                    <EditableItem label={t('numero_caja_caps')} value={entryForm.numero_caja_2} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_caja_2: v}) : null} />
-                    <EditableItem label={t('sello').toUpperCase()} value={entryForm.sello_entrada_2} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, sello_entrada_2: v}) : null} />
+                    <EditableItem label={t('numero_caja_caps')} value={entryForm.numero_caja_2} onEdit={editEntry ? (v:any)=>setEntryForm((prev: any) => ({ ...prev, numero_caja_2: v })) : null} />
+                    <EditableItem label={t('sello').toUpperCase()} value={entryForm.sello_entrada_2} onEdit={editEntry ? (v:any)=>setEntryForm((prev: any) => ({ ...prev, sello_entrada_2: v })) : null} />
                   </View>
                 </View>
               )}
@@ -331,10 +331,10 @@ export default function CasetaDetail() {
               <View style={styles.subSection}>
                 <Text style={styles.subTitle}>{t('datos_adicionales').toUpperCase()}</Text>
                 <View style={styles.grid}>
-                  <EditableItem label={t('destino_caps')} value={entryForm.destino} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, destino: v}) : null} />
-                  <EditableItem label={t('condicion_carga').toUpperCase()} value={entryForm.condicion_carga} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, condicion_carga: v}) : null} />
-                  <EditableItem label={t('orden_compra').toUpperCase()} value={entryForm.numero_orden_compra} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_orden_compra: v}) : null} />
-                  <EditableItem label={t('licencia_conductor').toUpperCase()} value={entryForm.licencia_conductor} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, licencia_conductor: v}) : null} />
+                  <EditableItem label={t('destino_caps')} value={entryForm.destino} onEdit={editEntry ? (v:any)=>setEntryForm((prev: any) => ({ ...prev, destino: v })) : null} />
+                  <EditableItem label={t('condicion_carga').toUpperCase()} value={entryForm.condicion_carga} onEdit={editEntry ? (v:any)=>setEntryForm((prev: any) => ({ ...prev, condicion_carga: v })) : null} />
+                  <EditableItem label={t('orden_compra').toUpperCase()} value={entryForm.numero_orden_compra} onEdit={editEntry ? (v:any)=>setEntryForm((prev: any) => ({ ...prev, numero_orden_compra: v })) : null} />
+                  <EditableItem label={t('licencia_conductor').toUpperCase()} value={entryForm.licencia_conductor} onEdit={editEntry ? (v:any)=>setEntryForm((prev: any) => ({ ...prev, licencia_conductor: v })) : null} />
                 </View>
                 <View style={{ marginTop: spacing.sm }}>
                   <Text style={styles.infoLabel}>{t('descripcion_carga').toUpperCase()}</Text>
@@ -342,7 +342,7 @@ export default function CasetaDetail() {
                     <TextInput
                       style={[styles.input, { minHeight: 60, textAlignVertical: 'top' }]}
                       value={entryForm.descripcion_carga || ''}
-                      onChangeText={(v) => setEntryForm({ ...entryForm, descripcion_carga: v.toUpperCase() })}
+                      onChangeText={(v) => setEntryForm((prev: any) => ({ ...prev, descripcion_carga: v.toUpperCase() }))}
                       multiline
                     />
                   ) : (
@@ -371,7 +371,7 @@ export default function CasetaDetail() {
                           <>
                             <Image source={{ uri: entryForm.firma_operador }} style={{ width: '100%', height: 60, resizeMode: 'contain' }} />
                             {editEntry && (
-                              <Pressable style={styles.removeBtnSig} onPress={() => setEntryForm({...entryForm, firma_operador: ''})}>
+                              <Pressable style={styles.removeBtnSig} onPress={() => setEntryForm((prev: any) => ({ ...prev, firma_operador: '' }))}>
                                 <Ionicons name="trash" size={16} color={colors.error} />
                               </Pressable>
                             )}
@@ -462,7 +462,7 @@ export default function CasetaDetail() {
                 <TextInput
                   style={styles.input}
                   value={exitData.guardia_salida_nombre}
-                  onChangeText={(v) => setExitData({ ...exitData, guardia_salida_nombre: v.toUpperCase() })}
+                  onChangeText={(v) => setExitData((prev: any) => ({ ...prev, guardia_salida_nombre: v.toUpperCase() }))}
                   placeholder={t('nombre_guardia').toUpperCase()}
                 />
 
@@ -472,7 +472,7 @@ export default function CasetaDetail() {
                     <Pressable
                       key={opt}
                       style={[styles.optionChip, exitData.condicion_salida === opt && styles.optionChipActive]}
-                      onPress={() => setExitData({ ...exitData, condicion_salida: opt })}
+                      onPress={() => setExitData((prev: any) => ({ ...prev, condicion_salida: opt }))}
                     >
                       <Text style={[styles.optionText, exitData.condicion_salida === opt && styles.optionTextActive]}>{opt}</Text>
                     </Pressable>
@@ -488,7 +488,7 @@ export default function CasetaDetail() {
                         autoCorrect={false}
                         spellCheck={false}
                         placeholder={entryForm.placas_unidad}
-                        onChangeText={(v) => setExitData({ ...exitData, placas_unidad_salida: sanitizePlate(v) })}
+                        onChangeText={(v) => setExitData((prev: any) => ({ ...prev, placas_unidad_salida: sanitizePlate(v) }))}
                       />
                    </View>
                    <View style={{ flex: 1 }}>
@@ -499,7 +499,7 @@ export default function CasetaDetail() {
                         autoCorrect={false}
                         spellCheck={false}
                         placeholder={entryForm.placas_caja}
-                        onChangeText={(v) => setExitData({ ...exitData, placas_caja_salida: sanitizePlate(v) })}
+                        onChangeText={(v) => setExitData((prev: any) => ({ ...prev, placas_caja_salida: sanitizePlate(v) }))}
                       />
                    </View>
                 </View>
@@ -512,7 +512,7 @@ export default function CasetaDetail() {
                         value={exitData.sello_salida}
                         autoCorrect={false}
                         spellCheck={false}
-                        onChangeText={(v) => setExitData({ ...exitData, sello_salida: v.toUpperCase() })}
+                        onChangeText={(v) => setExitData((prev: any) => ({ ...prev, sello_salida: v.toUpperCase() }))}
                       />
                    </View>
                    {isFull && (
@@ -523,7 +523,7 @@ export default function CasetaDetail() {
                           value={exitData.sello_salida_2}
                           autoCorrect={false}
                           spellCheck={false}
-                          onChangeText={(v) => setExitData({ ...exitData, sello_salida_2: v.toUpperCase() })}
+                          onChangeText={(v) => setExitData((prev: any) => ({ ...prev, sello_salida_2: v.toUpperCase() }))}
                         />
                      </View>
                    )}
@@ -537,7 +537,7 @@ export default function CasetaDetail() {
                       value={exitData.numero_caja_salida_2}
                       autoCorrect={false}
                       spellCheck={false}
-                      onChangeText={(v) => setExitData({ ...exitData, numero_caja_salida_2: v.toUpperCase() })}
+                      onChangeText={(v) => setExitData((prev: any) => ({ ...prev, numero_caja_salida_2: v.toUpperCase() }))}
                     />
                   </>
                 )}
@@ -549,7 +549,7 @@ export default function CasetaDetail() {
                         style={styles.input}
                         value={exitData.pallets}
                         keyboardType="numeric"
-                        onChangeText={(v) => setExitData({ ...exitData, pallets: v })}
+                        onChangeText={(v) => setExitData((prev: any) => ({ ...prev, pallets: v }))}
                       />
                    </View>
                    <View style={{ flex: 1 }}>
@@ -558,7 +558,7 @@ export default function CasetaDetail() {
                         style={styles.input}
                         value={exitData.cajas}
                         keyboardType="numeric"
-                        onChangeText={(v) => setExitData({ ...exitData, cajas: v })}
+                        onChangeText={(v) => setExitData((prev: any) => ({ ...prev, cajas: v }))}
                       />
                    </View>
                    <View style={{ flex: 1 }}>
@@ -567,7 +567,7 @@ export default function CasetaDetail() {
                         style={styles.input}
                         value={exitData.bultos}
                         keyboardType="numeric"
-                        onChangeText={(v) => setExitData({ ...exitData, bultos: v })}
+                        onChangeText={(v) => setExitData((prev: any) => ({ ...prev, bultos: v }))}
                       />
                    </View>
                 </View>
@@ -581,7 +581,7 @@ export default function CasetaDetail() {
                         value={exitData.sello_vvtt_estado}
                         autoCorrect={false}
                         spellCheck={false}
-                        onChangeText={(v) => setExitData({ ...exitData, sello_vvtt_estado: v.toUpperCase() })}
+                        onChangeText={(v) => setExitData((prev: any) => ({ ...prev, sello_vvtt_estado: v.toUpperCase() }))}
                       />
                    </View>
                    {isFull && (
@@ -592,7 +592,7 @@ export default function CasetaDetail() {
                           value={exitData.sello_vvtt_estado_2}
                           autoCorrect={false}
                           spellCheck={false}
-                          onChangeText={(v) => setExitData({ ...exitData, sello_vvtt_estado_2: v.toUpperCase() })}
+                          onChangeText={(v) => setExitData((prev: any) => ({ ...prev, sello_vvtt_estado_2: v.toUpperCase() }))}
                         />
                      </View>
                    )}
@@ -610,7 +610,7 @@ export default function CasetaDetail() {
                   {exitData.firma_guardia ? (
                     <>
                       <Image source={{ uri: exitData.firma_guardia }} style={{ width: '100%', height: 100, resizeMode: 'contain' }} />
-                      <Pressable style={styles.removeBtnSig} onPress={() => setExitData({...exitData, firma_guardia: ''})}>
+                      <Pressable style={styles.removeBtnSig} onPress={() => setExitData((prev: any) => ({ ...prev, firma_guardia: '' }))}>
                         <Ionicons name="trash" size={24} color={colors.error} />
                       </Pressable>
                     </>
@@ -640,8 +640,8 @@ export default function CasetaDetail() {
               <Signature
                 ref={sigRef}
                 onOK={(sig) => {
-                  if (sigTarget === 'exit') setExitData({ ...exitData, firma_guardia: sig });
-                  else setEntryForm({ ...entryForm, firma_operador: sig });
+                  if (sigTarget === 'exit') setExitData((prev: any) => ({ ...prev, firma_guardia: sig }));
+                  else setEntryForm((prev: any) => ({ ...prev, firma_operador: sig }));
                   setShowSig(false);
                 }}
                 onEmpty={() => alert(t('firma_vacia'))}

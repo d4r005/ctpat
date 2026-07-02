@@ -1393,15 +1393,23 @@ async def exit_record(rec_id: str, body: VehicleExit, background_tasks: Backgrou
     # pallets) sobreescribía fecha_salida con el momento de la edición,
     # haciendo que el reporte mostrara una hora de salida incorrecta.
     existing = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0, "exit": 1})
-    existing_fecha = (existing or {}).get("exit", {}).get("fecha_salida") if existing else None
+    existing_exit = (existing or {}).get("exit", {}) or {}
+    existing_fecha = existing_exit.get("fecha_salida")
     x["fecha_salida"] = existing_fecha or datetime.now(timezone.utc).isoformat()
-    # Antes sólo 'firma_guardia' se limpiaba/comprimía aquí -- las fotos del
-    # sello VVTT (sello_vvtt_foto/_2) se guardaban tal cual llegaban de la
-    # cámara, sin pasar por ensure_clean_image (a diferencia de TODAS las
-    # demás fotos del sistema). Eso las dejaba pesadas y con el mismo riesgo
-    # de fondo/formato inconsistente que ya se corrigió en otros lados.
+    # PROTECCIÓN CRÍTICA: este endpoint recibe SIEMPRE el modelo completo
+    # (VehicleExit tiene default "" en todos los campos), así que si el
+    # frontend guarda con un estado incompleto -- por ejemplo por un bug de
+    # estado en React, o simplemente porque el usuario abrió el formulario
+    # antes de que terminaran de cargar los datos existentes -- un $set
+    # directo del dict completo BORRA evidencia ya guardada (fotos de sello,
+    # firma del guardia) que no venía en este envío puntual. Igual que ya se
+    # corrigió para "entry"/"exit" en el PUT genérico, aquí se conserva el
+    # valor existente para foto/firma cuando el nuevo valor llega vacío.
     for f in ["firma_guardia", "sello_vvtt_foto", "sello_vvtt_foto_2"]:
-        if x.get(f): x[f] = ensure_clean_image(x[f])
+        if not x.get(f) and existing_exit.get(f):
+            x[f] = existing_exit[f]
+        elif x.get(f):
+            x[f] = ensure_clean_image(x[f])
     await db.vehicle_records.update_one({"id": rec_id}, {"$set": {"exit": x, "status": "salida"}})
     up = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
     # Sincronizar salida automáticamente al sheet
