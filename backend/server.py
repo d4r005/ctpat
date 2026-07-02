@@ -117,6 +117,8 @@ class VehicleExit(BaseModel):
     numero_tractor_salida: str = ""
     numero_caja_salida: str = ""
     numero_caja_salida_2: str = ""
+    placas_unidad_salida: str = ""
+    placas_caja_salida: str = ""
     escolta: EscoltaInfo = EscoltaInfo()
     pallets: str = ""
     cajas: str = ""
@@ -227,6 +229,7 @@ class ShippingTicketCreate(BaseModel):
     daño_caja: str = ""
     area: str = ""
     sellos: str = ""
+    numero_orden_compra: str = ""
     foto_inicio_carga: str = ""
     foto_media_carga: str = ""
     foto_final_carga: str = ""
@@ -351,6 +354,43 @@ async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
         }})
     except: pass
     return record
+
+async def sync_orden_compra(record_id: Optional[str] = None, ticket_id: Optional[str] = None):
+    """
+    Mantiene 'numero de orden de compra' sincronizado entre el registro de
+    caseta (entry.numero_orden_compra) y su ticket de embarque vinculado
+    (numero_orden_compra): si un lado lo tiene y el otro no, se autorrellena
+    el que falta. Si ambos ya tienen un valor (aunque sean distintos) no se
+    toca nada -- se respeta lo capturado manualmente en cada lado.
+    """
+    try:
+        rec = None
+        if record_id:
+            rec = await db.vehicle_records.find_one({"id": record_id}, {"_id": 0})
+        elif ticket_id:
+            ticket_probe = await db.shipping_tickets.find_one({"id": ticket_id}, {"_id": 0})
+            if ticket_probe and ticket_probe.get("record_id"):
+                rec = await db.vehicle_records.find_one({"id": ticket_probe["record_id"]}, {"_id": 0})
+            if not rec:
+                # Fallback: buscar por el lado del registro, que es el que de
+                # forma más confiable queda enlazado (shipping_ticket_id).
+                rec = await db.vehicle_records.find_one({"shipping_ticket_id": ticket_id}, {"_id": 0})
+        if not rec: return
+
+        tid = ticket_id or rec.get("shipping_ticket_id")
+        if not tid: return
+        ticket = await db.shipping_tickets.find_one({"id": tid}, {"_id": 0})
+        if not ticket: return
+
+        rec_oc = ((rec.get("entry") or {}).get("numero_orden_compra") or "").strip()
+        tk_oc = (ticket.get("numero_orden_compra") or "").strip()
+
+        if rec_oc and not tk_oc:
+            await db.shipping_tickets.update_one({"id": tid}, {"$set": {"numero_orden_compra": rec_oc}})
+        elif tk_oc and not rec_oc:
+            await db.vehicle_records.update_one({"id": rec["id"]}, {"$set": {"entry.numero_orden_compra": tk_oc}})
+    except Exception as e:
+        logger.error(f"sync_orden_compra fallo: {e}")
 
 def is_admin(user: Dict[str, Any]) -> bool:
     admins = ["d.trujillo@brancoindustries.com", "d4r005@gmail.com"]
@@ -673,7 +713,7 @@ async def get_record(rec_id: str, u: Dict[str, Any] = Depends(get_current_user))
     return VehicleRecord(**(await _ensure_record_links(d)))
 
 @api_router.put("/vehicle-records/{rec_id}")
-async def update_record(rec_id: str, body: Dict[str, Any], u: Dict[str, Any] = Depends(get_current_user)):
+async def update_record(rec_id: str, body: Dict[str, Any], background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
     """
     Actualiza un registro de forma parcial. IMPORTANTE: "entry" y "exit" se
     FUSIONAN (merge) con lo ya existente en vez de reemplazar el objeto
@@ -705,6 +745,7 @@ async def update_record(rec_id: str, body: Dict[str, Any], u: Dict[str, Any] = D
         body["exit"] = merged_exit
 
     await db.vehicle_records.update_one({"id": rec_id}, {"$set": body})
+    background_tasks.add_task(sync_orden_compra, rec_id, None)
     return {"ok": True}
 
 @api_router.delete("/vehicle-records/{rec_id}")
@@ -996,6 +1037,14 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
             + tr("Condición Salida", ex.get("condicion_salida"))
             + tr("Sello Salida 1", ex.get("sello_salida"))
         )
+        # Placas de unidad/caja en salida: sólo se muestran si el guardia las
+        # llenó explícitamente porque son DISTINTAS a las de entrada (caso de
+        # cambio de tractor/caja en patio). Si quedaron vacías se asume que
+        # es la misma unidad/caja que entró y no se repite el dato.
+        if ex.get("placas_unidad_salida"):
+            caseta_rows += tr("Placas Unidad Salida", ex.get("placas_unidad_salida"))
+        if ex.get("placas_caja_salida"):
+            caseta_rows += tr("Placas Caja Salida", ex.get("placas_caja_salida"))
         if is_full:
             caseta_rows += (
                 tr("Caja Salida 2", ex.get("numero_caja_salida_2"))
@@ -1178,6 +1227,7 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
             + tr("Pallets / 托盘数量", ticket.get("numero_pallets"))
             + tr("Sello / 封条", ticket.get("numero_sello"))
             + tr("No. Económico / 经济号", ticket.get("numero_economico"))
+            + tr("Orden de Compra / 采购订单", ticket.get("numero_orden_compra"))
             + tr("Observaciones / 备注", ticket.get("observaciones"))
             + '<tr><td style="background:#f9fafb;vertical-align:middle;"><b>Almacenista / 仓管员</b></td><td>'
             + '<div class="sr"><span style="font-size:9px;font-weight:600;">' + (ticket.get("almacenista") or "-") + "</span>"
@@ -1301,7 +1351,13 @@ async def exit_record(rec_id: str, body: VehicleExit, background_tasks: Backgrou
     existing = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0, "exit": 1})
     existing_fecha = (existing or {}).get("exit", {}).get("fecha_salida") if existing else None
     x["fecha_salida"] = existing_fecha or datetime.now(timezone.utc).isoformat()
-    if x.get("firma_guardia"): x["firma_guardia"] = ensure_clean_image(x["firma_guardia"])
+    # Antes sólo 'firma_guardia' se limpiaba/comprimía aquí -- las fotos del
+    # sello VVTT (sello_vvtt_foto/_2) se guardaban tal cual llegaban de la
+    # cámara, sin pasar por ensure_clean_image (a diferencia de TODAS las
+    # demás fotos del sistema). Eso las dejaba pesadas y con el mismo riesgo
+    # de fondo/formato inconsistente que ya se corrigió en otros lados.
+    for f in ["firma_guardia", "sello_vvtt_foto", "sello_vvtt_foto_2"]:
+        if x.get(f): x[f] = ensure_clean_image(x[f])
     await db.vehicle_records.update_one({"id": rec_id}, {"$set": {"exit": x, "status": "salida"}})
     up = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
     # Sincronizar salida automáticamente al sheet
@@ -1512,6 +1568,7 @@ async def create_ticket(body: ShippingTicketCreate, background_tasks: Background
             {"id": body.record_id},
             {"$set": {"shipping_ticket_id": tid, "has_shipping_ticket": True}}
         )
+        background_tasks.add_task(sync_orden_compra, body.record_id, tid)
     else:
         # Auto-vincular por placas si no viene record_id.
         # OJO: antes esto excluía registros con status=="salida", lo cual
@@ -1542,6 +1599,15 @@ async def create_ticket(body: ShippingTicketCreate, background_tasks: Background
                     {"$set": {"shipping_ticket_id": tid, "has_shipping_ticket": True}}
                 )
                 doc["record_id"] = rec_by_plates["id"]
+                # BUG corregido: antes 'record_id' sólo se fijaba en la variable
+                # local 'doc' (que ya se había insertado sin este campo) -- el
+                # ticket en la BD se quedaba con record_id vacío para siempre,
+                # aunque el vehicle_record SÍ apuntara correctamente al ticket
+                # via shipping_ticket_id. Esto rompía cualquier lógica que
+                # necesitara ir de ticket -> registro (como el autorrelleno de
+                # orden de compra) para tickets auto-vinculados por placa.
+                await db.shipping_tickets.update_one({"id": tid}, {"$set": {"record_id": rec_by_plates["id"]}})
+                background_tasks.add_task(sync_orden_compra, rec_by_plates["id"], tid)
     # Sincronizar automáticamente al sheet
     background_tasks.add_task(sync_to_google_sheets, "embarque", doc)
     # Alerta de seguimiento: nuevo ticket de embarque
@@ -1573,12 +1639,13 @@ async def get_ticket(id: str, u: Dict[str, Any] = Depends(get_current_user)):
     return d
 
 @api_router.put("/shipping-tickets/{id}")
-async def update_ticket(id: str, body: Dict[str, Any], u: Dict[str, Any] = Depends(get_current_user)):
+async def update_ticket(id: str, body: Dict[str, Any], background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
     for k in ["_id", "id", "user_id", "created_at"]:
         if k in body: del body[k]
     for f in ["firma_almacenista", "firma_guardia", "foto_inicio_carga", "foto_media_carga", "foto_final_carga"]:
         if body.get(f) and body[f].startswith("data:image"): body[f] = ensure_clean_image(body[f])
     await db.shipping_tickets.update_one({"id": id}, {"$set": body})
+    background_tasks.add_task(sync_orden_compra, None, id)
     return {"ok": True}
 
 @api_router.delete("/shipping-tickets/{id}")

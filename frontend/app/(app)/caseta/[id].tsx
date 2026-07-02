@@ -57,6 +57,8 @@ export default function CasetaDetail() {
     numero_tractor_salida: '',
     numero_caja_salida: '',
     numero_caja_salida_2: '',
+    placas_unidad_salida: '',
+    placas_caja_salida: '',
     pallets: '',
     cajas: '',
     bultos: '',
@@ -321,8 +323,6 @@ export default function CasetaDetail() {
                 <View style={styles.grid}>
                   <EditableItem label={t('destino_caps')} value={entryForm.destino} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, destino: v}) : null} />
                   <EditableItem label={t('condicion_carga').toUpperCase()} value={entryForm.condicion_carga} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, condicion_carga: v}) : null} />
-                  <EditableItem label={t('numero_guia').toUpperCase()} value={entryForm.numero_guia} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_guia: v}) : null} />
-                  <EditableItem label={t('numero_requerimiento').toUpperCase()} value={entryForm.numero_requerimiento} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_requerimiento: v}) : null} />
                   <EditableItem label={t('orden_compra').toUpperCase()} value={entryForm.numero_orden_compra} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, numero_orden_compra: v}) : null} />
                   <EditableItem label={t('licencia_conductor').toUpperCase()} value={entryForm.licencia_conductor} onEdit={editEntry ? (v:any)=>setEntryForm({...entryForm, licencia_conductor: v}) : null} />
                 </View>
@@ -467,6 +467,31 @@ export default function CasetaDetail() {
                       <Text style={[styles.optionText, exitData.condicion_salida === opt && styles.optionTextActive]}>{opt}</Text>
                     </Pressable>
                   ))}
+                </View>
+
+                <View style={styles.grid}>
+                   <View style={{ flex: 1 }}>
+                      <Text style={styles.fieldLabel}>{t('placas')}</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={exitData.placas_unidad_salida}
+                        autoCorrect={false}
+                        spellCheck={false}
+                        placeholder={entryForm.placas_unidad}
+                        onChangeText={(v) => setExitData({ ...exitData, placas_unidad_salida: sanitizePlate(v) })}
+                      />
+                   </View>
+                   <View style={{ flex: 1 }}>
+                      <Text style={styles.fieldLabel}>{t('placas_caja_caps')}</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={exitData.placas_caja_salida}
+                        autoCorrect={false}
+                        spellCheck={false}
+                        placeholder={entryForm.placas_caja}
+                        onChangeText={(v) => setExitData({ ...exitData, placas_caja_salida: sanitizePlate(v) })}
+                      />
+                   </View>
                 </View>
 
                 <View style={styles.grid}>
@@ -684,8 +709,8 @@ const styles = StyleSheet.create({
   photoGrid: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
   thumbWrapper: { width: '30%', minWidth: 90 },
   thumbLabel: { fontSize: 8, fontWeight: '900', color: colors.muted, marginBottom: 4, textAlign: 'center' },
-  thumbBox: { height: 90, borderWidth: 1, borderColor: '#DDD', borderRadius: 4, overflow: 'hidden', backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center' },
-  thumbImg: { width: '100%', height: '100%', resizeMode: 'cover' },
+  thumbBox: { height: 90, borderWidth: 1, borderColor: '#DDD', borderRadius: 4, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center' },
+  thumbImg: { width: '100%', height: '100%', resizeMode: 'cover', borderRadius: 4 },
   thumbPlaceholder: { alignItems: 'center' },
   thumbPlaceholderText: { fontSize: 9, color: colors.muted, fontWeight: '900', marginTop: 2 },
   removeBtn: { position: 'absolute', top: -5, right: -5, backgroundColor: '#FFF', borderRadius: 12 },

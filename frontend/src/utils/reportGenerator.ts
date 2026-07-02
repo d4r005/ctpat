@@ -302,6 +302,7 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
       <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Pallets / 托盘数量</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.numero_pallets || '-'}</td></tr>
       <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>${labels.seal}</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.numero_sello || '-'}</td></tr>
       <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>No. Económico / 经济号</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.numero_economico || '-'}</td></tr>
+      <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Orden de Compra / 采购订单</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.numero_orden_compra || '-'}</td></tr>
       <tr><td style="padding:6px;border:1px solid #ddd;background:#f9fafb;"><b>Observaciones / 备注</b></td><td style="padding:6px;border:1px solid #ddd;">${embarque.observaciones || '-'}</td></tr>
 
       <!-- ALMACENISTA: nombre + firma en misma celda -->

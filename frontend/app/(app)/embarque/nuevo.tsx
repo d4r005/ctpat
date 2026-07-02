@@ -28,6 +28,7 @@ export default function EmbarqueNuevo() {
     destino?: string;
     economico?: string;
     hora_llegada?: string;
+    orden_compra?: string;
   }>();
 
   const [saving, setSaving] = useState(false);
@@ -37,7 +38,7 @@ export default function EmbarqueNuevo() {
     linea_transporte: params.compania || '', numero_economico: params.economico || '', placas_unidad: params.placas || '',
     numero_caja: params.trailer || '', placas_caja: '',
     hora_llegada: params.hora_llegada || '', hora_apertura_cortina: '', hora_cierre_cortina: '', hora_salida: '',
-    numero_pallets: '', numero_sello: params.sello || '', observaciones: params.destino ? `${t('destino_caps')}: ${params.destino}` : '', daño_caja: '',
+    numero_pallets: '', numero_sello: params.sello || '', numero_orden_compra: params.orden_compra || '', observaciones: params.destino ? `${t('destino_caps')}: ${params.destino}` : '', daño_caja: '',
     nombre_guardia: '', firma_almacenista: '', firma_guardia: '',
     foto_inicio_carga: '', foto_media_carga: '', foto_final_carga: '',
     inspection_id: params.inspection_id || '',
@@ -247,6 +248,7 @@ export default function EmbarqueNuevo() {
             <F label={t('hora_salida_desenrampe').toUpperCase()} v={form.hora_salida} on={(t: string) => set('hora_salida', t)} tid="emb-hora-salida" placeholder="HH:MM" />
             <F label={t('numero_pallets_caps').toUpperCase()} v={form.numero_pallets} on={(t: string) => set('numero_pallets', t)} tid="emb-pallets" kb="numeric" />
             <F label={t('numero_sello_caps').toUpperCase()} v={form.numero_sello} on={(t: string) => set('numero_sello', t)} tid="emb-sello" />
+            <F label={t('orden_compra').toUpperCase()} v={form.numero_orden_compra} on={(t: string) => set('numero_orden_compra', t)} tid="emb-orden-compra" />
           </Section>
 
           <Section title={t('observaciones_y_danos').toUpperCase()}>

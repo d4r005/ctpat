@@ -120,6 +120,7 @@ export default function EmbarqueDetail() {
             <EditableRow label={t('almacenista')} value={form.almacenista} onEdit={editMode ? (v: string) => setForm({...form, almacenista: v}) : null} />
             <EditableRow label={t('cliente')} value={form.cliente} onEdit={editMode ? (v: string) => setForm({...form, cliente: v}) : null} />
             <EditableRow label={t('pallets')} value={form.numero_pallets} onEdit={editMode ? (v: string) => setForm({...form, numero_pallets: v}) : null} />
+            <EditableRow label={t('orden_compra')} value={form.numero_orden_compra} onEdit={editMode ? (v: string) => setForm({...form, numero_orden_compra: v}) : null} />
           </View>
         </View>
 
