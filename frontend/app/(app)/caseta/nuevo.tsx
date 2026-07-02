@@ -72,12 +72,18 @@ export default function CasetaNuevo() {
   const [placasCaja, setPlacasCaja] = useState('');
   const [selloEntrada, setSelloEntrada] = useState('');
   const [selloEntradaNA, setSelloEntradaNA] = useState(false);
+  // Tipo de sello de entrada: 'precinto' (numerado normal) o 'alta_seguridad'
+  // (candado/perno de alta seguridad) -- antes había un solo campo genérico
+  // "Número de precinto" sin distinguir; ahora se elige el tipo con un botón
+  // y sólo entonces se despliega el campo correspondiente para escribir.
+  const [tipoSelloEntrada, setTipoSelloEntrada] = useState<'precinto' | 'alta_seguridad' | null>(null);
 
   // Caja 2 (Full)
   const [companiaCaja2, setCompaniaCaja2] = useState('');
   const [numeroCaja2, setNumeroCaja2] = useState('');
   const [selloEntrada2, setSelloEntrada2] = useState('');
   const [selloEntradaNA2, setSelloEntradaNA2] = useState(false);
+  const [tipoSelloEntrada2, setTipoSelloEntrada2] = useState<'precinto' | 'alta_seguridad' | null>(null);
 
   const [escoltaPresente, setEscoltaPresente] = useState(false);
   const [escoltaCompania, setEscoltaCompania] = useState('');
@@ -143,7 +149,7 @@ export default function CasetaNuevo() {
           if (res.compania_transporte) setCompania(res.compania_transporte.toUpperCase());
           if (res.numero_tractor) setTractor(res.numero_tractor.toUpperCase());
           if (res.numero_caja) setNumeroCaja(res.numero_caja.toUpperCase());
-          if (res.sello_entrada) setSelloEntrada(res.sello_entrada.toUpperCase());
+          if (res.sello_entrada) { setSelloEntrada(res.sello_entrada.toUpperCase()); setTipoSelloEntrada(prev => prev || 'precinto'); }
           if (res.destino) setDestino(res.destino.toUpperCase());
           Alert.alert('Éxito', 'Información extraída correctamente.');
         }
@@ -335,17 +341,35 @@ export default function CasetaNuevo() {
                   <Field label={`${t('compania_caja').toUpperCase()} 2`} value={companiaCaja2} onChange={setCompaniaCaja2} testID="caseta-compania-caja-2" />
                   <Field label={`${t('numero_caja_caps').toUpperCase()} 2`} value={numeroCaja2} onChange={setNumeroCaja2} testID="caseta-numero-caja-2" />
 
-                  <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }}>
-                    <View style={{ flex: 1 }}>
-                      <Field label={`${t('numero_precinto_caps').toUpperCase()} 2`} value={selloEntrada2} onChange={setSelloEntrada2} testID="caseta-sello-entrada-2" disabled={selloEntradaNA2} />
-                    </View>
-                    <Pressable onPress={() => setSelloEntradaNA2(!selloEntradaNA2)} style={styles.naBox}>
+                  <Text style={styles.fieldLabel}>{(t('tipo_sello_caps') || 'TIPO DE SELLO')} 2</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm }}>
+                    <Pressable
+                      onPress={() => { setSelloEntradaNA2(false); setTipoSelloEntrada2(tipoSelloEntrada2 === 'precinto' ? null : 'precinto'); }}
+                      style={[styles.optionChip, tipoSelloEntrada2 === 'precinto' && styles.optionChipActive]}
+                    >
+                      <Text style={[styles.optionText, tipoSelloEntrada2 === 'precinto' && styles.optionTextActive]}>{t('precinto').toUpperCase()}</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => { setSelloEntradaNA2(false); setTipoSelloEntrada2(tipoSelloEntrada2 === 'alta_seguridad' ? null : 'alta_seguridad'); }}
+                      style={[styles.optionChip, tipoSelloEntrada2 === 'alta_seguridad' && styles.optionChipActive]}
+                    >
+                      <Text style={[styles.optionText, tipoSelloEntrada2 === 'alta_seguridad' && styles.optionTextActive]}>{t('sello_alta_seguridad').toUpperCase()}</Text>
+                    </Pressable>
+                    <Pressable onPress={() => { setSelloEntradaNA2(!selloEntradaNA2); setTipoSelloEntrada2(null); setSelloEntrada2(''); }} style={styles.naBox}>
                       <View style={[styles.naCheck, selloEntradaNA2 && styles.naCheckOn]}>
                         {selloEntradaNA2 && <Ionicons name="checkmark" size={14} color="#FFF" />}
                       </View>
                       <Text style={styles.naText}>N/A</Text>
                     </Pressable>
                   </View>
+                  {!selloEntradaNA2 && tipoSelloEntrada2 && (
+                    <Field
+                      label={`${(tipoSelloEntrada2 === 'precinto' ? t('numero_precinto_caps') : t('sello_alta_seguridad')).toUpperCase()} 2`}
+                      value={selloEntrada2}
+                      onChange={setSelloEntrada2}
+                      testID="caseta-sello-entrada-2"
+                    />
+                  )}
                 </>
               )}
 
