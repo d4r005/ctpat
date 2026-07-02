@@ -50,6 +50,7 @@ export default function EmbarqueNuevo() {
   }, [params]);
   const [sigTarget, setSigTarget] = useState<'almacenista' | 'guardia' | null>(null);
   const [almacenistaOpcion, setAlmacenistaOpcion] = useState<'CARLOS CANIZALES' | 'CYNTHIA SAUCEDA' | 'OTRO' | ''>('');
+  const [guardiaSeguridadOpcion, setGuardiaSeguridadOpcion] = useState<'MARIO AGUILAR' | 'ADELAIDO SAENZ' | 'OTRO' | ''>('');
 
   const set = (k: string, v: any) => setForm({ ...form, [k]: v });
 
@@ -287,7 +288,25 @@ export default function EmbarqueNuevo() {
           </Section>
 
           <Section title={t('firmas').toUpperCase()}>
-            <F label={t('nombre_guardia_seguridad').toUpperCase()} v={form.nombre_guardia} on={(t: string) => set('nombre_guardia', t)} tid="emb-guardia" />
+            <Text style={styles.label}>{`${t('nombre_guardia_seguridad').toUpperCase()} *`}</Text>
+            <View style={[styles.optionsRow, { marginBottom: spacing.md }]}>
+              {(['MARIO AGUILAR', 'ADELAIDO SAENZ', 'OTRO'] as const).map((o) => (
+                <Pressable
+                  key={o}
+                  onPress={() => {
+                    setGuardiaSeguridadOpcion(o);
+                    if (o !== 'OTRO') set('nombre_guardia', o);
+                    else set('nombre_guardia', '');
+                  }}
+                  style={[styles.optionChip, guardiaSeguridadOpcion === o && styles.optionChipActive]}
+                >
+                  <Text style={[styles.optionText, guardiaSeguridadOpcion === o && styles.optionTextActive]}>{o}</Text>
+                </Pressable>
+              ))}
+            </View>
+            {(guardiaSeguridadOpcion === 'OTRO' || !guardiaSeguridadOpcion) && (
+              <F label={t('nombre_completo').toUpperCase()} v={form.nombre_guardia} on={(t: string) => set('nombre_guardia', t)} tid="emb-guardia" placeholder={t('nombre_completo_placeholder')} />
+            )}
             <Pressable testID="emb-firma-almacenista" style={styles.signatureBox} onPress={() => setSigTarget('almacenista')}>
               {form.firma_almacenista ? (
                 <>
