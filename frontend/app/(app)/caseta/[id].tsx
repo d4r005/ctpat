@@ -29,6 +29,13 @@ export default function CasetaDetail() {
   const [showExit, setShowExit] = useState(false);
   const [editEntry, setEditEntry] = useState(false);
   const [showSig, setShowSig] = useState(false);
+  // Qué firma se está capturando en el modal compartido -- ANTES se usaba
+  // 'showExit' (si la sección de SALIDA está expandida) para decidirlo, lo
+  // cual no tiene nada que ver con qué botón de firma se tocó: si la sección
+  // de salida ya estaba abierta (pasa automático si el registro ya tiene
+  // salida), editar la firma del CHOFER terminaba sobrescribiendo la firma
+  // del GUARDIA en su lugar -- por eso 'no se podía cambiar' la del chofer.
+  const [sigTarget, setSigTarget] = useState<'entry' | 'exit'>('entry');
   const sigRef = React.useRef<any>(null);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'supervisor' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
@@ -349,7 +356,7 @@ export default function CasetaDetail() {
                 <View style={styles.grid}>
                    <View style={{ flex: 1 }}>
                      <Text style={styles.infoLabel}>{t('firma_operador')}</Text>
-                     <Pressable style={styles.sigBoxSmall} onPress={editEntry ? () => setShowSig(true) : undefined}>
+                     <Pressable style={styles.sigBoxSmall} onPress={editEntry ? () => { setSigTarget('entry'); setShowSig(true); } : undefined}>
                         {entryForm.firma_operador ? (
                           <>
                             <Image source={{ uri: entryForm.firma_operador }} style={{ width: '100%', height: 60, resizeMode: 'contain' }} />
@@ -561,7 +568,7 @@ export default function CasetaDetail() {
                 </View>
 
                 <Text style={styles.fieldLabel}>{t('firma_guardia')}</Text>
-                <Pressable style={styles.sigBox} onPress={() => setShowSig(true)}>
+                <Pressable style={styles.sigBox} onPress={() => { setSigTarget('exit'); setShowSig(true); }}>
                   {exitData.firma_guardia ? (
                     <>
                       <Image source={{ uri: exitData.firma_guardia }} style={{ width: '100%', height: 100, resizeMode: 'contain' }} />
@@ -595,7 +602,7 @@ export default function CasetaDetail() {
               <Signature
                 ref={sigRef}
                 onOK={(sig) => {
-                  if (showExit) setExitData({ ...exitData, firma_guardia: sig });
+                  if (sigTarget === 'exit') setExitData({ ...exitData, firma_guardia: sig });
                   else setEntryForm({ ...entryForm, firma_operador: sig });
                   setShowSig(false);
                 }}

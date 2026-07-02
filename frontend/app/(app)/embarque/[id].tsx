@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import Signature from '@/src/components/SignaturePad';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -19,6 +20,9 @@ export default function EmbarqueDetail() {
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  const [showSig, setShowSig] = useState(false);
+  const [sigTarget, setSigTarget] = useState<'almacenista' | 'guardia'>('almacenista');
+  const sigRef = React.useRef<any>(null);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'supervisor' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
   // Borrar el ticket es una acción destructiva reservada a admin real (el
@@ -132,6 +136,28 @@ export default function EmbarqueDetail() {
         </View>
 
         <View style={styles.section}>
+          <View style={[styles.sectionHeader, { backgroundColor: colors.warning }]}>
+            <Text style={styles.sectionTitle}>{t('firmas').toUpperCase()}</Text>
+          </View>
+          <View style={styles.sectionBody}>
+             <View style={styles.photoGrid}>
+                <SigItem
+                  label={t('firma_almacenista')}
+                  uri={form.firma_almacenista}
+                  onPick={editMode ? () => { setSigTarget('almacenista'); setShowSig(true); } : null}
+                  onRemove={editMode ? () => setForm({ ...form, firma_almacenista: '' }) : null}
+                />
+                <SigItem
+                  label={t('firma_guardia')}
+                  uri={form.firma_guardia}
+                  onPick={editMode ? () => { setSigTarget('guardia'); setShowSig(true); } : null}
+                  onRemove={editMode ? () => setForm({ ...form, firma_guardia: '' }) : null}
+                />
+             </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
           <View style={[styles.sectionHeader, { backgroundColor: colors.brandSecondary }]}>
             <Text style={styles.sectionTitle}>{t('evidencia_fotografica').toUpperCase()}</Text>
           </View>
@@ -163,7 +189,61 @@ export default function EmbarqueDetail() {
           </View>
         </View>
       </ScrollView>
+
+      {showSig && (
+        <View style={styles.sigModal}>
+          <View style={styles.sigModalContent}>
+            <Text style={styles.sigModalTitle}>
+              {t('firma').toUpperCase()} {sigTarget === 'almacenista' ? t('almacenista').toUpperCase() : t('guardia').toUpperCase()}
+            </Text>
+            <View style={styles.sigContainer}>
+              <Signature
+                ref={sigRef}
+                onOK={(sig: string) => {
+                  setForm({ ...form, [sigTarget === 'almacenista' ? 'firma_almacenista' : 'firma_guardia']: sig });
+                  setShowSig(false);
+                }}
+                onEmpty={() => Alert.alert(t('error'), t('firma_vacia'))}
+                webStyle={`.m-signature-pad--footer{display:none;}.m-signature-pad{box-shadow:none;border:2px solid #09090B;}body,html{background:#FFF;height:100%;}`}
+              />
+            </View>
+            <View style={styles.sigModalBtns}>
+              <Pressable style={styles.sigModalBtn} onPress={() => setShowSig(false)}>
+                <Text>{t('cancelar')}</Text>
+              </Pressable>
+              <Pressable style={[styles.sigModalBtn, styles.sigModalBtnPrimary]} onPress={() => sigRef.current?.readSignature()}>
+                <Text style={{ color: '#FFF' }}>{t('guardar')}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
+  );
+}
+
+function SigItem({ label, uri, onPick, onRemove }: any) {
+  return (
+    <View style={styles.photoWrapper}>
+       <Text style={styles.photoLabel}>{label}</Text>
+       <Pressable style={styles.photoBox} onPress={onPick || undefined} disabled={!onPick}>
+          {uri ? (
+            <>
+              <Image source={{ uri }} style={[styles.photoImg, { resizeMode: 'contain', backgroundColor: '#FFF' }]} />
+              {onRemove && (
+                <TouchableOpacity style={styles.removeBtn} onPress={onRemove}>
+                  <Ionicons name="close-circle" size={24} color={colors.error} />
+                </TouchableOpacity>
+              )}
+            </>
+          ) : (
+            <View style={styles.photoPlaceholder}>
+              <Ionicons name="create-outline" size={24} color={colors.muted} />
+              <Text style={styles.photoPlaceholderText}>{onPick ? 'TOCA PARA FIRMAR' : 'N/A'}</Text>
+            </View>
+          )}
+       </Pressable>
+    </View>
   );
 }
 
@@ -231,5 +311,12 @@ const styles = StyleSheet.create({
   photoPlaceholderText: { fontSize: 9, color: colors.muted, fontWeight: '900', marginTop: 2 },
   removeBtn: { position: 'absolute', top: -5, right: -5, backgroundColor: '#FFF', borderRadius: 12 },
   obsInput: { borderWidth: 1, borderColor: '#DDD', padding: 10, fontSize: 14, backgroundColor: '#FAFAFA', minHeight: 80, textAlignVertical: 'top' },
-  obsText: { fontSize: 13, color: colors.onSurface, fontWeight: '700' }
+  obsText: { fontSize: 13, color: colors.onSurface, fontWeight: '700' },
+  sigModal: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: spacing.md },
+  sigModalContent: { backgroundColor: '#FFF', width: '100%', maxWidth: 500, borderRadius: 8, padding: spacing.md, borderWidth: 2, borderColor: colors.borderStrong },
+  sigModalTitle: { fontWeight: '900', fontSize: 14, marginBottom: spacing.sm, textAlign: 'center' },
+  sigContainer: { height: 280, borderWidth: 1, borderColor: '#DDD', marginBottom: spacing.sm },
+  sigModalBtns: { flexDirection: 'row', gap: 10 },
+  sigModalBtn: { flex: 1, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#DDD', borderRadius: 4 },
+  sigModalBtnPrimary: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }
 });
