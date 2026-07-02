@@ -212,9 +212,21 @@ class ShippingTicketCreate(BaseModel):
     numero_economico: str = ""
     placas_unidad: str
     numero_caja: str = ""
+    placas_caja: str = ""
     numero_pallets: str = ""
     numero_sello: str = ""
     observaciones: str = ""
+    # Campos que el formulario de embarque ya capturaba en el frontend pero el
+    # backend descartaba silenciosamente por no estar declarados aqui (Pydantic
+    # ignora cualquier campo extra) -- esto hacia que Cortina/horarios llegaran
+    # siempre vacios al reporte consolidado aunque el almacenista SI los llenara.
+    hora_llegada: str = ""
+    hora_apertura_cortina: str = ""
+    hora_cierre_cortina: str = ""
+    hora_salida: str = ""
+    daño_caja: str = ""
+    area: str = ""
+    sellos: str = ""
     foto_inicio_carga: str = ""
     foto_media_carga: str = ""
     foto_final_carga: str = ""
@@ -974,13 +986,14 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
     )
     fotos_salida = ""
     if ex:
+        # NOTA: Destino / Tractor Salida / Caja Salida se eliminaron de este
+        # bloque -- son redundantes con los datos ya mostrados en CASETA
+        # (entrada) y en la práctica casi nunca se llenaban en el registro de
+        # salida, apareciendo siempre vacíos ("-") en el reporte.
         caseta_rows += (
             th2("DATOS DE SALIDA / 出场数据")
             + tr("Fecha Salida / 出场时间", _sd(ex.get("fecha_salida")))
-            + tr("Destino / 目的地", ex.get("destino"))
             + tr("Condición Salida", ex.get("condicion_salida"))
-            + tr("Tractor Salida", ex.get("numero_tractor_salida"))
-            + tr("Caja Salida", ex.get("numero_caja_salida"))
             + tr("Sello Salida 1", ex.get("sello_salida"))
         )
         if is_full:
@@ -988,11 +1001,19 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
                 tr("Caja Salida 2", ex.get("numero_caja_salida_2"))
                 + tr("Sello Salida 2", ex.get("sello_salida_2"))
             )
+        # Cortina / Pallets / Sello VVTT: estos datos en la práctica los captura
+        # el almacenista al llenar el TICKET DE EMBARQUE (no el guardia de
+        # salida en caseta), así que se toman de ahí primero y sólo se cae a
+        # los campos de 'exit' si el ticket no los tiene.
+        tk = ticket or {}
+        apertura = tk.get("hora_apertura_cortina") or ex.get("hora_apertura_cortina") or "-"
+        cierre = tk.get("hora_cierre_cortina") or ex.get("hora_cierre_cortina") or "-"
+        pallets = tk.get("numero_pallets") or ex.get("pallets") or "-"
+        sello_vvtt = tk.get("numero_sello") or ex.get("sello_vvtt_estado") or "-"
         caseta_rows += (
-            tr("Cortina (apertura/cierre)", (ex.get("hora_apertura_cortina") or "-") + " / " + (ex.get("hora_cierre_cortina") or "-"))
-            + tr("Cortina Salida", ex.get("cortina_salida"))
-            + tr("Pallets / Cajas / Bultos", (ex.get("pallets") or "-") + " / " + (ex.get("cajas") or "-") + " / " + (ex.get("bultos") or "-"))
-            + tr("Sello VVTT Estado", (ex.get("sello_vvtt_estado") or "-") + (("  |  Sello VVTT 2: " + ex.get("sello_vvtt_estado_2")) if is_full and ex.get("sello_vvtt_estado_2") else ""))
+            tr("Cortina (apertura/cierre)", apertura + " / " + cierre)
+            + tr("Pallets / Cajas / Bultos", pallets + " / " + (ex.get("cajas") or "-") + " / " + (ex.get("bultos") or "-"))
+            + tr("Sello VVTT Estado", sello_vvtt + (("  |  Sello VVTT 2: " + ex.get("sello_vvtt_estado_2")) if is_full and ex.get("sello_vvtt_estado_2") else ""))
             + tr("Guardia Salida / 门卫", ex.get("guardia_salida_nombre"))
         )
         fotos_salida = (
@@ -1528,7 +1549,14 @@ async def create_ticket(body: ShippingTicketCreate, background_tasks: Background
 
 @api_router.get("/shipping-tickets", response_model=List[Dict[str, Any]])
 async def list_tickets(u: Dict[str, Any] = Depends(get_current_user)):
-    return await db.shipping_tickets.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    # La lista NO necesita las fotos de carga (base64, pueden pesar cientos de
+    # KB - varios MB cada una) -- incluirlas en cada ticket de la lista es lo
+    # que hacia que la pantalla de embarque tardara mucho en abrir/cargar. El
+    # detalle (GET /shipping-tickets/{id}) si las sigue devolviendo completas.
+    return await db.shipping_tickets.find(
+        {},
+        {"_id": 0, "foto_inicio_carga": 0, "foto_media_carga": 0, "foto_final_carga": 0},
+    ).sort("created_at", -1).to_list(2000)
 
 @api_router.get("/shipping-tickets/{id}")
 async def get_ticket(id: str, u: Dict[str, Any] = Depends(get_current_user)):
@@ -2630,7 +2658,15 @@ async def refresh_sheets_token(
     token = body.get("token", "").strip()
     if not token: raise HTTPException(400, "Token requerido")
     os.environ["GOOGLEDRIVE_ACCESS_TOKEN"] = token
-    logger.info("GOOGLEDRIVE_ACCESS_TOKEN actualizado correctamente")
+    # Persistimos en Mongo (no solo en memoria) para que un redeploy/reinicio del
+    # Space (que borra os.environ) no deje el backend sin token hasta el
+    # siguiente ciclo de la automatizacion (~45 min) -- se recarga en startup.
+    await db.system_tokens.update_one(
+        {"key": "googledrive_access_token"},
+        {"$set": {"value": token, "updated_at": datetime.utcnow().isoformat()}},
+        upsert=True,
+    )
+    logger.info("GOOGLEDRIVE_ACCESS_TOKEN actualizado correctamente (memoria + Mongo)")
     return {"ok": True, "message": "Token inyectado correctamente"}
 
 
@@ -2657,7 +2693,15 @@ async def refresh_gmail_token(
     token = body.get("token", "").strip()
     if not token: raise HTTPException(400, "Token requerido")
     os.environ["GMAIL_ACCESS_TOKEN"] = token
-    logger.info("GMAIL_ACCESS_TOKEN actualizado correctamente")
+    # Igual que con Drive: se persiste en Mongo para sobrevivir a un
+    # redeploy/reinicio del Space sin depender del proximo ciclo (~45 min) de
+    # la automatizacion que refresca el token.
+    await db.system_tokens.update_one(
+        {"key": "gmail_access_token"},
+        {"$set": {"value": token, "updated_at": datetime.utcnow().isoformat()}},
+        upsert=True,
+    )
+    logger.info("GMAIL_ACCESS_TOKEN actualizado correctamente (memoria + Mongo)")
     return {"ok": True, "message": "Token inyectado correctamente"}
 
 app.include_router(api_router)
@@ -2667,6 +2711,20 @@ app.add_middleware(GZipMiddleware)
 @app.on_event("startup")
 async def startup_event():
     logger.info("SRIUC Backend Iniciando...")
+    # Recargar los ultimos tokens de Gmail/Drive guardados en Mongo. Esto es lo
+    # que evita que un redeploy (que borra os.environ por completo) deje al
+    # backend sin poder enviar correos ni sincronizar Sheets/Drive hasta que la
+    # automatizacion del agente vuelva a correr (hasta 45 min despues) -- ahora
+    # el ultimo token conocido (normalmente todavia valido, dura ~1h) se
+    # restaura de inmediato al arrancar.
+    try:
+        for key, env_name in (("gmail_access_token", "GMAIL_ACCESS_TOKEN"), ("googledrive_access_token", "GOOGLEDRIVE_ACCESS_TOKEN")):
+            doc = await db.system_tokens.find_one({"key": key}, {"_id": 0})
+            if doc and doc.get("value"):
+                os.environ[env_name] = doc["value"]
+                logger.info(f"{env_name} restaurado desde Mongo (guardado {doc.get('updated_at', '?')})")
+    except Exception as e:
+        logger.error(f"Error restaurando tokens desde Mongo al iniciar: {e}")
     # Prueba de vida: Enviar un mini-correo al admin indicando que el servidor reinició.
     # Usa la API de Gmail (HTTPS) — SMTP directo no funciona en HuggingFace Spaces
     # porque el contenedor bloquea los puertos salientes 25/465/587.

@@ -550,7 +550,7 @@ function EditableItem({ label, value, onEdit }: any) {
     <View style={styles.infoItem}>
       <Text style={styles.infoLabel}>{label}</Text>
       {onEdit ? (
-        <TextInput style={styles.editInput} value={value} autoCapitalize="characters" onChangeText={(v) => onEdit(v.toUpperCase())} />
+        <TextInput style={styles.editInput} value={value} autoCorrect={false} spellCheck={false} onChangeText={(v) => onEdit(v.toUpperCase())} />
       ) : (
         <Text style={styles.infoValue}>{value || '-'}</Text>
       )}

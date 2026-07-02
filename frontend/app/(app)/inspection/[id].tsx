@@ -733,7 +733,8 @@ function Row({ label, value, isEdit, onEdit }: { label: string; value: string; i
       <Text style={styles.rowLabel}>{label}</Text>
       {isEdit && onEdit ? (
         <TextInput
-          autoCapitalize="characters"
+          autoCorrect={false}
+          spellCheck={false}
           style={[styles.rowValue, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 4 }]}
           value={value}
           onChangeText={(text) => onEdit(text.toUpperCase())}

@@ -337,7 +337,8 @@ function F({ label, v, on, tid, multiline, kb, placeholder }: any) {
       <Text style={styles.label}>{label}</Text>
       <TextInput
         testID={tid}
-        autoCapitalize="characters"
+        autoCorrect={false}
+        spellCheck={false}
         style={[styles.input, multiline && { minHeight: 70, textAlignVertical: 'top' }]}
         value={v}
         onChangeText={(text) => on(text.toUpperCase())}

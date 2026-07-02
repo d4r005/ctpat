@@ -216,7 +216,8 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
               <Text style={styles.label}>{t('nombre')}</Text>
               <TextInput
                 testID="create-user-name"
-                autoCapitalize="characters"
+                autoCorrect={false}
+                spellCheck={false}
                 style={styles.input}
                 value={newName}
                 onChangeText={(text) => setNewName(text.toUpperCase())}

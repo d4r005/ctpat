@@ -172,7 +172,7 @@ function EditableRow({ label, value, onEdit }: any) {
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
       {onEdit ? (
-        <TextInput style={styles.rowInput} value={value} autoCapitalize="characters" onChangeText={(v) => onEdit(v.toUpperCase())} />
+        <TextInput style={styles.rowInput} value={value} autoCorrect={false} spellCheck={false} onChangeText={(v) => onEdit(v.toUpperCase())} />
       ) : (
         <Text style={styles.rowValue}>{value || '-'}</Text>
       )}

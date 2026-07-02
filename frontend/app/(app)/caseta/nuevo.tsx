@@ -584,7 +584,8 @@ function Field({ label, value, onChange, testID, multiline, disabled, placeholde
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
         testID={testID}
-        autoCapitalize="characters"
+        autoCorrect={false}
+        spellCheck={false}
         style={[
           styles.input,
           multiline && { minHeight: 80, textAlignVertical: 'top' },
