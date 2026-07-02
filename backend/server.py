@@ -2373,6 +2373,18 @@ async def read_all(u: Dict[str, Any] = Depends(get_current_user)):
     await db.notifications.update_many({"user_id": u["id"]}, {"$set": {"read": True}})
     return {"ok": True}
 
+@api_router.post("/notifications/read-by-kind")
+async def read_by_kind(body: Dict[str, Any], u: Dict[str, Any] = Depends(get_current_user)):
+    """Marca como leidas solo las notificaciones de un 'kind' especifico (ej. 'chat'),
+    sin tocar el resto -- para que abrir el chat no borre alertas de inspeccion/caseta."""
+    kind = body.get("kind")
+    if not kind: raise HTTPException(400, "kind requerido")
+    await db.notifications.update_many(
+        {"$or": [{"user_id": u["id"]}, {"global": True}], "kind": kind},
+        {"$set": {"read": True}}
+    )
+    return {"ok": True}
+
 class UserCreateInspector(BaseModel):
     email: str
     password: str

@@ -25,7 +25,8 @@ interface MainHeaderProps {
 const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack, onBack, rightAction }) => {
   const { user } = useAuth();
   const { isOnline } = useInspections();
-  const { unreadCount } = useNotifications();
+  const { unreadCount, notifications } = useNotifications();
+  const hasUnreadChat = notifications.some((n) => n.kind === 'chat' && !n.read);
   const { t } = useTranslation();
   const router = useRouter();
   const [showNotifs, setShowNotifs] = React.useState(false);
@@ -53,7 +54,8 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack, onBa
           </Pressable>
         )}
         <Pressable onPress={() => router.push('/(app)/chat')} style={styles.headerBtn}>
-          <Ionicons name="chatbubbles-outline" size={24} color="#FFF" />
+          <Ionicons name={hasUnreadChat ? "chatbubbles" : "chatbubbles-outline"} size={24} color="#FFF" />
+          {hasUnreadChat && <View style={styles.chatDot} />}
         </Pressable>
         <Pressable onPress={() => setShowNotifs(true)} style={styles.notifBtn}>
           <Ionicons name={unreadCount > 0 ? "notifications" : "notifications-outline"} size={24} color="#FFF" />
@@ -91,6 +93,18 @@ const styles = StyleSheet.create({
   },
   headerBtn: {
     padding: 8,
+    position: 'relative',
+  },
+  chatDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.error,
+    borderWidth: 2,
+    borderColor: colors.brandPrimary,
   },
   notifBadge: {
     position: 'absolute',

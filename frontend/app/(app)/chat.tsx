@@ -8,6 +8,7 @@ import { useAuth } from '@/src/context/AuthContext';
 import { apiCall } from '@/src/api/client';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import MainHeader from '@/src/components/MainHeader';
+import { useNotifications } from '@/src/context/NotificationsContext';
 
 interface DirectoryUser {
   id: string;
@@ -26,6 +27,7 @@ interface Message {
 export default function ChatScreen() {
   const { t } = useTranslation();
   const { token, user } = useAuth();
+  const { refresh: refreshNotifications } = useNotifications();
   const { room: paramRoom, title: paramTitle } = useLocalSearchParams<{ room?: string; title?: string }>();
   const router = useRouter();
 
@@ -45,6 +47,15 @@ export default function ChatScreen() {
     if (!token) return;
     apiCall<DirectoryUser[]>('/users/directory', { token }).then(setDirectory).catch(() => {});
   }, [token]);
+
+  // Al entrar al chat, se apaga el punto rojo del logotipo marcando como leidas
+  // solo las notificaciones de tipo 'chat' (las de inspeccion/caseta no se tocan).
+  useEffect(() => {
+    if (!token) return;
+    apiCall('/notifications/read-by-kind', { method: 'POST', token, body: { kind: 'chat' } })
+      .then(() => refreshNotifications())
+      .catch(() => {});
+  }, [token, room, refreshNotifications]);
 
   const handleChangeText = (v: string) => {
     setText(v);
