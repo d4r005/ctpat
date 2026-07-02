@@ -1293,7 +1293,14 @@ async def send_report_email(record_id: str, extra_emails: List[str] = []):
 
 @api_router.patch("/vehicle-records/{rec_id}/exit", response_model=VehicleRecord)
 async def exit_record(rec_id: str, body: VehicleExit, background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
-    x = body.dict(); x["fecha_salida"] = datetime.now(timezone.utc).isoformat()
+    x = body.dict()
+    # Sólo se fija la fecha/hora de salida la PRIMERA vez que se registra.
+    # Antes, cada edición posterior (ej. corregir un sello o el conteo de
+    # pallets) sobreescribía fecha_salida con el momento de la edición,
+    # haciendo que el reporte mostrara una hora de salida incorrecta.
+    existing = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0, "exit": 1})
+    existing_fecha = (existing or {}).get("exit", {}).get("fecha_salida") if existing else None
+    x["fecha_salida"] = existing_fecha or datetime.now(timezone.utc).isoformat()
     if x.get("firma_guardia"): x["firma_guardia"] = ensure_clean_image(x["firma_guardia"])
     await db.vehicle_records.update_one({"id": rec_id}, {"$set": {"exit": x, "status": "salida"}})
     up = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})

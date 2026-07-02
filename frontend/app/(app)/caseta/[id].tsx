@@ -468,6 +468,8 @@ export default function CasetaDetail() {
                       <TextInput
                         style={styles.input}
                         value={exitData.sello_salida}
+                        autoCorrect={false}
+                        spellCheck={false}
                         onChangeText={(v) => setExitData({ ...exitData, sello_salida: v.toUpperCase() })}
                       />
                    </View>
@@ -477,13 +479,82 @@ export default function CasetaDetail() {
                         <TextInput
                           style={styles.input}
                           value={exitData.sello_salida_2}
+                          autoCorrect={false}
+                          spellCheck={false}
                           onChangeText={(v) => setExitData({ ...exitData, sello_salida_2: v.toUpperCase() })}
                         />
                      </View>
                    )}
                 </View>
 
+                {isFull && (
+                  <>
+                    <Text style={styles.fieldLabel}>Caja Salida 2</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={exitData.numero_caja_salida_2}
+                      autoCorrect={false}
+                      spellCheck={false}
+                      onChangeText={(v) => setExitData({ ...exitData, numero_caja_salida_2: v.toUpperCase() })}
+                    />
+                  </>
+                )}
+
+                <View style={styles.grid}>
+                   <View style={{ flex: 1 }}>
+                      <Text style={styles.fieldLabel}>Pallets</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={exitData.pallets}
+                        keyboardType="numeric"
+                        onChangeText={(v) => setExitData({ ...exitData, pallets: v })}
+                      />
+                   </View>
+                   <View style={{ flex: 1 }}>
+                      <Text style={styles.fieldLabel}>Cajas</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={exitData.cajas}
+                        keyboardType="numeric"
+                        onChangeText={(v) => setExitData({ ...exitData, cajas: v })}
+                      />
+                   </View>
+                   <View style={{ flex: 1 }}>
+                      <Text style={styles.fieldLabel}>Bultos</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={exitData.bultos}
+                        keyboardType="numeric"
+                        onChangeText={(v) => setExitData({ ...exitData, bultos: v })}
+                      />
+                   </View>
+                </View>
+
                 <Text style={styles.fieldLabel}>{t('inspeccion_sellos_vvtt')}</Text>
+                <View style={styles.grid}>
+                   <View style={{ flex: 1 }}>
+                      <Text style={styles.fieldLabel}>Sello VVTT Estado 1</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={exitData.sello_vvtt_estado}
+                        autoCorrect={false}
+                        spellCheck={false}
+                        onChangeText={(v) => setExitData({ ...exitData, sello_vvtt_estado: v.toUpperCase() })}
+                      />
+                   </View>
+                   {isFull && (
+                     <View style={{ flex: 1 }}>
+                        <Text style={styles.fieldLabel}>Sello VVTT Estado 2</Text>
+                        <TextInput
+                          style={styles.input}
+                          value={exitData.sello_vvtt_estado_2}
+                          autoCorrect={false}
+                          spellCheck={false}
+                          onChangeText={(v) => setExitData({ ...exitData, sello_vvtt_estado_2: v.toUpperCase() })}
+                        />
+                     </View>
+                   )}
+                </View>
                 <View style={styles.photoGrid}>
                   <PhotoThumbnail label={t('foto_sello_vvtt')+" 1"} uri={exitData.sello_vvtt_foto} onPick={()=>pickPhoto('exit', 'sello_vvtt_foto')} onRemove={()=>removePhoto('exit', 'sello_vvtt_foto')} />
                   {isFull && <PhotoThumbnail label={t('foto_sello_vvtt')+" 2"} uri={exitData.sello_vvtt_foto_2} onPick={()=>pickPhoto('exit', 'sello_vvtt_foto_2')} onRemove={()=>removePhoto('exit', 'sello_vvtt_foto_2')} />}

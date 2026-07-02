@@ -46,17 +46,31 @@ export async function apiCall<T = any>(path: string, opts: ApiOptions = {}): Pro
 
     if (!res.ok) {
       const message = data?.detail || `Error ${res.status}`;
-      throw new Error(typeof message === 'string' ? message : JSON.stringify(message));
+      // isNetworkError=false: el servidor SI respondio (rechazo la peticion por
+      // permisos/validacion/etc). Esto no debe tratarse como "sin conexion" --
+      // ver nota en InspectionContext sobre por que importa esta distincion.
+      const err: any = new Error(typeof message === 'string' ? message : JSON.stringify(message));
+      err.isNetworkError = false;
+      err.status = res.status;
+      throw err;
     }
     return data as T;
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
-      throw new Error("La solicitud tardó demasiado tiempo (timeout). Posiblemente las fotos son muy pesadas para tu conexión actual.");
+      const err: any = new Error("La solicitud tardó demasiado tiempo (timeout). Posiblemente las fotos son muy pesadas para tu conexión actual.");
+      err.isNetworkError = true;
+      throw err;
     }
     if (error.message === 'Network request failed') {
-      throw new Error(`Error de conexión: No se pudo contactar al servidor en ${url}. Verifica tu internet o si el backend está activo.`);
+      const err: any = new Error(`Error de conexión: No se pudo contactar al servidor en ${url}. Verifica tu internet o si el backend está activo.`);
+      err.isNetworkError = true;
+      throw err;
     }
+    // Cualquier otro error ya trae isNetworkError definido si vino del bloque
+    // de arriba (res.ok === false); si no, es un fallo inesperado del cliente
+    // (ej. error de parseo) y se trata como error real, no como "sin conexion".
+    if (error.isNetworkError === undefined) error.isNetworkError = false;
     throw error;
   }
 }

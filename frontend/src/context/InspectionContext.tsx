@@ -213,7 +213,14 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
         const res = await apiCall('/inspections', { method: 'POST', body: full, token });
         await refresh();
         return res;
-      } catch (err) {}
+      } catch (err: any) {
+        // Sólo se encola para reintentar offline si fue un fallo de RED (sin
+        // conexión real, timeout, etc). Si el servidor respondió rechazando la
+        // petición (permiso, validación...), antes se tragaba el error en
+        // silencio y se simulaba éxito guardando "pendiente" -- el usuario
+        // creía que se había guardado y en realidad nunca llegó al servidor.
+        if (!err?.isNetworkError) throw err;
+      }
     }
     await addToQueue({ id: client_uuid, type: 'inspection', method: 'POST', endpoint: '/inspections', payload: full });
     const pending: Inspection = {
@@ -229,20 +236,35 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
 
   const saveVehicleRecord = useCallback(async (payload: any): Promise<any> => {
     const tempId = uuid();
-    if (isOnline) { try { return await apiCall('/vehicle-records', { method: 'POST', body: payload, token }); } catch (err) {} }
+    if (isOnline) {
+      try { return await apiCall('/vehicle-records', { method: 'POST', body: payload, token }); }
+      catch (err: any) { if (!err?.isNetworkError) throw err; }
+    }
     await addToQueue({ id: tempId, type: 'vehicle_record', method: 'POST', endpoint: '/vehicle-records', payload });
     return { id: tempId, _offline: true, entry: payload };
   }, [token, isOnline, addToQueue]);
 
   const saveShippingTicket = useCallback(async (payload: any): Promise<any> => {
     const tempId = uuid();
-    if (isOnline) { try { return await apiCall('/shipping-tickets', { method: 'POST', body: payload, token }); } catch (err) {} }
+    if (isOnline) {
+      try { return await apiCall('/shipping-tickets', { method: 'POST', body: payload, token }); }
+      catch (err: any) { if (!err?.isNetworkError) throw err; }
+    }
     await addToQueue({ id: tempId, type: 'shipping_ticket', method: 'POST', endpoint: '/shipping-tickets', payload });
     return { id: tempId, _offline: true, ...payload };
   }, [token, isOnline, addToQueue]);
 
   const patchVehicleExit = useCallback(async (id: string, payload: any): Promise<any> => {
-    if (isOnline) { try { return await apiCall(`/vehicle-records/${id}/exit`, { method: 'PATCH', body: payload, token }); } catch (err) {} }
+    // IMPORTANTE: si hay conexión pero la petición falla (permiso, validación,
+    // 500, etc.) NO debe tratarse como si estuviera offline -- antes el error
+    // se descartaba en silencio y se simulaba un "éxito" encolando el cambio,
+    // por lo que el usuario veía "Salida registrada" aunque el guardado real
+    // hubiera fallado. Ahora sólo se encola cuando realmente no hay conexión;
+    // si hay conexión y falla, se propaga el error para que se muestre al usuario.
+    if (isOnline) {
+      try { return await apiCall(`/vehicle-records/${id}/exit`, { method: 'PATCH', body: payload, token }); }
+      catch (err: any) { if (!err?.isNetworkError) throw err; }
+    }
     await addToQueue({ id, type: 'vehicle_exit', method: 'PATCH', endpoint: `/vehicle-records/${id}/exit`, payload });
     return { id, _offline: true, exit: payload };
   }, [token, isOnline, addToQueue]);
