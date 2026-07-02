@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Query, File, UploadFile, BackgroundTasks
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Query, File, UploadFile, BackgroundTasks, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import Response, JSONResponse
 from dotenv import load_dotenv
@@ -2404,14 +2404,38 @@ async def acts(u: Dict[str, Any] = Depends(get_current_user)):
     return activities[:100]
 
 
+def _check_admin_or_agent_key(u: Optional[Dict[str, Any]], agent_key: Optional[str]) -> None:
+    """Autoriza estos endpoints de mantenimiento de dos formas: (1) un usuario
+    admin autenticado normal, o (2) una clave de servicio fija (AGENT_ADMIN_KEY,
+    configurada como secreto del Space) para que la automatización programada
+    del agente pueda refrescar los tokens de Gmail/Drive cada ~45 min sin
+    depender de una sesión de usuario ni del JWT_SECRET real."""
+    expected = os.environ.get("AGENT_ADMIN_KEY", "").strip()
+    if expected and agent_key and agent_key.strip() == expected:
+        return
+    if u and is_admin(u):
+        return
+    raise HTTPException(403)
+
 @api_router.post("/admin/refresh-sheets-token")
-async def refresh_sheets_token(body: Dict[str, Any], u: Dict[str, Any] = Depends(get_current_user)):
+async def refresh_sheets_token(
+    body: Dict[str, Any],
+    x_agent_key: Optional[str] = Header(default=None),
+    creds: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
+):
     """
     Permite inyectar el access token de Google Drive/Sheets al entorno del servidor.
     Se llama desde el sandbox (que sí tiene el token OAuth fresco) para mantener
     la sincronización con Google Sheets activa.
     """
-    if not is_admin(u): raise HTTPException(403)
+    u = None
+    if creds:
+        try:
+            p = pyjwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            u = await db.users.find_one({"id": p.get("sub")}, {"_id": 0, "password_hash": 0})
+        except Exception:
+            u = None
+    _check_admin_or_agent_key(u, x_agent_key)
     token = body.get("token", "").strip()
     if not token: raise HTTPException(400, "Token requerido")
     os.environ["GOOGLEDRIVE_ACCESS_TOKEN"] = token
@@ -2420,14 +2444,25 @@ async def refresh_sheets_token(body: Dict[str, Any], u: Dict[str, Any] = Depends
 
 
 @api_router.post("/admin/refresh-gmail-token")
-async def refresh_gmail_token(body: Dict[str, Any], u: Dict[str, Any] = Depends(get_current_user)):
+async def refresh_gmail_token(
+    body: Dict[str, Any],
+    x_agent_key: Optional[str] = Header(default=None),
+    creds: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
+):
     """
     Permite inyectar el access token de Gmail al entorno del servidor.
     Se llama desde el sandbox (que sí tiene el token OAuth fresco, auto-refrescado)
     para poder enviar correos vía la API de Gmail (HTTPS), ya que HuggingFace
     Spaces bloquea los puertos SMTP salientes.
     """
-    if not is_admin(u): raise HTTPException(403)
+    u = None
+    if creds:
+        try:
+            p = pyjwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            u = await db.users.find_one({"id": p.get("sub")}, {"_id": 0, "password_hash": 0})
+        except Exception:
+            u = None
+    _check_admin_or_agent_key(u, x_agent_key)
     token = body.get("token", "").strip()
     if not token: raise HTTPException(400, "Token requerido")
     os.environ["GMAIL_ACCESS_TOKEN"] = token
