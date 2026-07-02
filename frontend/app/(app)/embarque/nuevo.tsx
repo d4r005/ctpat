@@ -48,7 +48,7 @@ export default function EmbarqueNuevo() {
     // If params change, we could update form, but usually initial state is enough for 'nuevo'
   }, [params]);
   const [sigTarget, setSigTarget] = useState<'almacenista' | 'guardia' | null>(null);
-  const [almacenistaOpcion, setAlmacenistaOpcion] = useState<'CARLOS CANIBALES' | 'CYNTHIA SAUCEDA' | 'OTRO' | ''>('');
+  const [almacenistaOpcion, setAlmacenistaOpcion] = useState<'CARLOS CANIZALES' | 'CYNTHIA SAUCEDA' | 'OTRO' | ''>('');
 
   const set = (k: string, v: any) => setForm({ ...form, [k]: v });
 
@@ -193,7 +193,7 @@ export default function EmbarqueNuevo() {
           <Section title={t('almacen').toUpperCase()}>
             <Text style={styles.label}>{`${t('almacenista_caps').toUpperCase()} *`}</Text>
             <View style={[styles.optionsRow, { marginBottom: spacing.md }]}>
-              {(['CARLOS CANIBALES', 'CYNTHIA SAUCEDA', 'OTRO'] as const).map((o) => (
+              {(['CARLOS CANIZALES', 'CYNTHIA SAUCEDA', 'OTRO'] as const).map((o) => (
                 <Pressable
                   key={o}
                   onPress={() => {
@@ -359,6 +359,7 @@ function SignatureModal({ sigTarget, onClose, sigRef, onOK, t }: any) {
           <Signature
             ref={sigRef}
             onOK={onOK}
+            onEmpty={() => alert(t('firma_vacia'))}
             webStyle={`.m-signature-pad--footer{display:none;}.m-signature-pad{box-shadow:none;border:2px solid #09090B;}body,html{background:#FFF;height:100%;}`}
             autoClear={false}
             imageType="image/jpeg"

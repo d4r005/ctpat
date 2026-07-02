@@ -32,6 +32,11 @@ export default function CasetaDetail() {
   const sigRef = React.useRef<any>(null);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'supervisor' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+  // Borrar sólo la salida (deshacer) es una acción destructiva reservada a
+  // admin real — a diferencia de "isAdmin" arriba, que también incluye
+  // supervisor para edición normal.
+  const isRealAdmin = user?.role === 'admin' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+  const [deletingExit, setDeletingExit] = useState(false);
 
   const [entryForm, setEntryForm] = useState<any>(null);
   const [exitData, setExitData] = useState<any>({
@@ -121,6 +126,39 @@ export default function CasetaDetail() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDeleteExit = () => {
+    if (deletingExit) return;
+    Alert.alert(
+      t('eliminar_proceso_title') || 'Eliminar salida',
+      `${t('eliminar_salida_msg') || '¿Seguro que quieres eliminar la salida registrada de esta unidad? La entrada e inspección se conservan. No se puede deshacer.'}`,
+      [
+        { text: t('cancelar') || 'Cancelar', style: 'cancel' },
+        {
+          text: t('eliminar') || 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingExit(true);
+            try {
+              await apiCall(`/vehicle-records/${id}/exit`, { method: 'DELETE', token });
+              setExitData({
+                cortina_salida: '', sello_salida: '', sello_salida_2: '', condicion_salida: '',
+                numero_tractor_salida: '', numero_caja_salida: '', numero_caja_salida_2: '',
+                guardia_salida_nombre: '',
+              } as any);
+              setShowExit(false);
+              await load();
+              Alert.alert(t('exito') || 'Listo', t('salida_eliminada_msg') || 'La salida fue eliminada.');
+            } catch (e: any) {
+              Alert.alert(t('error') || 'Error', e.message);
+            } finally {
+              setDeletingExit(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const pickPhoto = async (section: 'entry' | 'exit', field: string) => {
@@ -389,7 +427,16 @@ export default function CasetaDetail() {
             >
               <Ionicons name="log-out" size={20} color="#FFF" />
               <Text style={styles.sectionTitle}>{t('registrador_salida').toUpperCase()}</Text>
-              <Ionicons name={showExit ? "chevron-up" : "chevron-down"} size={20} color="#FFF" style={{ marginLeft: 'auto' }} />
+              {rec.status === 'salida' && isRealAdmin && (
+                <Pressable
+                  onPress={(e) => { e.stopPropagation(); handleDeleteExit(); }}
+                  style={{ marginLeft: 'auto', marginRight: spacing.sm, padding: 4 }}
+                  disabled={deletingExit}
+                >
+                  {deletingExit ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="trash-outline" size={20} color="#FFF" />}
+                </Pressable>
+              )}
+              <Ionicons name={showExit ? "chevron-up" : "chevron-down"} size={20} color="#FFF" style={rec.status === 'salida' && isRealAdmin ? undefined : { marginLeft: 'auto' }} />
             </Pressable>
 
             {showExit && (
@@ -481,6 +528,7 @@ export default function CasetaDetail() {
                   else setEntryForm({ ...entryForm, firma_operador: sig });
                   setShowSig(false);
                 }}
+                onEmpty={() => alert(t('firma_vacia'))}
                 webStyle={`.m-signature-pad--footer{display:none;}`}
               />
             </View>

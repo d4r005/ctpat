@@ -508,6 +508,28 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
   // El botón de email se activa si hay registro real (no virtual/pending)
   const canEmail = !item._is_pending && (!!relatedRecord || (!item._is_virtual && item.entry));
 
+  // "Generar ticket" aparece cuando la inspección ya está completa pero
+  // todavía no existe ticket de embarque para esta unidad — este botón no
+  // existía antes, así que no había forma directa de saltar a crear el
+  // ticket con los datos ya prellenados (placas, compañía, caja, etc.).
+  const canGenerateTicket = !item._is_pending && inspectionComplete && !hasTicket;
+  const linkedInspectionId = relatedRecord?.inspection_id || relatedInsps[0]?.id || (type === 'inspeccion' ? item.id : '');
+  const handleGenerateTicket = () => {
+    router.push({
+      pathname: '/embarque/nuevo',
+      params: {
+        record_id: relatedRecord?.id || '',
+        inspection_id: linkedInspectionId || '',
+        placas: plates !== 'S/P' ? plates : '',
+        compania: relatedRecord?.entry?.compania_transporte || '',
+        trailer: relatedRecord?.entry?.numero_caja || '',
+        sello: relatedRecord?.entry?.sello_entrada || '',
+        operador: relatedRecord?.entry?.chofer_nombre || '',
+        destino: relatedRecord?.entry?.destino || '',
+      },
+    });
+  };
+
   // El botón de eliminar sólo aplica a registros reales (no filas virtuales/pendientes
   // armadas en el cliente a partir de otra colección) y sólo lo puede usar un admin.
   const canDelete = isAdmin && !item._is_virtual && !item._is_pending && !!item.id;
@@ -594,6 +616,14 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
             <Ionicons name="mail-outline" size={14} color={canEmail ? '#0A2540' : '#9CA3AF'} />
             <Text style={[styles.emailBtnText, !canEmail && { color: '#9CA3AF' }]}>{t('enviar_correo_caps').toUpperCase()}</Text>
           </Pressable>
+
+          {/* BOTÓN GENERAR TICKET — visible sólo si ya hay inspección completa y aún no hay ticket */}
+          {canGenerateTicket && (
+            <Pressable style={styles.ticketBtn} onPress={handleGenerateTicket}>
+              <Ionicons name="cube-outline" size={14} color="#FFF" />
+              <Text style={styles.ticketBtnText}>{(t('generar_ticket_caps') || 'GENERAR TICKET').toUpperCase()}</Text>
+            </Pressable>
+          )}
         </View>
       </View>
 
@@ -656,6 +686,8 @@ const styles = StyleSheet.create({
   emailBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1.5, borderColor: '#0A2540', borderRadius: 2 },
   emailBtnDisabled: { borderColor: '#D1D5DB' },
   emailBtnText: { fontWeight: '900', fontSize: 9, color: '#0A2540' },
+  ticketBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#F59E0B', borderRadius: 2 },
+  ticketBtnText: { fontWeight: '900', fontSize: 9, color: '#FFF' },
   statusSide: { alignItems: 'flex-end', width: 100 },
   statusChip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 2, width: '100%', alignItems: 'center' },
   statusChipText: { color: '#FFF', fontWeight: '900', fontSize: 9 },

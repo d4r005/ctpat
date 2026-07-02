@@ -315,8 +315,64 @@ def is_admin(user: Dict[str, Any]) -> bool:
     return user.get("email") in admins or user.get("role") == "admin"
 
 # --- Helpers de notificaciones (alertas de seguimiento del proceso) ---
+def _expo_push_batch(messages: List[Dict[str, Any]]):
+    """Envía un lote (máx. 100) de mensajes a la API de push de Expo. Síncrono,
+    pensado para correr dentro de run_in_executor. No lanza excepción: un
+    fallo de push nunca debe tumbar el flujo de notificaciones en la app."""
+    try:
+        r = requests.post(
+            "https://exp.host/--/api/v2/push/send",
+            json=messages,
+            headers={"Accept": "application/json", "Accept-Encoding": "gzip, deflate", "Content-Type": "application/json"},
+            timeout=10,
+        )
+        if r.status_code >= 300:
+            logger.warning(f"Expo push: respuesta {r.status_code}: {r.text[:300]}")
+        else:
+            body = r.json()
+            # Expo reporta por-mensaje si un token quedó inválido/desregistrado;
+            # lo logueamos para poder limpiar tokens muertos a futuro.
+            for item in body.get("data", []):
+                if item.get("status") == "error":
+                    logger.warning(f"Expo push error: {item.get('message')} ({item.get('details')})")
+    except Exception as e:
+        logger.error(f"Expo push batch error: {e}")
+
+async def _send_push_to_users(user_ids: List[str], title: str, message: str, **extra):
+    """Envía notificación push REAL (Expo Push API) a cada usuario con push_token
+    registrado. Esto es lo que permite que suene/vibre incluso con la app en
+    segundo plano o cerrada — a diferencia del polling local, que sólo funciona
+    con la app abierta en primer plano."""
+    if not user_ids:
+        return
+    try:
+        users = await db.users.find(
+            {"id": {"$in": list(set(user_ids))}, "push_token": {"$exists": True, "$ne": None}},
+            {"_id": 0, "id": 1, "push_token": 1}
+        ).to_list(500)
+        tokens = [u["push_token"] for u in users if u.get("push_token", "").startswith("ExponentPushToken")]
+        if not tokens:
+            return
+        data_payload = {k: v for k, v in extra.items() if k in ("inspection_id", "record_id", "ticket_id", "chat_room", "kind")}
+        messages = [{
+            "to": tok,
+            "title": title,
+            "body": message,
+            "data": data_payload,
+            "sound": "default",
+            "priority": "high",       # crítico para que FCM entregue el mensaje con la app en background/cerrada
+            "channelId": "default",
+        } for tok in tokens]
+        loop = asyncio.get_event_loop()
+        for i in range(0, len(messages), 100):
+            await loop.run_in_executor(None, _expo_push_batch, messages[i:i + 100])
+    except Exception as e:
+        logger.error(f"_send_push_to_users error: {e}")
+
 async def _insert_notifications(user_ids: List[str], title: str, message: str, **extra):
-    """Inserta una notificación individual por cada user_id (evita auto-notificar duplicados)."""
+    """Inserta una notificación individual por cada user_id (evita auto-notificar duplicados)
+    y además dispara un push real vía Expo para que suene/vibre aunque la app
+    esté en segundo plano o cerrada."""
     now = datetime.now(timezone.utc).isoformat()
     docs = []
     seen = set()
@@ -330,6 +386,7 @@ async def _insert_notifications(user_ids: List[str], title: str, message: str, *
         docs.append(d)
     if docs:
         await db.notifications.insert_many(docs)
+        await _send_push_to_users(list(seen), title, message, **extra)
 
 async def notify_roles(roles: List[str], title: str, message: str, exclude_user_id: Optional[str] = None, **extra):
     """Notifica a todos los usuarios activos con alguno de los roles indicados (ej. supervisor/admin)."""
@@ -629,6 +686,49 @@ async def delete_record(rec_id: str, background_tasks: BackgroundTasks, u: Dict[
         exclude_user_id=u["id"], kind="caseta"
     )
     return {"ok": True}
+
+@api_router.delete("/vehicle-records/{rec_id}/exit")
+async def delete_exit(rec_id: str, background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Elimina SOLO la parte de SALIDA de un registro de caseta, dejando intactos
+    la entrada, la(s) inspección(es) y el ticket de embarque. Antes sólo se
+    podía borrar el proceso completo (entrada+salida juntos), así que no había
+    forma de "deshacer" una salida capturada por error sin perder todo lo demás.
+    """
+    if not is_admin(u): raise HTTPException(403)
+    rec = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "Registro no encontrado")
+    if not rec.get("exit"):
+        raise HTTPException(400, "Este registro no tiene una salida capturada")
+
+    placas = rec.get("entry", {}).get("placas_unidad", "")
+    old_exit = rec.get("exit") or {}
+
+    # Revertir status: si ya tiene inspección(es) vinculada(s), vuelve a
+    # "inspeccionado"; si no, vuelve a "entrada".
+    has_inspection = bool(rec.get("inspection_id") or rec.get("inspection_ids"))
+    new_status = "inspeccionado" if has_inspection else "entrada"
+
+    await db.vehicle_records.update_one(
+        {"id": rec_id},
+        {"$unset": {"exit": ""}, "$set": {"status": new_status}}
+    )
+
+    # Cascada: quitar sólo la fila de SALIDA del sheet (la de ENTRADA se conserva)
+    background_tasks.add_task(_sheet_delete_rows_by_ids, "Entradas_Salidas", [f"{rec_id}:salida"])
+    # Limpieza best-effort de las fotos/firma propias de la salida (sello VVTT,
+    # firma del guardia) — sin tocar la carpeta completa de evidencia de la placa.
+    background_tasks.add_task(cleanup_drive_evidence, "", old_exit)
+
+    background_tasks.add_task(
+        notify_roles, ["supervisor", "admin"],
+        f"🗑️ Salida eliminada: {placas or 'S/P'}",
+        f"{u['name']} eliminó la salida registrada de la unidad {placas or 'S/P'}. El registro vuelve a estado '{new_status}'.",
+        exclude_user_id=u["id"], record_id=rec_id, kind="salida_eliminada"
+    )
+    return {"ok": True, "status": new_status}
+
 
 
 # ========== Email: Reporte Consolidado ==========
@@ -1300,7 +1400,7 @@ async def delete_inspection(insp_id: str, background_tasks: BackgroundTasks, u: 
     return {"ok": True}
 
 @api_router.post("/inspections/{insp_id}/approve", response_model=Inspection)
-async def approve_insp(insp_id: str, body: ApprovalBody, u: Dict[str, Any] = Depends(get_current_user)):
+async def approve_insp(insp_id: str, body: ApprovalBody, background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
     now = datetime.now(timezone.utc).isoformat()
     update = {"approval_status": "aprobada", "approval_note": body.note, "approved_by": body.name, "approved_by_name": body.name, "approved_sig": ensure_clean_image(body.signature), "approved_by_signature": ensure_clean_image(body.signature), "approved_at": now}
     await db.inspections.update_one({"id": insp_id}, {"$set": update})
@@ -1314,6 +1414,30 @@ async def approve_insp(insp_id: str, body: ApprovalBody, u: Dict[str, Any] = Dep
             "message": f"Tu inspección de la unidad {d.get('placas_unidad')} ha sido aprobada por {u['name']}.",
             "inspection_id": insp_id, "kind": "approved", "created_at": datetime.now(timezone.utc).isoformat()
         })
+
+        # Alerta de seguimiento: avisar a supervisor/admin que ya pueden generar
+        # el ticket de embarque de esta unidad (antes no se avisaba a nadie
+        # tras aprobar, por eso "no llegaba mensaje" para el siguiente paso).
+        placas_d = d.get("placas_unidad", "S/P")
+        ya_tiene_ticket = False
+        rec = None
+        if d.get("record_id"):
+            rec = await db.vehicle_records.find_one({"id": d["record_id"]}, {"_id": 0})
+        if not rec:
+            pl = re.sub(r"[^A-Z0-9]", "", (placas_d or "").upper())
+            if pl:
+                rec = await db.vehicle_records.find_one(
+                    {"entry.placas_unidad": {"$regex": pl, "$options": "i"}},
+                    sort=[("created_at", -1)]
+                )
+        ya_tiene_ticket = bool(rec and rec.get("has_shipping_ticket"))
+        if not ya_tiene_ticket:
+            background_tasks.add_task(
+                notify_roles, ["supervisor", "admin"],
+                f"📦 Lista para embarque: {placas_d}",
+                f"La inspección de la unidad {placas_d} fue aprobada por {u['name']}. Ya se puede generar el ticket de embarque.",
+                exclude_user_id=u["id"], inspection_id=insp_id, record_id=(rec.get("id") if rec else None), kind="embarque_pendiente"
+            )
 
     return Inspection(**d)
 
@@ -1331,13 +1455,29 @@ async def create_ticket(body: ShippingTicketCreate, background_tasks: Background
             {"$set": {"shipping_ticket_id": tid, "has_shipping_ticket": True}}
         )
     else:
-        # Auto-vincular por placas si no viene record_id
+        # Auto-vincular por placas si no viene record_id.
+        # OJO: antes esto excluía registros con status=="salida", lo cual
+        # rompía el vínculo cuando el ticket se genera DESPUÉS de que la
+        # unidad ya salió (por ejemplo, completando datos faltantes de un
+        # registro histórico) — el ticket se guardaba pero nunca quedaba
+        # ligado al vehicle_record, así que el panel maestro seguía
+        # mostrando el proceso como incompleto para siempre. Ahora se
+        # prioriza el registro más reciente de esa placa que AÚN NO tenga
+        # ticket, sin importar si ya salió o no.
         pl = re.sub(r"[^A-Z0-9]", "", (body.placas_unidad or "").upper())
         if pl:
             rec_by_plates = await db.vehicle_records.find_one(
-                {"entry.placas_unidad": {"$regex": pl, "$options": "i"}, "status": {"$ne": "salida"}},
+                {"entry.placas_unidad": {"$regex": pl, "$options": "i"}, "has_shipping_ticket": {"$ne": True}},
                 sort=[("created_at", -1)]
             )
+            if not rec_by_plates:
+                # Fallback: si por lo que sea todos los registros de esa placa ya
+                # tienen ticket marcado, igual se liga al más reciente para no
+                # dejar el ticket huérfano.
+                rec_by_plates = await db.vehicle_records.find_one(
+                    {"entry.placas_unidad": {"$regex": pl, "$options": "i"}},
+                    sort=[("created_at", -1)]
+                )
             if rec_by_plates:
                 await db.vehicle_records.update_one(
                     {"id": rec_by_plates["id"]},

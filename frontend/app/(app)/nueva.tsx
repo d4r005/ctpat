@@ -756,6 +756,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
                    else setData({...data, guard_signature: sig});
                    setShowSig(false);
                 }}
+                onEmpty={() => alert(t('firma_vacia'))}
                 webStyle={`.m-signature-pad--footer{display:none;}`}
               />
             </View>

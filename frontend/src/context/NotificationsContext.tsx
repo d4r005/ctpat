@@ -179,11 +179,21 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       }
 
       if (Platform.OS === 'android') {
+        // OJO: en Android, una vez que un dispositivo YA creó el canal
+        // "default" (p. ej. con una versión anterior del APK), estos ajustes
+        // (sonido/vibración/importancia) quedan fijos en ese dispositivo y
+        // esta llamada NO los actualiza — sólo aplica en instalaciones nuevas
+        // o si el usuario borra los datos de la app. Si un usuario reporta
+        // que nunca suena/vibra, pedirle que vaya a Ajustes > Apps > NAF >
+        // Notificaciones > canal "default" y revise sonido/vibración ahí.
         await Notifications.setNotificationChannelAsync('default', {
           name: 'default',
           importance: Notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#FF231F7C',
+          sound: 'default',
+          enableVibrate: true,
+          showBadge: true,
         });
       }
     })();

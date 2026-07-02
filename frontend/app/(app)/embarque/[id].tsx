@@ -21,6 +21,11 @@ export default function EmbarqueDetail() {
   const [saving, setSaving] = useState(false);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'supervisor' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+  // Borrar el ticket es una acción destructiva reservada a admin real (el
+  // backend rechaza con 403 a supervisor, así que el botón sólo se muestra
+  // a quien realmente puede usarlo).
+  const isRealAdmin = user?.role === 'admin' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+  const [deleting, setDeleting] = useState(false);
 
   const load = async () => {
     try {
@@ -33,6 +38,31 @@ export default function EmbarqueDetail() {
   };
 
   useEffect(() => { if (id) load(); }, [id]);
+
+  const handleDelete = () => {
+    if (deleting) return;
+    Alert.alert(
+      t('eliminar_proceso_title') || 'Eliminar ticket',
+      `${t('eliminar_ticket_msg') || '¿Seguro que quieres eliminar este ticket de embarque? Se borra de la base de datos y de Google Sheets. No se puede deshacer.'}`,
+      [
+        { text: t('cancelar') || 'Cancelar', style: 'cancel' },
+        {
+          text: t('eliminar') || 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await apiCall(`/shipping-tickets/${id}`, { method: 'DELETE', token });
+              router.back();
+            } catch (e: any) {
+              Alert.alert(t('error') || 'Error', e.message);
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleUpdate = async () => {
     setSaving(true);
@@ -68,6 +98,11 @@ export default function EmbarqueDetail() {
         {isAdmin && (
           <Pressable onPress={() => editMode ? handleUpdate() : setEditMode(true)} style={styles.editBtn}>
             {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.editBtnText}>{editMode ? t('guardar').toUpperCase() : t('editar').toUpperCase()}</Text>}
+          </Pressable>
+        )}
+        {isRealAdmin && (
+          <Pressable onPress={handleDelete} disabled={deleting} style={{ padding: 6 }}>
+            {deleting ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="trash-outline" size={22} color="#FFF" />}
           </Pressable>
         )}
       </View>

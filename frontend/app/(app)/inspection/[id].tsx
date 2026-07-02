@@ -9,6 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import Signature from '@/src/components/SignaturePad';
 import { useInspections, Inspection, InspectionPoint } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
+import { apiCall } from '@/src/api/client';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import { sanitizePlate } from '@/src/utils/text';
 import { getInspectionPoints } from '@/src/constants/inspectionPoints';
@@ -20,7 +21,7 @@ export default function InspectionDetail() {
   const router = useRouter();
   const { t } = useTranslation();
   const { getById, approveInspection, rejectInspection, updateInspection } = useInspections();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.email?.toLowerCase().includes('d.trujillo') || user?.email?.toLowerCase().includes('d4r005');
   const [insp, setInsp] = useState<Inspection | undefined>(undefined);
   const [generating, setGenerating] = useState(false);
@@ -38,6 +39,7 @@ export default function InspectionDetail() {
   const isSupervisor = user?.role === 'supervisor';
 
   const canEdit = isAdmin; // Solo administrador puede editar/modificar/borrar
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -166,6 +168,31 @@ export default function InspectionDetail() {
       router.replace('/(app)/supervisor');
     } catch (e: any) { alert(e.message); }
     finally { setActing(false); }
+  };
+
+  const handleDelete = () => {
+    if (!id || deleting) return;
+    Alert.alert(
+      t('eliminar_proceso_title') || 'Eliminar inspección',
+      `${t('eliminar_inspeccion_msg') || '¿Seguro que quieres eliminar esta inspección? Se borra de la base de datos, de Google Sheets y de la evidencia en Drive. No se puede deshacer.'}`,
+      [
+        { text: t('cancelar') || 'Cancelar', style: 'cancel' },
+        {
+          text: t('eliminar') || 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await apiCall(`/inspections/${id}`, { method: 'DELETE', token });
+              router.canGoBack() ? router.back() : router.replace('/(app)/supervisor');
+            } catch (e: any) {
+              Alert.alert(t('error') || 'Error', e.message);
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (!insp) {
@@ -319,6 +346,11 @@ export default function InspectionDetail() {
           ) : (
             <Pressable onPress={handleExportPDF} disabled={generating}>
               {generating ? <ActivityIndicator size={20} color="#FFF" /> : <Ionicons name="download" size={24} color="#FFF" />}
+            </Pressable>
+          )}
+          {canEdit && !isEditing && (
+            <Pressable onPress={handleDelete} disabled={deleting}>
+              {deleting ? <ActivityIndicator size={20} color="#FFF" /> : <Ionicons name="trash-outline" size={24} color="#FFF" />}
             </Pressable>
           )}
         </View>
@@ -660,6 +692,7 @@ function SignatureModal({ onClose, onSave, title, t }: { onClose: () => void; on
           <Signature
             ref={sigRef}
             onOK={handleOK}
+            onEmpty={() => alert(t('firma_vacia'))}
             descriptionText={t('firme_dentro_desc')}
             clearText={t('borrar')}
             confirmText={t('guardar')}

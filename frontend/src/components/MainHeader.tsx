@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import NotificationsPanel from './NotificationsPanel';
 import ProfilePanel from './ProfilePanel';
+import { useNotifications } from '../context/NotificationsContext';
 
 import { useTranslation } from 'react-i18next';
 
@@ -24,6 +25,7 @@ interface MainHeaderProps {
 const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack, onBack, rightAction }) => {
   const { user } = useAuth();
   const { isOnline } = useInspections();
+  const { unreadCount } = useNotifications();
   const { t } = useTranslation();
   const router = useRouter();
   const [showNotifs, setShowNotifs] = React.useState(false);
@@ -54,8 +56,12 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack, onBa
           <Ionicons name="chatbubbles-outline" size={24} color="#FFF" />
         </Pressable>
         <Pressable onPress={() => setShowNotifs(true)} style={styles.notifBtn}>
-          <Ionicons name="notifications-outline" size={24} color="#FFF" />
-          <View style={styles.notifBadge} />
+          <Ionicons name={unreadCount > 0 ? "notifications" : "notifications-outline"} size={24} color="#FFF" />
+          {unreadCount > 0 && (
+            <View style={styles.notifBadge}>
+              <Text style={styles.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+            </View>
+          )}
         </Pressable>
         <Pressable onPress={() => setShowProfile(true)} style={styles.userContainer}>
           <View style={styles.avatarCircle}>
@@ -88,14 +94,22 @@ const styles = StyleSheet.create({
   },
   notifBadge: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: colors.error,
     borderWidth: 2,
     borderColor: colors.brandPrimary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  notifBadgeText: {
+    color: '#FFF',
+    fontSize: 9,
+    fontWeight: '900',
   },
   backBtn: {
     marginRight: spacing.md,

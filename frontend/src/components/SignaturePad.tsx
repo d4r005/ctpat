@@ -11,6 +11,7 @@ if (Platform.OS === 'web') {
 
 interface SignaturePadProps {
   onOK: (signature: string) => void;
+  onEmpty?: () => void;
   descriptionText?: string;
   clearText?: string;
   confirmText?: string;
@@ -26,6 +27,10 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
   useImperativeHandle(ref, () => ({
     readSignature: () => {
       if (Platform.OS === 'web' && webCanvasRef.current) {
+        if (webCanvasRef.current.isEmpty()) {
+          props.onEmpty?.();
+          return;
+        }
         const sig = webCanvasRef.current.getTrimmedCanvas().toDataURL(props.imageType || 'image/png');
         props.onOK(sig);
       } else {
@@ -47,6 +52,7 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
         <ReactSignatureCanvas
           ref={webCanvasRef}
           penColor="#000"
+          backgroundColor="#FFFFFF"
           canvasProps={{
             className: 'sigCanvas',
             style: {
@@ -64,9 +70,9 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
 
   const defaultWebStyle = `
     .m-signature-pad { box-shadow: none; border: none; }
-    .m-signature-pad--body { border: 2px solid #09090B; }
+    .m-signature-pad--body { border: 2px solid #09090B; background-color: #FFFFFF; }
     .m-signature-pad--footer { display: none; margin: 0px; }
-    body, html { background-color: transparent; }
+    body, html { background-color: #FFFFFF; }
   `;
 
   return (
@@ -74,10 +80,21 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
       <SignatureScreen
         ref={signatureRef}
         onOK={props.onOK}
+        onEmpty={props.onEmpty}
         descriptionText={props.descriptionText || i18n.t('firme_dentro_desc')}
         webStyle={props.webStyle || defaultWebStyle}
         autoClear={props.autoClear ?? false}
         imageType={props.imageType || 'image/png'}
+        // Fondo blanco explícito en el propio canvas (no solo CSS): sin esto,
+        // el buffer del canvas queda transparente y al exportar (sobre todo en
+        // JPEG, y en algunos Android también en PNG) el área vacía se rellena
+        // de NEGRO en vez de blanco — eso es lo que se veía como "firma en negro".
+        backgroundColor="#FFFFFF"
+        // Evita el bug de captura en negro por aceleración por hardware del
+        // WebView en ciertos equipos Android (la textura de GPU no se puede
+        // leer al hacer toDataURL). Forzar capa de software es el fix
+        // documentado por la propia librería para este caso.
+        androidLayerType="software"
       />
     </View>
   );

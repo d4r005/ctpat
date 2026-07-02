@@ -553,6 +553,7 @@ export default function CasetaNuevo() {
               <Signature
                 ref={sigRef}
                 onOK={(sig) => { setFirmaOperador(sig); setShowSig(false); }}
+                onEmpty={() => alert(t('firma_vacia'))}
                 webStyle={`.m-signature-pad--footer{display:none;}.m-signature-pad{box-shadow:none;border:2px solid #09090B;}body,html{background:#FFF;height:100%;}`}
                 autoClear={false}
                 imageType="image/jpeg"
