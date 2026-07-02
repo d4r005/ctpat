@@ -33,6 +33,19 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("SRIUC-CORE")
 
 ROOT_DIR = Path(__file__).parent
+
+def _load_naf_logo_b64() -> str:
+    """Logo NAF (North America Flooring) embebido en base64 para mostrarlo
+    en la esquina superior izquierda del reporte consolidado PDF/correo,
+    sin depender de una URL externa (igual criterio que fotos/firmas)."""
+    try:
+        p = ROOT_DIR / "assets" / "naf_logo.png"
+        with open(p, "rb") as f:
+            return "data:image/png;base64," + base64.b64encode(f.read()).decode()
+    except Exception:
+        return ""
+
+NAF_LOGO_B64 = _load_naf_logo_b64()
 load_dotenv(ROOT_DIR / '.env')
 
 mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
@@ -1031,9 +1044,10 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
     css = (
         "body{font-family:Arial,Helvetica,sans-serif;font-size:9px;color:#1a1a1a;margin:0;padding:16px;background:#f4f4f4;}"
         ".pw{max-width:780px;margin:0 auto;background:#FFF;padding:20px;border:1px solid #ddd;}"
-        ".hb{background:#0A2540;color:#FFF;text-align:center;padding:16px;margin-bottom:20px;}"
+        ".hb{background:#0A2540;color:#FFF;text-align:center;padding:16px;margin-bottom:20px;position:relative;}"
         ".hb h1{margin:0;font-size:18px;letter-spacing:2px;}"
         ".hb p{margin:4px 0 0;font-size:9px;opacity:.85;}"
+        ".hb-logo{position:absolute;top:12px;left:16px;height:36px;background:#FFF;padding:4px 6px;border-radius:3px;}"
         ".st{background:#0A2540;color:#FFF;padding:8px 12px;font-size:11px;"
         "font-weight:900;letter-spacing:1px;margin:20px 0 8px;text-transform:uppercase;}"
         "table{width:100%;border-collapse:collapse;}"
@@ -1333,7 +1347,9 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
     return (
         "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>" + css + "</style></head><body>"
         '<div class="pw">'
-        '<div class="hb"><h1>REPORTE CONSOLIDADO / 综合报告</h1>'
+        '<div class="hb">'
+        + (('<img src="' + NAF_LOGO_B64 + '" class="hb-logo" alt="NAF"/>') if NAF_LOGO_B64 else "")
+        + '<h1>REPORTE CONSOLIDADO / 综合报告</h1>'
         "<p>NAF INDUSTRIES · C-TPAT · Unidad: <b>" + placas + "</b> · Generado: " + now_str + "</p></div>"
         '<div class="st">1. REGISTRO DE CASETA / 门卫室记录</div>'
         + caseta_section
