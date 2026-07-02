@@ -750,22 +750,60 @@ async def update_record(rec_id: str, body: Dict[str, Any], background_tasks: Bac
 
 @api_router.delete("/vehicle-records/{rec_id}")
 async def delete_record(rec_id: str, background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Elimina el PROCESO COMPLETO de la unidad: registro de caseta + TODAS sus
+    inspecciones vinculadas + su ticket de embarque (si existe). Antes solo se
+    borraba el vehicle_record, dejando huérfanas las inspecciones/tickets en
+    Mongo -- eso hacía que "Auditoría" (POST /admin/repair-links), que
+    reconstruye registros faltantes a partir de inspecciones/tickets
+    existentes, "resucitara" el registro recién borrado en la siguiente
+    ejecución. Ahora se borra todo en cascada para que no quede nada que
+    pueda reconstruirlo.
+    """
     if not is_admin(u): raise HTTPException(403)
     rec = await db.vehicle_records.find_one({"id": rec_id}, {"_id": 0})
     if not rec:
         raise HTTPException(404, "Registro no encontrado")
     placas = rec.get("entry", {}).get("placas_unidad", "")
 
-    await db.vehicle_records.delete_one({"id": rec_id})
+    # Reunir TODAS las inspecciones vinculadas (por id y, por si acaso, por placa)
+    insp_ids = set(rec.get("inspection_ids") or [])
+    if rec.get("inspection_id"):
+        insp_ids.add(rec["inspection_id"])
+    norm_plate = _canon_plate(placas)
+    linked_insps = await db.inspections.find({"id": {"$in": list(insp_ids)}}, {"_id": 0}).to_list(50) if insp_ids else []
+    if norm_plate:
+        extra_insps = await db.inspections.find({}, {"_id": 0}).to_list(5000)
+        for i in extra_insps:
+            if _canon_plate(i.get("placas_unidad", "")) == norm_plate and i["id"] not in insp_ids:
+                insp_ids.add(i["id"])
+                linked_insps.append(i)
 
-    # Cascada: quitar de Google Sheets (fila de entrada y/o salida) y de Drive
+    ticket_id = rec.get("shipping_ticket_id")
+    ticket = await db.shipping_tickets.find_one({"id": ticket_id}, {"_id": 0}) if ticket_id else None
+    if not ticket and norm_plate:
+        all_tickets = await db.shipping_tickets.find({}, {"_id": 0}).to_list(5000)
+        ticket = next((tk for tk in all_tickets if _canon_plate(tk.get("placas_unidad", "")) == norm_plate), None)
+
+    await db.vehicle_records.delete_one({"id": rec_id})
+    if insp_ids:
+        await db.inspections.delete_many({"id": {"$in": list(insp_ids)}})
+    if ticket:
+        await db.shipping_tickets.delete_one({"id": ticket["id"]})
+
+    # Cascada: quitar de Google Sheets (entrada/salida, inspecciones y ticket) y de Drive
     background_tasks.add_task(_sheet_delete_rows_by_ids, "Entradas_Salidas", [f"{rec_id}:entrada", f"{rec_id}:salida"])
-    background_tasks.add_task(cleanup_drive_evidence, placas, rec)
+    if insp_ids:
+        background_tasks.add_task(_sheet_delete_rows_by_ids, "Inspecciones_19_Puntos", list(insp_ids))
+        background_tasks.add_task(_sheet_delete_rows_by_ids, "Inspecciones_9_Puntos", list(insp_ids))
+    if ticket:
+        background_tasks.add_task(_sheet_delete_rows_by_ids, "Tickets_Embarque", [ticket["id"]])
+    background_tasks.add_task(cleanup_drive_evidence, placas, rec, *linked_insps, ticket)
 
     background_tasks.add_task(
         notify_roles, ["supervisor", "admin"],
         f"🗑️ Registro de caseta eliminado: {placas or 'S/P'}",
-        f"{u['name']} eliminó el registro de caseta de la unidad {placas or 'S/P'} (Mongo, Sheet y evidencia de Drive).",
+        f"{u['name']} eliminó el proceso completo (caseta, {len(insp_ids)} inspección(es), ticket) de la unidad {placas or 'S/P'} (Mongo, Sheet y evidencia de Drive).",
         exclude_user_id=u["id"], kind="caseta"
     )
     return {"ok": True}

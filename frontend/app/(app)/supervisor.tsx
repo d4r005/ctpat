@@ -591,6 +591,8 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
 
   const relatedRecord = type === 'caseta' ? (item._is_virtual ? null : item) : records.find((r: any) => normalize(r.entry?.placas_unidad) === normPlates);
   const isFull = (relatedRecord?.entry?.tipo_unidad === 'full') || (item.inspection_type === '19_puntos' && item.numero_trailer?.includes('-2'));
+  const isDescarga = relatedRecord?.entry?.condicion_carga === 'descarga';
+  const showShipping = !isFull && !isDescarga;
 
   const relatedInsps = inspections.filter((i: any) => i.record_id === relatedRecord?.id || normalize(i.placas_unidad) === normPlates);
   const matchTicket = tickets.find((tk: any) => normalize(tk.placas_unidad) === normPlates);
@@ -690,7 +692,7 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
         <Text style={styles.rowSub}>{subtitle} {company !== '-' ? `· ${company}` : ''}</Text>
 
         <View style={{ marginVertical: 10 }}>
-          <ProcessTracker steps={steps} compact />
+          <ProcessTracker steps={steps} compact showShipping={showShipping} />
         </View>
 
         <View style={styles.rowActions}>

@@ -18,25 +18,23 @@ interface ProcessTrackerProps {
 
 export default function ProcessTracker({ steps, compact = false, showShipping = true, showLabels = false }: ProcessTrackerProps) {
   const { t } = useTranslation();
-  const Step = ({ icon, completed, skipped = false, label, last = false }: any) => (
+  const Step = ({ icon, completed, label, last = false }: any) => (
     <View style={[styles.stepWrapper, compact && styles.stepWrapperCompact]}>
       <View style={styles.stepContainer}>
         <View style={[
           styles.node,
           completed && styles.nodeCompleted,
-          skipped && styles.nodeSkipped,
           compact && styles.nodeCompact,
         ]}>
           <Ionicons
-            name={completed ? 'checkmark' : skipped ? 'remove' : icon}
+            name={completed ? 'checkmark' : icon}
             size={compact ? 12 : 16}
-            color={completed || skipped ? '#FFF' : colors.muted}
+            color={completed ? '#FFF' : colors.muted}
           />
         </View>
         {!last && <View style={[
           styles.line,
           completed && styles.lineCompleted,
-          skipped && styles.lineSkipped,
           compact && styles.lineCompact,
         ]} />}
       </View>
@@ -45,24 +43,24 @@ export default function ProcessTracker({ steps, compact = false, showShipping = 
           styles.label,
           compact && styles.labelCompact,
           completed && styles.labelCompleted,
-          skipped && styles.labelSkipped,
         ]}>
-          {skipped ? t('no_aplica') : label}
+          {label}
         </Text>
       ) : null}
     </View>
   );
 
-  // Siempre se dibujan los 4 nodos con el mismo ancho total, aunque el
-  // embarque no aplique (carga completa / descarga) — así el tracker no
-  // cambia de tamaño entre tarjetas y las filas quedan alineadas entre sí.
-  // Cuando no aplica, el nodo se muestra "saltado" (gris con un guion) en
-  // vez de desaparecer.
+  // Cuando el embarque no aplica (unidad FULL o condición "descarga"), el
+  // nodo de embarque se OMITE por completo -- el tracker queda lineal con
+  // solo 3 pasos (entrada, inspección, salida), en vez de mostrar un nodo
+  // "saltado"/gris que no representa una etapa real del proceso de esa unidad.
   return (
     <View style={[styles.container, compact && styles.containerCompact]}>
       <Step icon="car-outline" completed={steps.entry} label={t('entrada')} />
       <Step icon="clipboard-outline" completed={steps.inspection} label={t('inspeccion')} />
-      <Step icon="cube-outline" completed={showShipping && steps.shipping} skipped={!showShipping} label={t('embarque')} />
+      {showShipping && (
+        <Step icon="cube-outline" completed={steps.shipping} label={t('embarque')} />
+      )}
       <Step icon="exit-outline" completed={steps.exit} label={t('salida')} last />
     </View>
   );
@@ -106,10 +104,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
     borderColor: '#10B981',
   },
-  nodeSkipped: {
-    backgroundColor: '#CBD5E1',
-    borderColor: '#CBD5E1',
-  },
   line: {
     width: 25,
     height: 3,
@@ -121,9 +115,6 @@ const styles = StyleSheet.create({
   },
   lineCompleted: {
     backgroundColor: '#10B981',
-  },
-  lineSkipped: {
-    backgroundColor: '#CBD5E1',
   },
   label: {
     fontSize: 7,
@@ -139,8 +130,5 @@ const styles = StyleSheet.create({
   labelCompleted: {
     color: '#10B981',
     fontWeight: '600',
-  },
-  labelSkipped: {
-    color: '#94A3B8',
   },
 });
