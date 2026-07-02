@@ -2181,8 +2181,8 @@ async def get_analytics(u: Dict[str, Any] = Depends(get_current_user), date_from
 async def list_notifications(u: Dict[str, Any] = Depends(get_current_user)):
     # Los supervisores ven alertas críticas globales, inspectores solo las suyas
     filt = {"$or": [{"user_id": u["id"]}, {"global": True}]}
-    notifs = await db.notifications.find(filt).sort("created_at", -1).to_list(100)
-    return [{**n, "id": str(n.get("id", n.get("_id")))} for n in notifs]
+    notifs = await db.notifications.find(filt, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return notifs
 
 @api_router.post("/notifications/{id}/read")
 async def mark_read(id: str, u: Dict[str, Any] = Depends(get_current_user)):
