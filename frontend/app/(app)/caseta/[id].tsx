@@ -652,7 +652,6 @@ export default function CasetaDetail() {
                      </View>
                    )}
                 </View>
-                </View>
                 <View style={styles.photoGrid}>
                   {/* Una descarga siempre termina SIN el sello VVTT intacto (se rompe
                       para poder abrir la caja) -- la evidencia esperada en ese caso es
