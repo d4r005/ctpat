@@ -26,7 +26,7 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
 from email import encoders
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 # Configuración de Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -238,7 +238,9 @@ def ensure_clean_image(b64: str) -> str:
     if not b64 or not b64.startswith("data:image"): return b64
     try:
         header, data = b64.split(",", 1)
-        img = Image.open(io.BytesIO(base64.b64decode(data)))
+        content = base64.b64decode(data)
+        img = Image.open(io.BytesIO(content))
+        img = ImageOps.exif_transpose(img)
         if img.mode in ("RGBA", "P"):
             bg = Image.new("RGB", img.size, (255, 255, 255))
             if img.mode == "RGBA":
@@ -250,9 +252,37 @@ def ensure_clean_image(b64: str) -> str:
             img = img.convert("RGB")
         img.thumbnail((1200, 1200))
         out = io.BytesIO()
-        img.save(out, format="JPEG", quality=75)
+        img.save(out, format="JPEG", quality=85)
         return f"data:image/jpeg;base64,{base64.b64encode(out.getvalue()).decode()}"
     except: return b64
+
+def _process_image_bytes(content: bytes) -> str:
+    try:
+        img = Image.open(io.BytesIO(content))
+        img = ImageOps.exif_transpose(img)
+
+        # Si la imagen es más alta que ancha, es probable que esté rotada
+        # (especialmente para trailers y licencias que son horizontales)
+        if img.height > img.width:
+            # Solo rotar si no tiene EXIF (exif_transpose ya lo habría hecho si tuviera)
+            # Rotamos 90 grados a la derecha (o izquierda) para volverla horizontal
+            img = img.rotate(-90, expand=True)
+
+        if img.mode in ("RGBA", "P"):
+            bg = Image.new("RGB", img.size, (255, 255, 255))
+            if img.mode == "RGBA":
+                bg.paste(img, mask=img.split()[3])
+            else:
+                bg.paste(img)
+            img = bg
+        elif img.mode != "RGB":
+            img = img.convert("RGB")
+        img.thumbnail((1200, 1200))
+        out = io.BytesIO()
+        img.save(out, format="JPEG", quality=90)
+        return "data:image/jpeg;base64," + base64.b64encode(out.getvalue()).decode()
+    except Exception as e:
+        return "data:image/jpeg;base64," + base64.b64encode(content).decode()
 
 def add_watermark(b64: str) -> str:
     if not b64 or not b64.startswith("data:image"): return b64
@@ -607,10 +637,32 @@ _POINT_MAP_ALL = {n: (es, zh) for n, es, zh in _POINTS_19 + _POINTS_9}
 
 
 def _sd(d) -> str:
+    """Formatea fecha a DD/MM/YYYY HH:MM ajustando de UTC a CST (México -6h)."""
     if not d: return "-"
     try:
-        dt = datetime.fromisoformat(str(d).replace("Z", "+00:00"))
-        return dt.strftime("%d/%m/%Y %H:%M")
+        if isinstance(d, datetime):
+            dt_obj = d
+        else:
+            s = str(d)
+            if "T" in s:
+                dt_obj = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            elif "/" in s and ":" in s:
+                # Si el usuario dice que 17:10 está mal, es que es UTC.
+                try:
+                    dt_obj = datetime.strptime(s, "%d/%m/%Y %H:%M").replace(tzinfo=timezone.utc)
+                except:
+                    return s
+            else:
+                return s
+
+        # Asegurar que sea consciente de la zona horaria (asumir UTC si es naive)
+        if dt_obj.tzinfo is None:
+            dt_obj = dt_obj.replace(tzinfo=timezone.utc)
+
+        # Convertir a CST (UTC-6)
+        cst_tz = timezone(timedelta(hours=-6))
+        cst_dt = dt_obj.astimezone(cst_tz)
+        return cst_dt.strftime("%d/%m/%Y %H:%M")
     except Exception:
         return str(d)
 
@@ -620,7 +672,8 @@ def _resolve_src_to_b64(src: str) -> str:
     if not src:
         return ""
     if src.startswith("data:image"):
-        return src
+        # Auto-corregir orientación y dimensiones si ya es base64
+        return ensure_clean_image(src)
     if not src.startswith("http"):
         return ""
     try:
@@ -632,14 +685,10 @@ def _resolve_src_to_b64(src: str) -> str:
                     dl_url = "https://www.googleapis.com/drive/v3/files/" + m.group(1) + "?alt=media"
                     r = requests.get(dl_url, headers={"Authorization": "Bearer " + token}, timeout=15)
                     if r.status_code == 200:
-                        ct = r.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
-                        return "data:" + ct + ";base64," + base64.b64encode(r.content).decode()
+                        return _process_image_bytes(r.content)
         r = requests.get(src, timeout=15)
         if r.status_code == 200:
-            ct = r.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
-            if "image" not in ct:
-                ct = "image/jpeg"
-            return "data:" + ct + ";base64," + base64.b64encode(r.content).decode()
+            return _process_image_bytes(r.content)
     except Exception as exc:
         logger.warning("_resolve_src_to_b64 error (%s): %s", src[:60], exc)
     return ""
@@ -674,11 +723,14 @@ def _photo_block(url: str, label: str) -> str:
     resolved = _resolve_src_to_b64(url)
     if not resolved:
         return ""
+    # Aumentamos el ancho al 48% para que se vean mucho más grandes y legibles
     return (
-        '<div style="display:inline-block;width:30%;margin:1%;vertical-align:top;'
-        'border:1px solid #eee;padding:5px;background:#FFF;text-align:center;">'
-        '<p style="margin:0 0 4px 0;font-size:7px;font-weight:bold;color:#666;text-transform:uppercase;">' + label + "</p>"
-        '<img src="' + resolved + '" style="width:100%;height:100px;object-fit:cover;border:1px solid #ddd;" />'
+        '<div style="display:inline-block;width:48%;margin:0.8%;vertical-align:top;'
+        'border:1px solid #ddd;padding:8px;background:#FFF;text-align:center;box-sizing:border-box;border-radius:4px;">'
+        '<p style="margin:0 0 6px 0;font-size:9px;font-weight:bold;color:#333;text-transform:uppercase;background:#f8f9fa;padding:3px;">' + label + "</p>"
+        '<div style="width:100%;background:#fafafa;border:1px solid #eee;overflow:hidden;line-height:0;">'
+        '<img src="' + resolved + '" style="width:100%;height:auto;display:block;" />'
+        '</div>'
         "</div>"
     )
 
@@ -813,16 +865,18 @@ def _build_full_report_html(rec: dict, inspections: list, ticket, placas: str) -
                 foto_html = ""
                 if pt.get("photo"):
                     p_url = pt["photo"]
-                    p_info = "Cámara"
-                    if "drive.google.com" in p_url or "doc-0s-80-docs.googleusercontent.com" in p_url: p_info = "Drive"
-                    elif p_url.startswith("http"): p_info = "Web"
-
-                    foto_html = (
-                        '<div style="margin-top:4px;border:1px solid #eee;padding:4px;background:#f9fafb;">'
-                        '<p style="margin:0 0 2px 0;font-size:5.5px;color:#888;">INFO FOTO: ' + p_info + '</p>'
-                        '<img src="' + p_url + '" style="max-height:100px;max-width:240px;object-fit:contain;border:1px solid #ddd;"/>'
-                        '</div>'
-                    )
+                    resolved = _resolve_src_to_b64(p_url)
+                    if resolved:
+                        foto_html = (
+                            '<div style="margin-top:4px;border:1px solid #eee;padding:4px;background:#f9fafb;line-height:0;">'
+                            '<img src="' + resolved + '" style="width:100%;max-width:400px;height:auto;display:block;border:1px solid #ddd;"/>'
+                            '</div>'
+                        )
+                    else:
+                        foto_html = (
+                            '<div style="margin-top:4px;border:1px dashed #ccc;padding:4px;background:#f9fafb;'
+                            'color:#999;font-size:6px;">Foto no disponible (' + p_url[:40] + ')</div>'
+                        )
                 rows_html += (
                     "<tr>"
                     '<td style="text-align:center;width:28px;">' + str(num) + "</td>"

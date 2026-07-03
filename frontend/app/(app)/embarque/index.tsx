@@ -25,8 +25,30 @@ export default function EmbarqueList() {
     if (!token) return;
     setLoading(true);
     try {
-      const data = await apiCall<any[]>('/shipping-tickets', { token });
-      setTickets(Array.isArray(data) ? data : []);
+      // El guardia de embarque ahora ve tanto los tickets ya creados como las
+      // unidades en patio que requieren un ticket (status=inspeccionado).
+      const [tickets, pendingUnits] = await Promise.all([
+        apiCall<any[]>('/shipping-tickets', { token }),
+        apiCall<any[]>('/vehicle-records?status=inspeccionado', { token })
+      ]);
+
+      const existingRecordsIds = new Set(tickets.map(t => t.record_id));
+
+      // Convertimos las unidades pendientes al formato de la lista
+      const virtualTickets = pendingUnits
+        .filter(u => !existingRecordsIds.has(u.id) && u.entry?.condicion_carga !== 'descarga')
+        .map(u => ({
+          id: `new-${u.id}`,
+          record_id: u.id,
+          placas_unidad: u.entry?.placas_unidad,
+          cliente: u.entry?.descripcion_carga || 'PENDIENTE',
+          linea_transporte: u.entry?.compania_transporte,
+          numero_caja: u.entry?.numero_caja,
+          created_at: u.created_at,
+          is_virtual: true
+        }));
+
+      setTickets([...virtualTickets, ...(Array.isArray(tickets) ? tickets : [])]);
     } catch { setTickets([]); }
     finally { setLoading(false); }
   }, [token]);
@@ -49,17 +71,27 @@ export default function EmbarqueList() {
     const hasGuardia = !!tk.firma_guardia || !!tk.nombre_guardia;
     const hasAlmacenista = !!tk.firma_almacenista || !!tk.almacenista;
     const isComplete = hasGuardia && hasAlmacenista;
+    const isVirtual = !!tk.is_virtual;
 
     return (
       <Pressable
-        style={styles.card}
-        onPress={() => router.push(`/embarque/${tk.id}`)}
+        style={[styles.card, isVirtual && { borderStyle: 'dashed', borderColor: colors.info }]}
+        onPress={() => {
+          if (isVirtual) {
+            // Si es virtual, navegamos a "nuevo" pasando el record_id
+            router.push(`/embarque/nuevo?record_id=${tk.record_id}`);
+          } else {
+            router.push(`/embarque/${tk.id}`);
+          }
+        }}
       >
         <View style={{ flex: 1 }}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>{tk.placas_unidad || 'S/P'}</Text>
-            <View style={[styles.badge, { backgroundColor: isComplete ? colors.success : colors.warning }]}>
-              <Text style={styles.badgeText}>{isComplete ? t('completo').toUpperCase() : t('en_proceso').toUpperCase()}</Text>
+            <View style={[styles.badge, { backgroundColor: isVirtual ? colors.info : (isComplete ? colors.success : colors.warning) }]}>
+              <Text style={styles.badgeText}>
+                {isVirtual ? 'POR CREAR' : (isComplete ? t('completo').toUpperCase() : t('en_proceso').toUpperCase())}
+              </Text>
             </View>
           </View>
 

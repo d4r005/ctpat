@@ -46,8 +46,29 @@ export default function EmbarqueNuevo() {
   });
 
   useEffect(() => {
-    // If params change, we could update form, but usually initial state is enough for 'nuevo'
-  }, [params]);
+    const fetchRecord = async () => {
+      if (params.record_id && !form.placas_unidad) {
+        try {
+          const rec = await apiCall<any>(`/vehicle-records/${params.record_id}`, { token });
+          if (rec && rec.entry) {
+            setForm(prev => ({
+              ...prev,
+              operador: rec.entry.chofer_nombre || prev.operador,
+              linea_transporte: rec.entry.compania_transporte || prev.linea_transporte,
+              placas_unidad: rec.entry.placas_unidad || prev.placas_unidad,
+              numero_caja: rec.entry.numero_caja || prev.numero_caja,
+              hora_llegada: rec.entry.fecha_entrada ? new Date(rec.entry.fecha_entrada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : prev.hora_llegada,
+              numero_orden_compra: rec.entry.numero_orden_compra || prev.numero_orden_compra,
+              observaciones: rec.entry.destino ? `${t('destino_caps')}: ${rec.entry.destino}` : prev.observaciones,
+            }));
+          }
+        } catch (e) {
+          console.error("Error cargando record para embarque:", e);
+        }
+      }
+    };
+    fetchRecord();
+  }, [params.record_id, token]);
   const [sigTarget, setSigTarget] = useState<'almacenista' | 'guardia' | null>(null);
   const [almacenistaOpcion, setAlmacenistaOpcion] = useState<'CARLOS CANIZALES' | 'CYNTHIA SAUCEDA' | 'OTRO' | ''>('');
   const [guardiaSeguridadOpcion, setGuardiaSeguridadOpcion] = useState<'MARIO AGUILAR' | 'ADELAIDO SAENZ' | 'OTRO' | ''>('');
@@ -360,6 +381,7 @@ function F({ label, v, on, tid, multiline, kb, placeholder }: any) {
         testID={tid}
         autoCorrect={false}
         spellCheck={false}
+        autoCapitalize="characters"
         style={[styles.input, multiline && { minHeight: 70, textAlignVertical: 'top' }]}
         value={v}
         onChangeText={(text) => on(text.toUpperCase())}

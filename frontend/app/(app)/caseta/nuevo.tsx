@@ -598,6 +598,7 @@ function Field({ label, value, onChange, testID, multiline, disabled, placeholde
         testID={testID}
         autoCorrect={false}
         spellCheck={false}
+        autoCapitalize="characters"
         style={[
           styles.input,
           multiline && { minHeight: 80, textAlignVertical: 'top' },

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "641259214725",
+    "project_id": "sriuc-naf",
+    "storage_bucket": "sriuc-naf.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:641259214725:android:a402c11ba77f8b678696ec",
+        "android_client_info": {
+          "package_name": "com.naf.inspeccion"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBMx2so-jU6XkJJwftIfS3VzQpYNZb9kmc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -520,6 +520,7 @@ export default function InspectionDetail() {
             <TextInput
               style={[styles.noteInput, { minHeight: 100 }]}
               multiline
+              autoCapitalize="characters"
               value={editData.actividad_sospechosa || insp.actividad_sospechosa}
               onChangeText={(v) => setEditData({ ...editData, actividad_sospechosa: v.toUpperCase() })}
             />
@@ -553,6 +554,7 @@ export default function InspectionDetail() {
           {isEditing ? (
             <TextInput
               style={[styles.value, { borderBottomWidth: 1, borderBottomColor: colors.border }]}
+              autoCapitalize="characters"
               value={editData.inspector_nombre || insp.inspector_nombre}
               onChangeText={(v) => setEditData({ ...editData, inspector_nombre: v.toUpperCase() })}
             />

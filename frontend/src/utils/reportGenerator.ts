@@ -27,7 +27,26 @@ const DECLARACIONES = [
 ];
 
 const safeDate = (d: any): string => {
-  try { return d ? new Date(d).toLocaleString('es-MX') : '-'; } catch { return '-'; }
+  if (!d) return '-';
+  try {
+    const date = new Date(d);
+    // Si la fecha es inválida, devolver el string original
+    if (isNaN(date.getTime())) return String(d);
+
+    // Forzamos el ajuste de zona horaria si detectamos que viene en UTC o sin zona
+    // Mexico Central es UTC-6.
+    return date.toLocaleString('es-MX', {
+      timeZone: 'America/Mexico_City',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+  } catch {
+    return String(d);
+  }
 };
 
 /** Renderiza un cuadro de firma inline (dentro de tabla o donde se necesite) */
@@ -47,9 +66,11 @@ const inlineSig = (imgSrc: string | undefined, label: string, name?: string) => 
 const getPhotoHtml = (url: string | undefined, label: string) => {
   if (!url || (!url.startsWith('data:image') && !url.startsWith('http'))) return '';
   return `
-    <div style="display:inline-block; width:30%; margin:1%; vertical-align:top; border:1px solid #eee; padding:5px; background:#FFF; text-align:center;">
-      <p style="margin:0 0 4px 0; font-size:7px; font-weight:bold; color:#666; text-transform:uppercase;">${label}</p>
-      <img src="${url}" style="width:100%; height:100px; object-fit:cover; border:1px solid #ddd;" />
+    <div style="display:inline-block; width:48%; margin:0.8%; vertical-align:top; border:1px solid #ddd; padding:8px; background:#FFF; text-align:center; box-sizing:border-box; border-radius:4px;">
+      <p style="margin:0 0 6px 0; font-size:9px; font-weight:bold; color:#333; text-transform:uppercase; background:#f8f9fa; padding:3px;">${label}</p>
+      <div style="width:100%; background:#fafafa; border:1px solid #eee; overflow:hidden; line-height:0;">
+        <img src="${url}" style="width:100%; height:auto; display:block; image-orientation: from-image;" />
+      </div>
     </div>
   `;
 };
@@ -372,7 +393,7 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
     </div>
     <div style="text-align:right;">
       <h1 style="margin:0;font-size:15px;color:#0A2540;font-weight:900;">${labels.title}</h1>
-      <p style="margin:3px 0 0 0;color:#666;font-size:9px;">${labels.generated}: ${new Date().toLocaleString('es-MX')}</p>
+      <p style="margin:3px 0 0 0;color:#666;font-size:9px;">${labels.generated}: ${new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
       ${caseta ? `<p style="margin:2px 0 0 0;color:#0A2540;font-size:9px;font-weight:bold;">Placas: ${caseta.entry?.placas_unidad || '-'} &nbsp;|&nbsp; Chofer: ${caseta.entry?.chofer_nombre || '-'}</p>` : ''}
     </div>
   </div>
@@ -409,7 +430,7 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
 
   <!-- FOOTER -->
   <div style="margin-top:30px;border-top:1px solid #eee;padding-top:10px;text-align:center;color:#aaa;font-size:8px;">
-    © ${new Date().getFullYear()} Branco Industries — Sistema SRIUC / SRIUC 系统 &nbsp;|&nbsp; Documento generado el ${new Date().toLocaleString('es-MX')}
+    © ${new Date().getFullYear()} Branco Industries — Sistema SRIUC / SRIUC 系统 &nbsp;|&nbsp; Documento generado el ${new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}
   </div>
 
 </body>

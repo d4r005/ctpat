@@ -76,7 +76,7 @@ export const SignaturePad = forwardRef((props: SignaturePadProps, ref) => {
   `;
 
   return (
-    <View style={{ flex: 1, minHeight: 280 }}>
+    <View style={{ flex: 1, width: '100%', minHeight: 280 }}>
       <SignatureScreen
         ref={signatureRef}
         onOK={props.onOK}

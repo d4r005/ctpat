@@ -134,12 +134,18 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
       }
-      if (finalStatus !== 'granted') return;
+      if (finalStatus !== 'granted') {
+        console.warn('Permiso de notificaciones rechazado');
+        return;
+      }
 
+      // En APKs standalone (produccion), getExpoPushTokenAsync requiere
+      // projectId configurado en app.json (ya esta) y credenciales de Firebase.
       const expoToken = (await Notifications.getExpoPushTokenAsync()).data;
       await apiCall('/users/push-token', { method: 'POST', body: { token: expoToken }, token });
-      console.log('Push Token registrado:', expoToken);
+      console.log('Push Token registrado con éxito');
     } catch (err) {
+      // Este error es común si no hay google-services.json configurado en el APK
       console.error('Error registrando Push Token:', err);
     }
   }, [token]);
@@ -198,7 +204,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       }
     })();
 
-    const t = setInterval(refresh, 15000); // Polling every 15s for faster response
+    const t = setInterval(refresh, 5000); // Polling cada 5s para mayor agilidad en chat/alertas
     return () => clearInterval(t);
   }, [token, refresh]);
 

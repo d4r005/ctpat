@@ -82,19 +82,45 @@ export default function CasetaDetail() {
       if (data) {
         setRec(data);
         setEntryForm(JSON.parse(JSON.stringify(data.entry)));
+
+        // --- Lógica de Autollenado de Salida ---
+        // Buscamos si existe un ticket de embarque para esta unidad para jalar sus datos.
+        let ticketData: any = null;
+        try {
+          const tickets = await apiCall<any[]>(`/shipping-tickets?record_id=${id}`, { token });
+          if (tickets && tickets.length > 0) {
+            ticketData = tickets[0];
+          }
+        } catch (e) {
+          console.log("No se encontró ticket de embarque para autollenado");
+        }
+
         if (data.exit) {
-          // En una descarga el sello VVTT se rompe por definición para poder
-          // abrir la caja y descargar la mercancía -- se autocompleta "SELLO
-          // ROTO" para no obligar al guardia a escribirlo a mano cada vez.
-          // Sólo se autocompleta si el campo aún está vacío (no pisa un valor
-          // ya capturado manualmente).
           const autoSello = data.entry?.condicion_carga === 'descarga' && !data.exit?.sello_vvtt_estado
             ? { sello_vvtt_estado: 'SELLO ROTO' }
             : {};
           setExitData((prev: any) => ({ ...prev, ...data.exit, ...autoSello }));
           setShowExit(true);
-        } else if (data.entry?.condicion_carga === 'descarga') {
-          setExitData((prev: any) => ({ ...prev, sello_vvtt_estado: 'SELLO ROTO' }));
+        } else {
+          // Si es un registro nuevo de salida, intentamos pre-llenar con lo que
+          // se capturó en la entrada o en el ticket de embarque.
+          const isDescarga = data.entry?.condicion_carga === 'descarga';
+          setExitData((prev: any) => ({
+            ...prev,
+            sello_vvtt_estado: isDescarga ? 'SELLO ROTO' : '',
+            // Las placas suelen ser las mismas que al entrar
+            placas_unidad_salida: data.entry?.placas_unidad || '',
+            placas_caja_salida: data.entry?.placas_caja || '',
+            numero_tractor_salida: data.entry?.numero_tractor || '',
+            numero_caja_salida: data.entry?.numero_caja || '',
+            numero_caja_salida_2: data.entry?.numero_caja_2 || '',
+            destino: data.entry?.destino || '',
+            // Si hay ticket de embarque, priorizamos los sellos y cantidades que puso el almacenista
+            sello_salida: ticketData?.numero_sello || '',
+            pallets: ticketData?.pallets || '',
+            cajas: ticketData?.cajas || '',
+            bultos: ticketData?.bultos || '',
+          }));
         }
       }
     } catch (e: any) {
@@ -481,6 +507,7 @@ export default function CasetaDetail() {
                   <TextInput
                     style={styles.input}
                     value={exitData.guardia_salida_nombre}
+                    autoCapitalize="characters"
                     onChangeText={(v) => setExitData((prev: any) => ({ ...prev, guardia_salida_nombre: v.toUpperCase() }))}
                     placeholder={t('nombre_guardia').toUpperCase()}
                   />
@@ -532,6 +559,7 @@ export default function CasetaDetail() {
                         value={exitData.sello_salida}
                         autoCorrect={false}
                         spellCheck={false}
+                        autoCapitalize="characters"
                         onChangeText={(v) => setExitData((prev: any) => ({ ...prev, sello_salida: v.toUpperCase() }))}
                       />
                    </View>
@@ -543,6 +571,7 @@ export default function CasetaDetail() {
                           value={exitData.sello_salida_2}
                           autoCorrect={false}
                           spellCheck={false}
+                          autoCapitalize="characters"
                           onChangeText={(v) => setExitData((prev: any) => ({ ...prev, sello_salida_2: v.toUpperCase() }))}
                         />
                      </View>
@@ -557,6 +586,7 @@ export default function CasetaDetail() {
                       value={exitData.numero_caja_salida_2}
                       autoCorrect={false}
                       spellCheck={false}
+                      autoCapitalize="characters"
                       onChangeText={(v) => setExitData((prev: any) => ({ ...prev, numero_caja_salida_2: v.toUpperCase() }))}
                     />
                   </>
@@ -592,15 +622,19 @@ export default function CasetaDetail() {
                    </View>
                 </View>
 
-                <Text style={styles.fieldLabel}>{t('inspeccion_sellos_vvtt')}</Text>
+                <Text style={styles.fieldLabel}>{rec.entry?.condicion_carga === 'descarga' ? 'SELLO ROTO' : t('inspeccion_sellos_vvtt')}</Text>
                 <View style={styles.grid}>
                    <View style={{ flex: 1 }}>
-                      <Text style={styles.fieldLabel}>Sello VVTT Estado{isFull ? ' 1' : ''}</Text>
+                      <Text style={styles.fieldLabel}>
+                        {rec.entry?.condicion_carga === 'descarga' ? 'NÚMERO DE SELLO ROTO' : `Sello VVTT Estado${isFull ? ' 1' : ''}`}
+                      </Text>
                       <TextInput
                         style={styles.input}
                         value={exitData.sello_vvtt_estado}
                         autoCorrect={false}
                         spellCheck={false}
+                        autoCapitalize="characters"
+                        placeholder={rec.entry?.condicion_carga === 'descarga' ? 'EJ: 123456' : ''}
                         onChangeText={(v) => setExitData((prev: any) => ({ ...prev, sello_vvtt_estado: v.toUpperCase() }))}
                       />
                    </View>
@@ -612,10 +646,12 @@ export default function CasetaDetail() {
                           value={exitData.sello_vvtt_estado_2}
                           autoCorrect={false}
                           spellCheck={false}
+                          autoCapitalize="characters"
                           onChangeText={(v) => setExitData((prev: any) => ({ ...prev, sello_vvtt_estado_2: v.toUpperCase() }))}
                         />
                      </View>
                    )}
+                </View>
                 </View>
                 <View style={styles.photoGrid}>
                   {/* Una descarga siempre termina SIN el sello VVTT intacto (se rompe

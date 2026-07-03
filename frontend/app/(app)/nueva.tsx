@@ -530,23 +530,47 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
           {step === 0 && (
             <View>
               <Text style={styles.label}>{t('compañia').toUpperCase()}</Text>
-              <TextInput style={styles.input} value={data.compania} onChangeText={v => setData({...data, compania: v.toUpperCase()})} />
+              <TextInput
+                style={styles.input}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                value={data.compania}
+                onChangeText={v => setData({...data, compania: v.toUpperCase()})}
+              />
 
               <Text style={styles.label}>{t('placas').toUpperCase()}</Text>
               <View style={styles.inputRow}>
-                <TextInput style={[styles.input, { flex: 1 }]} value={data.placas} onChangeText={v => setData({...data, placas: sanitizePlate(v)})} />
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  value={data.placas}
+                  onChangeText={v => setData({...data, placas: sanitizePlate(v)})}
+                />
                 <Pressable style={styles.scanBtn} onPress={() => setScanner({ visible: true, field: 'placas' })}><Ionicons name="barcode" size={24} color="#FFF" /></Pressable>
               </View>
 
               <Text style={styles.label}>{t('trailer').toUpperCase()}</Text>
               <View style={styles.inputRow}>
-                <TextInput style={[styles.input, { flex: 1 }]} value={data.trailer} onChangeText={v => setData({...data, trailer: v.toUpperCase()})} />
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  value={data.trailer}
+                  onChangeText={v => setData({...data, trailer: v.toUpperCase()})}
+                />
                 <Pressable style={styles.scanBtn} onPress={() => setScanner({ visible: true, field: 'trailer' })}><Ionicons name="barcode" size={24} color="#FFF" /></Pressable>
               </View>
 
               <Text style={styles.label}>{t('sello_alta_seguridad').toUpperCase()}</Text>
               <View style={styles.inputRow}>
-                <TextInput style={[styles.input, { flex: 1 }]} value={data.selloAlta} onChangeText={v => setData({...data, selloAlta: v.toUpperCase()})} />
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  value={data.selloAlta}
+                  onChangeText={v => setData({...data, selloAlta: v.toUpperCase()})}
+                />
                 <Pressable style={styles.scanBtn} onPress={() => setScanner({ visible: true, field: 'selloAlta' })}><Ionicons name="barcode" size={24} color="#FFF" /></Pressable>
               </View>
 
@@ -656,6 +680,8 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
                     <TextInput
                       style={styles.failInput}
                       placeholder={t('comentarios_falla')}
+                      autoCapitalize="characters"
+                      autoCorrect={false}
                       value={p.comentarios}
                       onChangeText={v => { const n = [...points]; n[originalIdx].comentarios = v.toUpperCase(); setPoints(n); }}
                     />
@@ -684,6 +710,8 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
               <TextInput
                 style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
                 multiline
+                autoCapitalize="characters"
+                autoCorrect={false}
                 placeholder={t('describa_actividad_sospechosa')}
                 value={data.actSospechosa}
                 onChangeText={v => setData({...data, actSospechosa: v.toUpperCase()})}
@@ -708,6 +736,8 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
               {(inspectorOpcion === 'OTRO' || !inspectorOpcion) && (
                 <TextInput
                   style={styles.input}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
                   value={data.inspectorNombre}
                   onChangeText={v => setData({...data, inspectorNombre: v.toUpperCase()})}
                   placeholder={t('nombre_completo_placeholder')}
