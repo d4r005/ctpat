@@ -356,6 +356,34 @@ async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(securit
 
 app = FastAPI(); api_router = APIRouter(prefix="/api")
 
+# Fields to exclude in list/activity views to avoid massive payloads (timeouts)
+MINIMAL_RECORD_PROJECTION = {
+    "entry.foto_frente_unidad": 0,
+    "entry.foto_atras_caja": 0,
+    "entry.foto_atras_caja_2": 0,
+    "entry.foto_id_chofer": 0,
+    "entry.firma_operador": 0,
+    "exit.sello_vvtt_foto": 0,
+    "exit.sello_vvtt_foto_2": 0,
+    "exit.firma_guardia": 0,
+}
+
+MINIMAL_INSPECTION_PROJECTION = {
+    "inspector_firma": 0,
+    "guard_signature": 0,
+    "approved_by_signature": 0,
+    "approved_sig": 0,
+    "points.photo": 0,
+}
+
+MINIMAL_TICKET_PROJECTION = {
+    "foto_inicio_carga": 0,
+    "foto_media_carga": 0,
+    "foto_final_carga": 0,
+    "firma_almacenista": 0,
+    "firma_guardia": 0,
+}
+
 try:
     import google.generativeai as genai
     HAS_GOOGLE_AI = True
@@ -471,7 +499,8 @@ async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Op
     filt: Dict[str, Any] = {}
     if status:
         filt["status"] = status
-    docs = await db.vehicle_records.find(filt, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    # Proyectar fuera las fotos base64 para evitar payloads gigantes y timeouts en la lista
+    docs = await db.vehicle_records.find(filt, MINIMAL_RECORD_PROJECTION).sort("created_at", -1).to_list(2000)
 
     # Enriquecer con vínculos (inspection_ids, shipping_ticket_id) en batch
     # para que el ProcessTracker del frontend sea preciso sin llamadas adicionales
@@ -1154,7 +1183,8 @@ async def create_inspection(body: InspectionCreate, background_tasks: Background
 @api_router.get("/inspections", response_model=List[Inspection])
 async def list_insps(u: Dict[str, Any] = Depends(get_current_user), scope: str = "mine"):
     filt = {} if scope == "all" and (u["role"] in ["supervisor", "admin"] or is_admin(u)) else {"user_id": u["id"]}
-    docs = await db.inspections.find(filt, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    # Proyectar fuera las fotos para la lista
+    docs = await db.inspections.find(filt, MINIMAL_INSPECTION_PROJECTION).sort("created_at", -1).to_list(2000)
     return [Inspection(**d) for d in docs]
 
 @api_router.get("/inspections/{insp_id}", response_model=Inspection)
@@ -1339,44 +1369,44 @@ async def sync_to_google_sheets(tipo: str, payload: Any):
 
             if tipo == "entrada" and key_entrada not in existing:
                 row = [
-                    key_entrada,                        # Col A: ID Registro / Unique Key
-                    data.get("inspection_id", ""),      # Col B: ID Inspección
-                    data.get("shipping_ticket_id", ""), # Col C: ID Embarque
-                    data.get("created_at", ""),         # Col D: Fecha
+                    str(key_entrada),                        # Col A: ID Registro / Unique Key
+                    str(data.get("inspection_id") or ""),      # Col B: ID Inspección
+                    str(data.get("shipping_ticket_id") or ""), # Col C: ID Embarque
+                    str(data.get("created_at") or ""),         # Col D: Fecha
                     "ENTRADA",                          # Col E: Proceso
-                    entry.get("placas_unidad", ""),
-                    entry.get("chofer_nombre", ""),
-                    entry.get("compania_transporte", ""),
-                    entry.get("numero_tractor", ""),
-                    entry.get("numero_caja", ""),
-                    entry.get("sello_entrada", ""),
-                    entry.get("destino", ""),
-                    entry.get("guardia_caseta_nombre", ""),
-                    entry.get("cortina_asignada", ""),
-                    entry.get("licencia_conductor", ""),
-                    entry.get("condicion_carga", ""),
+                    str(entry.get("placas_unidad") or ""),
+                    str(entry.get("chofer_nombre") or ""),
+                    str(entry.get("compania_transporte") or ""),
+                    str(entry.get("numero_tractor") or ""),
+                    str(entry.get("numero_caja") or ""),
+                    str(entry.get("sello_entrada") or ""),
+                    str(entry.get("destino") or ""),
+                    str(entry.get("guardia_caseta_nombre") or ""),
+                    str(entry.get("cortina_asignada") or ""),
+                    str(entry.get("licencia_conductor") or ""),
+                    str(entry.get("condicion_carga") or ""),
                 ]
                 await _sheet_append_via_api(hoja, row, key_entrada)
                 logger.info(f"Sheets ENTRADA registrada: {entry.get('placas_unidad')}")
 
             elif tipo == "salida" and ex and key_salida not in existing:
                 row = [
-                    key_salida,                         # Col A: ID Registro / Unique Key
-                    data.get("inspection_id", ""),      # Col B: ID Inspección
-                    data.get("shipping_ticket_id", ""), # Col C: ID Embarque
-                    ex.get("fecha_salida", data.get("created_at", "")), # Col D: Fecha
+                    str(key_salida),                         # Col A: ID Registro / Unique Key
+                    str(data.get("inspection_id") or ""),      # Col B: ID Inspección
+                    str(data.get("shipping_ticket_id") or ""), # Col C: ID Embarque
+                    str(ex.get("fecha_salida") or data.get("created_at") or ""), # Col D: Fecha
                     "SALIDA",                           # Col E: Proceso
-                    entry.get("placas_unidad", ""),
-                    entry.get("chofer_nombre", ""),
+                    str(entry.get("placas_unidad") or ""),
+                    str(entry.get("chofer_nombre") or ""),
                     "",
                     "",
-                    ex.get("numero_caja_salida", entry.get("numero_caja", "")),
-                    ex.get("sello_salida", ""),
-                    ex.get("destino", entry.get("destino", "")),
-                    ex.get("guardia_salida_nombre", ""),
-                    ex.get("cortina_salida", ""),
+                    str(ex.get("numero_caja_salida") or entry.get("numero_caja") or ""),
+                    str(ex.get("sello_salida") or ""),
+                    str(ex.get("destino") or entry.get("destino") or ""),
+                    str(ex.get("guardia_salida_nombre") or ""),
+                    str(ex.get("cortina_salida") or ""),
                     "",
-                    ex.get("condicion_salida", ""),
+                    str(ex.get("condicion_salida") or ""),
                 ]
                 await _sheet_append_via_api(hoja, row, key_salida)
                 logger.info(f"Sheets SALIDA registrada: {entry.get('placas_unidad')}")
@@ -1393,37 +1423,37 @@ async def sync_to_google_sheets(tipo: str, payload: Any):
                 logger.info(f"Sheets inspeccion ya existe, omitiendo: {insp_id}")
                 return
 
-            def pt(n): return pts.get(n, {}).get("estado", "-")
+            def pt(n): return str(pts.get(n, {}).get("estado") or "-")
 
             if is_19:
                 row = [
-                    insp_id,                            # Col A: ID Inspección / Unique Key
-                    data.get("record_id", ""),          # Col B: ID Registro
-                    data.get("shipping_ticket_id", ""), # Col C: ID Embarque
-                    data.get("created_at", ""),         # Col D: Fecha
+                    str(insp_id),                            # Col A: ID Inspección / Unique Key
+                    str(data.get("record_id") or ""),          # Col B: ID Registro
+                    str(data.get("shipping_ticket_id") or ""), # Col C: ID Embarque
+                    str(data.get("created_at") or ""),         # Col D: Fecha
                     "INSPECCION_19",                    # Col E: Proceso
-                    data.get("placas_unidad", ""),
-                    data.get("inspector_nombre", ""),
-                    data.get("status_general", ""),
+                    str(data.get("placas_unidad") or ""),
+                    str(data.get("inspector_nombre") or ""),
+                    str(data.get("status_general") or ""),
                     str(sum(1 for p in pts.values() if p.get("estado") == "malo")),
-                    data.get("approval_status", ""),
-                    data.get("approved_by_name", ""),
+                    str(data.get("approval_status") or ""),
+                    str(data.get("approved_by_name") or ""),
                     pt(1), pt(2), pt(3), pt(4), pt(5), pt(6), pt(7), pt(8), pt(9),
                     pt(10), pt(11), pt(12), pt(13), pt(14), pt(15), pt(16), pt(17), pt(18), pt(19)
                 ]
             else:
                 row = [
-                    insp_id,                            # Col A: ID Inspección / Unique Key
-                    data.get("record_id", ""),          # Col B: ID Registro
-                    data.get("shipping_ticket_id", ""), # Col C: ID Embarque
-                    data.get("created_at", ""),         # Col D: Fecha
+                    str(insp_id),                            # Col A: ID Inspección / Unique Key
+                    str(data.get("record_id") or ""),          # Col B: ID Registro
+                    str(data.get("shipping_ticket_id") or ""), # Col C: ID Embarque
+                    str(data.get("created_at") or ""),         # Col D: Fecha
                     "INSPECCION_9",                     # Col E: Proceso
-                    data.get("placas_unidad", ""),
-                    data.get("inspector_nombre", ""),
-                    data.get("status_general", ""),
+                    str(data.get("placas_unidad") or ""),
+                    str(data.get("inspector_nombre") or ""),
+                    str(data.get("status_general") or ""),
                     str(sum(1 for p in pts.values() if p.get("estado") == "malo")),
-                    data.get("approval_status", ""),
-                    data.get("approved_by_name", ""),
+                    str(data.get("approval_status") or ""),
+                    str(data.get("approved_by_name") or ""),
                     pt(1), pt(2), pt(3), pt(4), pt(5), pt(6), pt(7), pt(8), pt(9)
                 ]
 
@@ -1439,22 +1469,22 @@ async def sync_to_google_sheets(tipo: str, payload: Any):
                 return
 
             row = [
-                tid,                                # Col A: ID Embarque / Unique Key
-                data.get("record_id", ""),          # Col B: ID Registro
-                data.get("inspection_id", ""),      # Col C: ID Inspección
-                data.get("created_at", ""),         # Col D: Fecha
+                str(tid),                                # Col A: ID Embarque / Unique Key
+                str(data.get("record_id") or ""),          # Col B: ID Registro
+                str(data.get("inspection_id") or ""),      # Col C: ID Inspección
+                str(data.get("created_at") or ""),         # Col D: Fecha
                 "EMBARQUE",                         # Col E: Proceso
-                data.get("placas_unidad", ""),
-                data.get("cliente", ""),
-                data.get("almacenista", ""),
-                data.get("operador", ""),
-                data.get("linea_transporte", ""),
-                data.get("numero_caja", ""),
-                data.get("numero_pallets", ""),
-                data.get("numero_sello", ""),
-                data.get("nombre_guardia", ""),
-                data.get("observaciones", ""),
-                data.get("area", ""),
+                str(data.get("placas_unidad") or ""),
+                str(data.get("cliente") or ""),
+                str(data.get("almacenista") or ""),
+                str(data.get("operador") or ""),
+                str(data.get("linea_transporte") or ""),
+                str(data.get("numero_caja") or ""),
+                str(data.get("numero_pallets") or ""),
+                str(data.get("numero_sello") or ""),
+                str(data.get("nombre_guardia") or ""),
+                str(data.get("observaciones") or ""),
+                str(data.get("area") or ""),
             ]
             await _sheet_append_via_api(hoja, row, tid)
             logger.info(f"Sheets embarque registrado: {data.get('placas_unidad')}")
@@ -1754,26 +1784,26 @@ async def acts(u: Dict[str, Any] = Depends(get_current_user)):
     activities = []
 
     # Inspecciones recientes
-    insps = await db.inspections.find({}, {"_id": 0,
+    insps = await db.inspections.find({}, {
         "id": 1, "placas_unidad": 1, "inspector_nombre": 1,
-        "status_general": 1, "approval_status": 1, "created_at": 1
+        "status_general": 1, "approval_status": 1, "created_at": 1, "_id": 0
     }).sort("created_at", -1).to_list(200)
     for insp in insps:
         activities.append({
             "id": insp["id"],
             "type": "inspection",
             "title": f"Inspección: {insp.get('placas_unidad', '-')}",
-            "subtitle": insp.get("inspector_nombre", "-"),
+            "subtitle": insp.get('inspector_nombre', '-'),
             "status": insp.get("status_general", "bueno"),
             "user_name": insp.get("inspector_nombre", "-"),
             "created_at": insp.get("created_at", ""),
         })
 
     # Casetas recientes
-    recs = await db.vehicle_records.find({}, {"_id": 0,
+    recs = await db.vehicle_records.find({}, {
         "id": 1, "status": 1, "created_at": 1,
         "entry.placas_unidad": 1, "entry.chofer_nombre": 1,
-        "entry.guardia_caseta_nombre": 1
+        "entry.guardia_caseta_nombre": 1, "_id": 0
     }).sort("created_at", -1).to_list(200)
     for rec in recs:
         entry = rec.get("entry", {})
@@ -1788,8 +1818,8 @@ async def acts(u: Dict[str, Any] = Depends(get_current_user)):
         })
 
     # Tickets de embarque recientes
-    tickets = await db.shipping_tickets.find({}, {"_id": 0,
-        "id": 1, "placas_unidad": 1, "almacenista": 1, "created_at": 1
+    tickets = await db.shipping_tickets.find({}, {
+        "id": 1, "placas_unidad": 1, "almacenista": 1, "created_at": 1, "_id": 0
     }).sort("created_at", -1).to_list(200)
     for tk in tickets:
         activities.append({
