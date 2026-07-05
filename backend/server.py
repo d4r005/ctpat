@@ -2532,68 +2532,68 @@ async def merge_vehicle_records(body: MergeRecordsBody, u: Dict[str, Any] = Depe
 
 
 @api_router.post("/admin/repair-links")
-async def repair_links(u: Dict[str, Any] = Depends(get_current_user)):
+async def repair_links(background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Inicia una reconstrucción y sincronización masiva en segundo plano.
+    Evita el error de Timeout procesando los datos sin fotos y delegando
+    la tarea pesada a un hilo de background.
+    """
     if not is_admin(u): raise HTTPException(403)
 
-    logger.info("Iniciando RECONSTRUCCIÓN TOTAL desde Inspecciones y Tickets...")
+    async def _do_work():
+        logger.info("ADMIN: Iniciando tarea de background para REPARACIÓN Y RESINC...")
+        try:
+            # 1. Obtener datos proyectando fuera las fotos para velocidad
+            proj = {"_id": 0, "entry.foto_frente_unidad": 0, "entry.foto_atras_caja": 0, "entry.foto_id_chofer": 0, "entry.firma_operador": 0, "exit.sello_vvtt_foto": 0, "exit.firma_guardia": 0, "inspector_firma": 0, "guard_signature": 0, "foto_inicio_carga": 0, "foto_media_carga": 0, "foto_final_carga": 0, "firma_almacenista": 0}
 
-    # 1. Obtener toda la data existente
-    all_insps = await db.inspections.find({}, {"_id": 0}).to_list(5000)
-    all_tickets = await db.shipping_tickets.find({}, {"_id": 0}).to_list(5000)
-    all_records = await db.vehicle_records.find({}, {"_id": 0}).to_list(5000)
+            all_insps = await db.inspections.find({}, proj).to_list(10000)
+            all_tickets = await db.shipping_tickets.find({}, proj).to_list(10000)
+            all_records = await db.vehicle_records.find({}, proj).to_list(10000)
 
-    # Se usa la forma canonica (tolerante a confusiones de OCR: Z/2, O/0, I/1,
-    # S/5, B/8, G/6) para decidir si una placa "ya existe", evitando crear un
-    # registro duplicado quando la misma unidad fue leida con un caracter distinto.
-    existing_plates = {_canon_plate(r.get("entry", {}).get("placas_unidad", "")) for r in all_records}
+            # Mapas para vinculacion rapida
+            def norm(p): return _canon_plate(p)
 
-    created_count = 0
+            # 2. Reconstruir registros faltantes
+            existing_plates = {norm(r.get("entry", {}).get("placas_unidad", "")) for r in all_records}
+            missing_plates_data = {}
 
-    # Recolectar todas las placas que aparecen en inspecciones o tickets pero no en registros
-    missing_plates_data = {} # canon_plates -> {plates, type, date, data}
+            for insp in all_insps:
+                p = insp.get("placas_unidad", "").strip().upper()
+                nm = norm(p)
+                if nm and nm not in existing_plates:
+                    missing_plates_data[nm] = {"p": p, "date": insp.get("created_at"), "company": insp.get("compania_transportista"), "box": insp.get("numero_trailer"), "sello": insp.get("numero_precinto"), "driver": insp.get("inspector_nombre")}
 
-    for insp in all_insps:
-        p = insp.get("placas_unidad", "").strip().upper()
-        norm = _canon_plate(p)
-        if norm and norm not in existing_plates:
-            if norm not in missing_plates_data:
-                missing_plates_data[norm] = {"p": p, "date": insp.get("created_at"), "company": insp.get("compania_transportista"), "box": insp.get("numero_trailer"), "sello": insp.get("numero_precinto"), "driver": insp.get("inspector_nombre")}
+            for tick in all_tickets:
+                p = tick.get("placas_unidad", "").strip().upper()
+                nm = norm(p)
+                if nm and nm not in existing_plates:
+                    if nm not in missing_plates_data:
+                        missing_plates_data[nm] = {"p": p, "date": tick.get("created_at"), "company": tick.get("linea_transporte"), "box": tick.get("numero_caja"), "sello": tick.get("numero_sello"), "driver": tick.get("operador")}
 
-    for tick in all_tickets:
-        p = tick.get("placas_unidad", "").strip().upper()
-        norm = _canon_plate(p)
-        if norm and norm not in existing_plates:
-            if norm not in missing_plates_data:
-                missing_plates_data[norm] = {"p": p, "date": tick.get("created_at"), "company": tick.get("linea_transporte"), "box": tick.get("numero_caja"), "sello": tick.get("numero_sello"), "driver": tick.get("operador")}
+            for nm, data in missing_plates_data.items():
+                rid = str(uuid.uuid4())
+                await db.vehicle_records.insert_one({
+                    "id": rid, "user_id": u["id"], "status": "inspeccionado", "created_at": data["date"],
+                    "entry": {"tipo_unidad": "sencillo", "placas_unidad": data["p"], "chofer_nombre": data["driver"] or "HISTÓRICO", "compania_transporte": data["company"] or "", "numero_caja": data["box"] or "", "sello_entrada": data["sello"] or "", "guardia_caseta_nombre": "RECONSTRUIDO", "fecha_entrada": data["date"]}
+                })
+                existing_plates.add(nm)
 
-    for norm, data in missing_plates_data.items():
-        rid = str(uuid.uuid4())
-        new_record = {
-            "id": rid,
-            "user_id": u["id"],
-            "status": "inspeccionado",
-            "created_at": data["date"],
-            "entry": {
-                "tipo_unidad": "sencillo",
-                "placas_unidad": data["p"],
-                "chofer_nombre": data["driver"] or "HISTÓRICO",
-                "compania_transporte": data["company"] or "",
-                "numero_caja": data["box"] or "",
-                "sello_entrada": data["sello"] or "",
-                "guardia_caseta_nombre": "RECONSTRUIDO",
-                "fecha_entrada": data["date"]
-            }
-        }
-        await db.vehicle_records.insert_one(new_record)
-        existing_plates.add(norm)
-        created_count += 1
+            # 3. Re-vincular y RESINCRONIZAR AL SHEET
+            records = await db.vehicle_records.find({}, proj).to_list(10000)
+            for r in records:
+                # Actualizar vinculos internos
+                updated_r = await _ensure_record_links(r)
+                # Forzar sincronizacion al sheet con el formato nuevo corregido
+                await sync_to_google_sheets("entrada", updated_r)
+                if updated_r.get("exit"):
+                    await sync_to_google_sheets("salida", updated_r)
 
-    # Ahora re-vincular todo (incluyendo los nuevos)
-    records = await db.vehicle_records.find().to_list(5000)
-    for r in records:
-        await _ensure_record_links(r)
+            logger.info(f"ADMIN: Tarea finalizada. Procesados {len(records)} registros.")
+        except Exception as e:
+            logger.error(f"ADMIN: Error en tarea de reparación: {e}")
 
-    return {"status": "success", "reconstructed": created_count, "total_records": len(records)}
+    background_tasks.add_task(_do_work)
+    return {"status": "started", "message": "Proceso de vinculación y sincronización masiva iniciado. Verás los cambios en el Google Sheet gradualmente."}
 
 @api_router.get("/analytics")
 async def get_analytics(u: Dict[str, Any] = Depends(get_current_user), date_from: Optional[str] = None, date_to: Optional[str] = None):
