@@ -21,12 +21,13 @@ Sistema de Registro e Inspección de Unidades de Carga (SRIUC) desarrollado para
 - Seguimiento en tiempo real vía Google Sheets.
 - Envío automático de reportes por correo electrónico.
 
-## Configuración de Seguimiento (Google Sheets)
+## Configuración de Seguimiento (Google Sheets & Drive)
 
 El sistema sincroniza automáticamente cada etapa del proceso con una hoja de cálculo en Google Drive.
 
 1. Crea un Google Sheet y añade el script de Webhook proporcionado.
 2. Configura la URL del script en la variable de entorno `GOOGLE_SHEET_WEBHOOK_URL`.
+3. Para la gestión de archivos en Drive (evidencias fotográficas), configura la variable `GOOGLE_SERVICE_ACCOUNT_JSON` con el contenido del archivo de credenciales de la cuenta de servicio de Google Cloud.
 
 ## Credenciales de Correo
 
