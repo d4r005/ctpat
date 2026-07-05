@@ -278,10 +278,21 @@ export default function Supervisor() {
     const ticketPlates = new Set(safeTickets.map(tk => normalize(tk.placas_unidad)));
 
     if (activeTab === 'caseta') {
+      const recordsByPlate = new Map(safeRecords.map(r => [normalize(r.entry?.placas_unidad), r.id]));
+      const recordsById = new Set(safeRecords.map(r => r.id));
+
       const virtuals = safeInsps
-        .filter(i => !recordsPlates.has(normalize(i.placas_unidad)))
+        .filter(i => {
+          const normP = normalize(i.placas_unidad);
+          // Si la inspección ya tiene record_id y ese registro existe, no es virtual
+          if (i.record_id && recordsById.has(i.record_id)) return false;
+          // Si la placa coincide exactamente con un registro de caseta, no es virtual
+          if (recordsByPlate.has(normP)) return false;
+          return true;
+        })
         .map(i => ({
-           id: i.id, _is_virtual: true, status: 'inspeccionado', created_at: i.created_at,
+           ...i, // Importante: conservar record_id si existe
+           _is_virtual: true, status: 'inspeccionado', created_at: i.created_at,
            entry: { placas_unidad: i.placas_unidad, chofer_nombre: i.inspector_nombre, compania_transporte: i.compania_transportista, fecha_entrada: i.created_at, numero_caja: i.numero_trailer, sello_entrada: i.numero_precinto }
         }));
       source = [...safeRecords, ...virtuals];
@@ -699,14 +710,38 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
           <Pressable
             style={styles.actionLink}
             onPress={() => {
-              if (type === 'inspeccion') router.push(`/inspection/${item.id}`);
-              else if (type === 'embarque') router.push(`/embarque/${item.id}`);
-              else router.push(`/caseta/${relatedRecord?.id || item.id}`);
+              if (type === 'inspeccion') {
+                router.push(`/inspection/${item.id}`);
+              } else if (type === 'embarque') {
+                router.push(`/embarque/${item.id}`);
+              } else {
+                // Caso Caseta
+                const targetId = item.record_id || relatedRecord?.id || (item._is_virtual ? null : item.id);
+
+                if (targetId) {
+                  router.push(`/caseta/${targetId}`);
+                } else if (item._is_virtual) {
+                  // Si es virtual y no tiene record_id, entonces sí es un nuevo registro
+                  router.push({
+                    pathname: '/caseta/nuevo',
+                    params: {
+                      placas: item.entry?.placas_unidad || '',
+                      chofer: item.entry?.chofer_nombre || '',
+                      compania: item.entry?.compania_transporte || '',
+                      tractor: item.entry?.numero_tractor || '',
+                      caja: item.entry?.numero_caja || '',
+                      sello: item.entry?.sello_entrada || '',
+                    }
+                  });
+                } else {
+                  router.push(`/caseta/${item.id}`);
+                }
+              }
             }}
           >
             <Ionicons name="create-outline" size={14} color="#333" />
             <Text style={styles.actionLinkText}>
-              {type === 'inspeccion' ? t('editar_inspeccion').toUpperCase() : type === 'embarque' ? t('editar_ticket').toUpperCase() : t('editor_caseta').toUpperCase()}
+              {type === 'inspeccion' ? t('editar_inspeccion').toUpperCase() : type === 'embarque' ? t('editar_ticket').toUpperCase() : (item._is_virtual ? t('registrar_entrada').toUpperCase() : t('editor_caseta').toUpperCase())}
             </Text>
           </Pressable>
 

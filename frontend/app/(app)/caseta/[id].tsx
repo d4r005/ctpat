@@ -287,25 +287,40 @@ export default function CasetaDetail() {
 
   if (!rec) return (
     <SafeAreaView style={styles.safe}>
+      <View style={styles.topBar}>
+        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={24} color="#FFF" />
+        </Pressable>
+        <Text style={styles.topTitle}>{t('registro').toUpperCase()}</Text>
+      </View>
       <View style={styles.center}>
         {loadError && !loadError.notFound ? (
           <>
             <Ionicons name="cloud-offline-outline" size={40} color={colors.muted} style={{ marginBottom: spacing.md }} />
-            <Text style={{ textAlign: 'center', marginBottom: spacing.md, paddingHorizontal: spacing.lg }}>
+            <Text style={{ textAlign: 'center', marginBottom: spacing.md, paddingHorizontal: spacing.lg, fontWeight: '700', color: colors.onSurface }}>
               {t('no_pudo_cargar_registro')}
             </Text>
-            <Pressable onPress={load} style={{ backgroundColor: colors.brandPrimary, paddingVertical: 10, paddingHorizontal: 24 }}>
-              <Text style={{ color: '#FFF', fontWeight: '900' }}>{(t('reintentar') || 'REINTENTAR').toUpperCase()}</Text>
+            <Pressable onPress={load} style={{ backgroundColor: colors.brandPrimary, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 4 }}>
+              <Text style={{ color: '#FFF', fontWeight: '900', letterSpacing: 1 }}>{(t('reintentar') || 'REINTENTAR').toUpperCase()}</Text>
             </Pressable>
           </>
         ) : (
-          <Text>{t('no_hay_registros')}</Text>
+          <>
+            <Ionicons name="search-outline" size={48} color={colors.muted} style={{ marginBottom: spacing.md }} />
+            <Text style={{ textAlign: 'center', marginBottom: spacing.xxl, paddingHorizontal: spacing.lg, fontWeight: '700', color: colors.onSurface }}>
+              {t('no_hay_registros')}
+            </Text>
+            <Pressable onPress={() => router.back()} style={{ borderWidth: 2, borderColor: colors.brandPrimary, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 4 }}>
+              <Text style={{ color: colors.brandPrimary, fontWeight: '900', letterSpacing: 1 }}>{t('atras').toUpperCase()}</Text>
+            </Pressable>
+          </>
         )}
       </View>
     </SafeAreaView>
   );
 
   const isFull = rec.entry?.tipo_unidad === 'full';
+  const entryPlates = rec.entry?.placas_unidad || 'S/P';
   const inspectionsDone = Array.isArray(rec.inspection_ids) ? rec.inspection_ids.length : (rec.inspection_id ? 1 : 0);
 
   return (
@@ -314,7 +329,7 @@ export default function CasetaDetail() {
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#FFF" />
         </Pressable>
-        <Text style={styles.topTitle}>{t('registro').toUpperCase()}: {rec.entry.placas_unidad}</Text>
+        <Text style={styles.topTitle}>{t('registro').toUpperCase()}: {entryPlates}</Text>
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>

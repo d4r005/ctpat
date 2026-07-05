@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView,
   Platform, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Signature from '@/src/components/SignaturePad';
@@ -47,6 +47,14 @@ const DECLARACIONES = [
 
 export default function CasetaNuevo() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    placas?: string;
+    chofer?: string;
+    compania?: string;
+    tractor?: string;
+    caja?: string;
+    sello?: string;
+  }>();
   const { token } = useAuth();
   const { saveVehicleRecord } = useInspections();
   const { t } = useTranslation();
@@ -77,6 +85,19 @@ export default function CasetaNuevo() {
   // "Número de precinto" sin distinguir; ahora se elige el tipo con un botón
   // y sólo entonces se despliega el campo correspondiente para escribir.
   const [tipoSelloEntrada, setTipoSelloEntrada] = useState<'precinto' | 'alta_seguridad' | null>(null);
+
+  // Prefill from params
+  useEffect(() => {
+    if (params.placas) setPlacas(sanitizePlate(params.placas));
+    if (params.chofer) setChofer(params.chofer);
+    if (params.compania) setCompania(params.compania);
+    if (params.tractor) setTractor(params.tractor);
+    if (params.caja) setNumeroCaja(params.caja);
+    if (params.sello) {
+      setSelloEntrada(params.sello);
+      setTipoSelloEntrada('precinto');
+    }
+  }, [params]);
 
   // Caja 2 (Full)
   const [companiaCaja2, setCompaniaCaja2] = useState('');
