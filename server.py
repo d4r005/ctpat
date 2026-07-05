@@ -573,6 +573,11 @@ async def create_record(body: VehicleEntry, background_tasks: BackgroundTasks, u
     for f in ["foto_frente_unidad", "foto_atras_caja", "foto_atras_caja_2", "foto_id_chofer", "firma_operador"]:
         if full_doc["entry"].get(f): full_doc["entry"][f] = ensure_clean_image(full_doc["entry"][f])
     await db.vehicle_records.insert_one(full_doc)
+
+    # Auto-vincular inspecciones/tickets previos antes de sincronizar al sheet
+    # Esto evita que se "pierda" la información al registrar una unidad virtual
+    full_doc = await _ensure_record_links(full_doc)
+
     # Sincronizar automáticamente al sheet
     background_tasks.add_task(sync_to_google_sheets, "entrada", full_doc)
     return VehicleRecord(**full_doc)
@@ -1369,44 +1374,40 @@ async def sync_to_google_sheets(tipo: str, payload: Any):
 
             if tipo == "entrada" and key_entrada not in existing:
                 row = [
-                    str(key_entrada),                        # Col A: ID Registro / Unique Key
-                    str(data.get("inspection_id") or ""),      # Col B: ID Inspección
-                    str(data.get("shipping_ticket_id") or ""), # Col C: ID Embarque
-                    str(data.get("created_at") or ""),         # Col D: Fecha
-                    "ENTRADA",                          # Col E: Proceso
-                    str(entry.get("placas_unidad") or ""),
-                    str(entry.get("chofer_nombre") or ""),
-                    str(entry.get("compania_transporte") or ""),
-                    str(entry.get("numero_tractor") or ""),
-                    str(entry.get("numero_caja") or ""),
-                    str(entry.get("sello_entrada") or ""),
-                    str(entry.get("destino") or ""),
-                    str(entry.get("guardia_caseta_nombre") or ""),
-                    str(entry.get("cortina_asignada") or ""),
-                    str(entry.get("licencia_conductor") or ""),
-                    str(entry.get("condicion_carga") or ""),
+                    str(key_entrada),                           # A: ID_Registro
+                    str(data.get("created_at") or ""),          # B: Fecha
+                    "ENTRADA",                                  # C: Proceso
+                    str(entry.get("placas_unidad") or ""),       # D: Placas
+                    str(entry.get("chofer_nombre") or ""),       # E: Chofer
+                    str(entry.get("compania_transporte") or ""), # F: Compañía
+                    str(entry.get("numero_tractor") or ""),      # G: Tractor
+                    str(entry.get("numero_caja") or ""),         # H: Caja
+                    str(entry.get("sello_entrada") or ""),       # I: Sello
+                    str(entry.get("destino") or ""),             # J: Destino
+                    str(entry.get("guardia_caseta_nombre") or ""), # K: Guardia
+                    str(entry.get("cortina_asignada") or ""),    # L: Cortina
+                    str(entry.get("licencia_conductor") or ""),  # M: Licencia
+                    str(entry.get("condicion_carga") or ""),     # N: Condicion
                 ]
                 await _sheet_append_via_api(hoja, row, key_entrada)
                 logger.info(f"Sheets ENTRADA registrada: {entry.get('placas_unidad')}")
 
             elif tipo == "salida" and ex and key_salida not in existing:
                 row = [
-                    str(key_salida),                         # Col A: ID Registro / Unique Key
-                    str(data.get("inspection_id") or ""),      # Col B: ID Inspección
-                    str(data.get("shipping_ticket_id") or ""), # Col C: ID Embarque
-                    str(ex.get("fecha_salida") or data.get("created_at") or ""), # Col D: Fecha
-                    "SALIDA",                           # Col E: Proceso
-                    str(entry.get("placas_unidad") or ""),
-                    str(entry.get("chofer_nombre") or ""),
-                    "",
-                    "",
-                    str(ex.get("numero_caja_salida") or entry.get("numero_caja") or ""),
-                    str(ex.get("sello_salida") or ""),
-                    str(ex.get("destino") or entry.get("destino") or ""),
-                    str(ex.get("guardia_salida_nombre") or ""),
-                    str(ex.get("cortina_salida") or ""),
-                    "",
-                    str(ex.get("condicion_salida") or ""),
+                    str(key_salida),                            # A: ID_Registro
+                    str(ex.get("fecha_salida") or data.get("created_at") or ""), # B: Fecha
+                    "SALIDA",                                   # C: Proceso
+                    str(ex.get("placas_unidad_salida") or entry.get("placas_unidad") or ""), # D: Placas
+                    str(entry.get("chofer_nombre") or ""),       # E: Chofer
+                    str(entry.get("compania_transporte") or ""), # F: Compañía
+                    str(ex.get("numero_tractor_salida") or entry.get("numero_tractor") or ""), # G: Tractor
+                    str(ex.get("numero_caja_salida") or entry.get("numero_caja") or ""), # H: Caja
+                    str(ex.get("sello_salida") or ""),           # I: Sello
+                    str(ex.get("destino") or entry.get("destino") or ""), # J: Destino
+                    str(ex.get("guardia_salida_nombre") or ""),  # K: Guardia
+                    str(ex.get("cortina_salida") or ""),         # L: Cortina
+                    "",                                         # M: Licencia
+                    str(ex.get("condicion_salida") or ""),       # N: Condicion
                 ]
                 await _sheet_append_via_api(hoja, row, key_salida)
                 logger.info(f"Sheets SALIDA registrada: {entry.get('placas_unidad')}")
