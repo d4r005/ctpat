@@ -48,6 +48,8 @@ def _load_naf_logo_b64() -> str:
 NAF_LOGO_B64 = _load_naf_logo_b64()
 load_dotenv(ROOT_DIR / '.env')
 
+app = FastAPI(); api_router = APIRouter(prefix="/api")
+
 # Configuración de base de datos con detección automática de respaldo
 mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 client = AsyncIOMotorClient(mongo_url, maxPoolSize=50)
@@ -578,8 +580,6 @@ async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(securit
     except: raise HTTPException(401)
 
 # ========== Endpoints de API ==========
-
-app = FastAPI(); api_router = APIRouter(prefix="/api")
 
 # Fields to exclude in list/activity views to avoid massive payloads (timeouts)
 MINIMAL_RECORD_PROJECTION = {
