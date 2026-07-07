@@ -48,9 +48,29 @@ def _load_naf_logo_b64() -> str:
 NAF_LOGO_B64 = _load_naf_logo_b64()
 load_dotenv(ROOT_DIR / '.env')
 
+# Configuración de base de datos con detección automática de respaldo
 mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 client = AsyncIOMotorClient(mongo_url, maxPoolSize=50)
+
+# Detección inteligente: si DB_NAME es 'ctpat' pero está vacía, intentamos usar 'naf_inspection'
+async def get_db():
+    target = os.environ.get('DB_NAME', 'naf_inspection')
+    # Si por alguna razón el Space tiene 'ctpat' hardcodeado en sus env vars
+    # pero no tiene registros, forzamos el uso de la que sí tiene datos.
+    if target == 'ctpat':
+        count = await client['ctpat'].vehicle_records.count_documents({})
+        if count == 0:
+            return client['naf_inspection']
+    return client[target]
+
+# Variable global que se inicializa en el startup
 db = client[os.environ.get('DB_NAME', 'naf_inspection')]
+
+@app.on_event("startup")
+async def startup_db_client():
+    global db
+    db = await get_db()
+    logger.info(f"Conectado a la base de datos: {db.name}")
 
 JWT_SECRET = os.environ.get('JWT_SECRET', 'naf-secret')
 JWT_ALGORITHM = 'HS256'
