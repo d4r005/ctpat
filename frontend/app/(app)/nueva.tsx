@@ -538,7 +538,12 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
                 autoCapitalize="characters"
                 autoCorrect={false}
                 value={data.compania}
-                onChangeText={v => setData({...data, compania: v.toUpperCase()})}
+                onChangeText={v => {
+                  const upper = v.toUpperCase();
+                  if (upper !== data.compania) {
+                    setData({...data, compania: upper});
+                  }
+                }}
               />
 
               <Text style={styles.label}>{t('placas').toUpperCase()}</Text>
@@ -548,7 +553,12 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
                   autoCapitalize="characters"
                   autoCorrect={false}
                   value={data.placas}
-                  onChangeText={v => setData({...data, placas: sanitizePlate(v)})}
+                  onChangeText={v => {
+                    const clean = sanitizePlate(v);
+                    if (clean !== data.placas) {
+                      setData({...data, placas: clean});
+                    }
+                  }}
                 />
                 <Pressable style={styles.scanBtn} onPress={() => setScanner({ visible: true, field: 'placas' })}><Ionicons name="barcode" size={24} color="#FFF" /></Pressable>
               </View>
@@ -560,7 +570,12 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
                   autoCapitalize="characters"
                   autoCorrect={false}
                   value={data.trailer}
-                  onChangeText={v => setData({...data, trailer: v.toUpperCase()})}
+                  onChangeText={v => {
+                    const upper = v.toUpperCase();
+                    if (upper !== data.trailer) {
+                      setData({...data, trailer: upper});
+                    }
+                  }}
                 />
                 <Pressable style={styles.scanBtn} onPress={() => setScanner({ visible: true, field: 'trailer' })}><Ionicons name="barcode" size={24} color="#FFF" /></Pressable>
               </View>
@@ -572,7 +587,12 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
                   autoCapitalize="characters"
                   autoCorrect={false}
                   value={data.selloAlta}
-                  onChangeText={v => setData({...data, selloAlta: v.toUpperCase()})}
+                  onChangeText={v => {
+                    const upper = v.toUpperCase();
+                    if (upper !== data.selloAlta) {
+                      setData({...data, selloAlta: upper});
+                    }
+                  }}
                 />
                 <Pressable style={styles.scanBtn} onPress={() => setScanner({ visible: true, field: 'selloAlta' })}><Ionicons name="barcode" size={24} color="#FFF" /></Pressable>
               </View>
@@ -686,7 +706,14 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
                       autoCapitalize="characters"
                       autoCorrect={false}
                       value={p.comentarios}
-                      onChangeText={v => { const n = [...points]; n[originalIdx].comentarios = v.toUpperCase(); setPoints(n); }}
+                      onChangeText={v => {
+                        const upper = v.toUpperCase();
+                        if (upper !== p.comentarios) {
+                          const n = [...points];
+                          n[originalIdx].comentarios = upper;
+                          setPoints(n);
+                        }
+                      }}
                     />
                     <Pressable style={styles.photoBtn} onPress={() => pickPointPhoto(originalIdx)}>
                       {p.photo ? (
@@ -717,7 +744,12 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
                 autoCorrect={false}
                 placeholder={t('describa_actividad_sospechosa')}
                 value={data.actSospechosa}
-                onChangeText={v => setData({...data, actSospechosa: v.toUpperCase()})}
+                onChangeText={v => {
+                  const upper = v.toUpperCase();
+                  if (upper !== data.actSospechosa) {
+                    setData({...data, actSospechosa: upper});
+                  }
+                }}
               />
 
               <Text style={styles.label}>{t('nombre_inspector').toUpperCase()}</Text>
@@ -742,7 +774,12 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
                   autoCapitalize="characters"
                   autoCorrect={false}
                   value={data.inspectorNombre}
-                  onChangeText={v => setData({...data, inspectorNombre: v.toUpperCase()})}
+                  onChangeText={v => {
+                    const upper = v.toUpperCase();
+                    if (upper !== data.inspectorNombre) {
+                      setData({...data, inspectorNombre: upper});
+                    }
+                  }}
                   placeholder={t('nombre_completo_placeholder')}
                 />
               )}

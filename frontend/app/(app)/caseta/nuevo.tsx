@@ -633,7 +633,12 @@ function Field({ label, value, onChange, testID, multiline, disabled, placeholde
           disabled && { backgroundColor: colors.border, opacity: 0.6 }
         ]}
         value={disabled ? 'N/A' : value}
-        onChangeText={(text) => onChange(text.toUpperCase())}
+        onChangeText={(text) => {
+          const upper = text.toUpperCase();
+          if (upper !== value) {
+            onChange(upper);
+          }
+        }}
         multiline={!!multiline}
         placeholder={placeholder}
         placeholderTextColor={colors.muted}

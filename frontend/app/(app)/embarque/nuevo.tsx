@@ -391,7 +391,12 @@ function F({ label, v, on, tid, multiline, kb, placeholder }: any) {
         autoCapitalize="characters"
         style={[styles.input, multiline && { minHeight: 70, textAlignVertical: 'top' }]}
         value={v}
-        onChangeText={(text) => on(text.toUpperCase())}
+        onChangeText={(text) => {
+          const upper = text.toUpperCase();
+          if (upper !== v) {
+            on(upper);
+          }
+        }}
         multiline={!!multiline}
         keyboardType={kb || 'default'}
         placeholder={placeholder}

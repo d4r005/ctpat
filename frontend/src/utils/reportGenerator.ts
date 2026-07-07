@@ -293,6 +293,19 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
                 }
               </td>
             </tr>
+
+            <!-- GUARDIA: (opcional en inspección) -->
+            ${(insp as any).guard_name ? `
+            <tr>
+              <td style="padding:6px;border:1px solid #ddd;background:#f9fafb;vertical-align:middle;"><b>Guardia / 警卫</b></td>
+              <td style="padding:6px;border:1px solid #ddd;">
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                  <span style="font-size:9px;font-weight:600;">${(insp as any).guard_name}</span>
+                  ${inlineSig((insp as any).guard_signature, 'Firma Guardia / 警卫签字')}
+                </div>
+              </td>
+            </tr>
+            ` : ''}
           </table>
 
           <!-- Tabla de puntos de inspección -->
