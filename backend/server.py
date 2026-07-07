@@ -50,7 +50,7 @@ load_dotenv(ROOT_DIR / '.env')
 
 mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 client = AsyncIOMotorClient(mongo_url, maxPoolSize=50)
-db = client[os.environ.get('DB_NAME', 'ctpat')]
+db = client[os.environ.get('DB_NAME', 'naf_inspection')]
 
 JWT_SECRET = os.environ.get('JWT_SECRET', 'naf-secret')
 JWT_ALGORITHM = 'HS256'
