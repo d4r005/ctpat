@@ -63,23 +63,31 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'naf-secret')
 JWT_ALGORITHM = 'HS256'
 security = HTTPBearer()
 
-# ========== Modelos de Datos (ULTRA-FLEXIBLES: Evitan pantallas en blanco) ==========
+# ========== Modelos de Datos de Emergencia (Aceptan cualquier formato de DB) ==========
 
 class BaseConfig(BaseModel):
     class Config:
         extra = "ignore"
-        allow_population_by_field_name = True
+        validate_assignment = False
 
-class UserPublic(BaseConfig):
-    id: Optional[str] = ""
-    email: Optional[str] = ""
-    name: Optional[str] = ""
-    role: Optional[str] = "inspector"
-    active: bool = True
+class VehicleRecord(BaseConfig):
+    id: str
+    user_id: Optional[Any] = ""
+    status: Optional[Any] = "entrada"
+    entry: Optional[Dict[str, Any]] = {}
+    exit: Optional[Dict[str, Any]] = {}
+    created_at: Optional[Any] = ""
+    inspection_ids: Optional[List[str]] = []
+    has_shipping_ticket: Optional[bool] = False
 
-class TokenResponse(BaseConfig):
-    access_token: str
-    user: UserPublic
+class Inspection(BaseConfig):
+    id: str
+    placas_unidad: Optional[Any] = ""
+    status_general: Optional[Any] = "bueno"
+    inspector_nombre: Optional[Any] = ""
+    created_at: Optional[Any] = ""
+    points: Optional[List[Any]] = []
+    record_id: Optional[Any] = None
 
 class UserLogin(BaseConfig):
     email: str
@@ -91,65 +99,16 @@ class UserRegister(BaseConfig):
     name: str
     role: str = "inspector"
 
-class EscoltaInfo(BaseConfig):
-    presente: bool = False
-    compania: Optional[str] = ""
-    unidad: Optional[str] = ""
-    placas: Optional[str] = ""
-
-class VehicleEntry(BaseConfig):
-    tipo_unidad: Optional[str] = "sencillo"
-    sucursal: Optional[str] = ""
-    direccion: Optional[str] = ""
-    licencia_conductor: Optional[str] = ""
-    placas_unidad: Optional[str] = ""
-    chofer_nombre: Optional[str] = ""
-    compania_transporte: Optional[str] = ""
-    numero_tractor: Optional[str] = ""
-    compania_caja: Optional[str] = ""
-    numero_caja: Optional[str] = ""
-    placas_caja: Optional[str] = ""
-    sello_entrada: Optional[str] = ""
-    guardia_caseta_nombre: Optional[str] = ""
-    condicion_carga: Optional[str] = ""
-    descripcion_carga: Optional[str] = ""
-    destino: Optional[str] = ""
-    fecha_entrada: Optional[str] = None
-    # Otros campos como opcionales
-    foto_frente_unidad: Optional[str] = ""
-    foto_atras_caja: Optional[str] = ""
-    foto_id_chofer: Optional[str] = ""
-    firma_operador: Optional[str] = ""
-
-class VehicleExit(BaseConfig):
-    guardia_salida_nombre: Optional[str] = ""
-    condicion_salida: Optional[str] = ""
-    sello_salida: Optional[str] = ""
-    fecha_salida: Optional[str] = None
-    pallets: Optional[str] = ""
-    cajas: Optional[str] = ""
-    bultos: Optional[str] = ""
-    sello_vvtt_estado: Optional[str] = ""
-    firma_guardia: Optional[str] = ""
-
-class VehicleRecord(BaseConfig):
-    id: str
-    user_id: Optional[str] = ""
-    status: Optional[str] = "entrada"
-    entry: Optional[VehicleEntry] = None
-    exit: Optional[VehicleExit] = None
-    inspection_id: Optional[str] = None
-    inspection_ids: List[str] = []
-    shipping_ticket_id: Optional[str] = None
-    has_shipping_ticket: bool = False
-    created_at: Optional[str] = ""
-
-class InspectionPoint(BaseConfig):
-    number: int
+class UserPublic(BaseConfig):
+    id: Optional[str] = ""
+    email: Optional[str] = ""
     name: Optional[str] = ""
-    estado: Optional[str] = ""
-    comentarios: Optional[str] = ""
-    photo: Optional[str] = ""
+    role: Optional[str] = "inspector"
+    active: bool = True
+
+class TokenResponse(BaseConfig):
+    access_token: str
+    user: Dict[str, Any]
 
 class Measures(BaseConfig):
     alto: Optional[str] = ""
@@ -159,6 +118,16 @@ class Measures(BaseConfig):
 
 class InspectionCreate(BaseConfig):
     inspection_type: Optional[str] = ""
+    placas_unidad: Optional[str] = ""
+    points: List[Any] = []
+    inspector_nombre: Optional[str] = ""
+    record_id: Optional[str] = None
+    client_uuid: Optional[str] = ""
+
+class ShippingTicketCreate(BaseConfig):
+    almacenista: str
+    placas_unidad: str
+    record_id: Optional[str] = None
     compania_transportista: Optional[str] = ""
     placas_unidad: Optional[str] = ""
     numero_trailer: Optional[str] = ""
