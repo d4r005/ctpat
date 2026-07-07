@@ -76,36 +76,41 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'naf-secret')
 JWT_ALGORITHM = 'HS256'
 security = HTTPBearer()
 
-# ========== Modelos de Datos ==========
+# ========== Modelos de Datos (Configuración de Emergencia: Ignorar extras para evitar fallos de sync) ==========
 
-class UserLogin(BaseModel):
+class BaseConfig(BaseModel):
+    class Config:
+        extra = "ignore"
+        allow_population_by_field_name = True
+
+class UserLogin(BaseConfig):
     email: str
     password: str
 
-class UserRegister(BaseModel):
+class UserRegister(BaseConfig):
     email: str
     password: str
     name: str
     role: str = "inspector"
 
-class UserPublic(BaseModel):
+class UserPublic(BaseConfig):
     id: str
     email: str
     name: str
     role: str
     active: bool = True
 
-class TokenResponse(BaseModel):
+class TokenResponse(BaseConfig):
     access_token: str
     user: UserPublic
 
-class EscoltaInfo(BaseModel):
+class EscoltaInfo(BaseConfig):
     presente: bool = False
     compania: str = ""
     unidad: str = ""
     placas: str = ""
 
-class VehicleEntry(BaseModel):
+class VehicleEntry(BaseConfig):
     tipo_unidad: str = "sencillo"
     sucursal: str = ""
     direccion: str = ""
@@ -139,7 +144,7 @@ class VehicleEntry(BaseModel):
     declaraciones_aceptadas: bool = False
     fecha_entrada: Optional[str] = None
 
-class VehicleExit(BaseModel):
+class VehicleExit(BaseConfig):
     hora_apertura_cortina: str = ""
     hora_cierre_cortina: str = ""
     cortina_salida: str = ""
@@ -164,7 +169,7 @@ class VehicleExit(BaseModel):
     firma_guardia: str = ""
     fecha_salida: Optional[str] = None
 
-class VehicleRecord(BaseModel):
+class VehicleRecord(BaseConfig):
     id: str
     user_id: str
     status: str
@@ -176,20 +181,20 @@ class VehicleRecord(BaseModel):
     has_shipping_ticket: bool = False
     created_at: str
 
-class InspectionPoint(BaseModel):
+class InspectionPoint(BaseConfig):
     number: int
     name: str
     estado: str
     comentarios: str = ""
     photo: str = ""
 
-class Measures(BaseModel):
+class Measures(BaseConfig):
     alto: str = ""
     ancho: str = ""
     largo: str = ""
     capacidad: str = ""
 
-class InspectionCreate(BaseModel):
+class InspectionCreate(BaseConfig):
     inspection_type: str = ""
     compania_transportista: str = ""
     placas_unidad: str = ""
@@ -202,13 +207,12 @@ class InspectionCreate(BaseModel):
     inspector_nombre: str = ""
     inspector_firma: str = ""
     record_id: Optional[str] = None
-    # Nuevos campos
     box_type: str = ""
     measures: Optional[Measures] = None
     guard_name: str = ""
     guard_signature: str = ""
 
-class Inspection(BaseModel):
+class Inspection(BaseConfig):
     id: str
     user_id: str = ""
     created_at: str = ""
@@ -233,7 +237,6 @@ class Inspection(BaseModel):
     actividad_sospechosa: str = ""
     points: List[InspectionPoint] = []
     record_id: Optional[str] = None
-    # Nuevos campos
     box_type: str = ""
     measures: Optional[Measures] = None
     guard_name: str = ""
