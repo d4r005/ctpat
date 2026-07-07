@@ -77,6 +77,20 @@ class UserPublic(BaseConfig):
     role: Optional[str] = "inspector"
     active: bool = True
 
+class TokenResponse(BaseConfig):
+    access_token: str
+    user: UserPublic
+
+class UserLogin(BaseConfig):
+    email: str
+    password: str
+
+class UserRegister(BaseConfig):
+    email: str
+    password: str
+    name: str
+    role: str = "inspector"
+
 class EscoltaInfo(BaseConfig):
     presente: bool = False
     compania: Optional[str] = ""
@@ -146,44 +160,40 @@ class Inspection(BaseConfig):
     points: List[InspectionPoint] = []
     record_id: Optional[str] = None
 
-class ShippingTicketCreate(BaseModel):
+class ShippingTicketCreate(BaseConfig):
     almacenista: str
-    cliente: str = ""
-    operador: str = ""
-    linea_transporte: str = ""
-    numero_economico: str = ""
-    placas_unidad: str
-    numero_caja: str = ""
-    placas_caja: str = ""
-    numero_pallets: str = ""
-    numero_sello: str = ""
-    observaciones: str = ""
-    # Campos que el formulario de embarque ya capturaba en el frontend pero el
-    # backend descartaba silenciosamente por no estar declarados aqui (Pydantic
-    # ignora cualquier campo extra) -- esto hacia que Cortina/horarios llegaran
-    # siempre vacios al reporte consolidado aunque el almacenista SI los llenara.
-    hora_llegada: str = ""
-    hora_apertura_cortina: str = ""
-    hora_cierre_cortina: str = ""
-    hora_salida: str = ""
-    daño_caja: str = ""
-    area: str = ""
-    sellos: str = ""
-    numero_orden_compra: str = ""
-    foto_inicio_carga: str = ""
-    foto_media_carga: str = ""
-    foto_final_carga: str = ""
-    firma_almacenista: str = ""
-    firma_guardia: str = ""
-    nombre_guardia: str = ""
+    cliente: Optional[str] = ""
+    operador: Optional[str] = ""
+    linea_transporte: Optional[str] = ""
+    numero_economico: Optional[str] = ""
+    placas_unidad: Optional[str] = ""
+    numero_caja: Optional[str] = ""
+    placas_caja: Optional[str] = ""
+    numero_pallets: Optional[str] = ""
+    numero_sello: Optional[str] = ""
+    observaciones: Optional[str] = ""
+    hora_llegada: Optional[str] = ""
+    hora_apertura_cortina: Optional[str] = ""
+    hora_cierre_cortina: Optional[str] = ""
+    hora_salida: Optional[str] = ""
+    daño_caja: Optional[str] = ""
+    area: Optional[str] = ""
+    sellos: Optional[str] = ""
+    numero_orden_compra: Optional[str] = ""
+    foto_inicio_carga: Optional[str] = ""
+    foto_media_carga: Optional[str] = ""
+    foto_final_carga: Optional[str] = ""
+    firma_almacenista: Optional[str] = ""
+    firma_guardia: Optional[str] = ""
+    nombre_guardia: Optional[str] = ""
     record_id: Optional[str] = None
 
-class ApprovalBody(BaseModel):
-    note: str
-    name: str
-    signature: str
+class ApprovalBody(BaseConfig):
+    note: Optional[str] = ""
+    name: Optional[str] = ""
+    signature: Optional[str] = ""
 
-class SendReportEmailBody(BaseModel):
+class SendReportEmailBody(BaseConfig):
     record_id: str
     extra_emails: List[str] = []
 
