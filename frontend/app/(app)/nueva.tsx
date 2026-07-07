@@ -19,7 +19,6 @@ import { sanitizePlate } from '@/src/utils/text';
 import Signature from '@/src/components/SignaturePad';
 import * as ImagePicker from 'expo-image-picker';
 import { compressImage } from '@/src/utils/image';
-import { compressImage } from '@/src/utils/image';
 
 const TOTAL_STEPS = 4;
 
