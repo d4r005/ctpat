@@ -13,6 +13,7 @@ import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import { sanitizePlate } from '@/src/utils/text';
+import { compressImage } from '@/src/utils/image';
 
 import { useTranslation } from 'react-i18next';
 
@@ -206,12 +207,18 @@ export default function CasetaNuevo() {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) { alert(t('acceso_restringido')); return; }
         const r = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.2, base64: true });
-        if (!r.canceled && r.assets[0]?.base64) setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
+        if (!r.canceled && r.assets[0]?.base64) {
+          const b64 = await compressImage(`data:image/jpeg;base64,${r.assets[0].base64}`);
+          setter(b64);
+        }
       } else if (mode === 'gallery') {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) { alert(t('acceso_restringido')); return; }
         const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.2, base64: true });
-        if (!r.canceled && r.assets[0]?.base64) setter(`data:image/jpeg;base64,${r.assets[0].base64}`);
+        if (!r.canceled && r.assets[0]?.base64) {
+          const b64 = await compressImage(`data:image/jpeg;base64,${r.assets[0].base64}`);
+          setter(b64);
+        }
       } else {
         Alert.prompt(
           "Ingresar URL",

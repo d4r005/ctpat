@@ -117,8 +117,24 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setQueue = useCallback(async (q: SyncItem[]) => {
-    await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(q));
-    setPendingCount(q.length);
+    try {
+      await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(q));
+      setPendingCount(q.length);
+    } catch (e: any) {
+      // Error de cuota en Web (LocalStorage lleno)
+      if (e.message?.includes('quota') || e.name === 'QuotaExceededError' || e.message?.includes('exceeded the quota')) {
+        if (Platform.OS === 'web') {
+          const clear = window.confirm("⚠️ MEMORIA LLENA: No se pueden guardar más registros offline porque la memoria del navegador está llena.\n\n¿Deseas limpiar la cola de sincronización para poder seguir usando la app? (Se perderán los registros que no se han subido)");
+          if (clear) {
+            await AsyncStorage.removeItem(QUEUE_KEY);
+            setPendingCount(0);
+            return;
+          }
+        }
+      }
+      // Re-lanzar para que el llamador sepa que falló el guardado persistente
+      throw e;
+    }
   }, []);
 
   const refresh = useCallback(async () => {

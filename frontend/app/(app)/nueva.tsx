@@ -18,6 +18,8 @@ import BarcodeScanner from '@/src/components/BarcodeScanner';
 import { sanitizePlate } from '@/src/utils/text';
 import Signature from '@/src/components/SignaturePad';
 import * as ImagePicker from 'expo-image-picker';
+import { compressImage } from '@/src/utils/image';
+import { compressImage } from '@/src/utils/image';
 
 const TOTAL_STEPS = 4;
 
@@ -456,8 +458,9 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
             if (!perm.granted) { alert(t('acceso_restringido')); return; }
             const r = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.2, base64: true });
             if (!r.canceled && r.assets[0]?.base64) {
+              const b64 = await compressImage(`data:image/jpeg;base64,${r.assets[0].base64}`);
               const n = [...points];
-              n[idx].photo = `data:image/jpeg;base64,${r.assets[0].base64}`;
+              n[idx].photo = b64;
               setPoints(n);
             }
           }
@@ -469,8 +472,9 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
             if (!perm.granted) { alert(t('acceso_restringido')); return; }
             const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.2, base64: true });
             if (!r.canceled && r.assets[0]?.base64) {
+              const b64 = await compressImage(`data:image/jpeg;base64,${r.assets[0].base64}`);
               const n = [...points];
-              n[idx].photo = `data:image/jpeg;base64,${r.assets[0].base64}`;
+              n[idx].photo = b64;
               setPoints(n);
             }
           }

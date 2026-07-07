@@ -14,6 +14,7 @@ import { useInspections } from '@/src/context/InspectionContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import { sanitizePlate } from '@/src/utils/text';
 import { useTranslation } from 'react-i18next';
+import { compressImage } from '@/src/utils/image';
 
 export default function CasetaDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -224,7 +225,7 @@ export default function CasetaDetail() {
               base64: true,
             });
             if (!result.canceled && result.assets[0].base64) {
-              const b64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
+              const b64 = await compressImage(`data:image/jpeg;base64,${result.assets[0].base64}`);
               if (section === 'entry') setEntryForm((prev: any) => ({ ...prev, [field]: b64 }));
               else setExitData((prev: any) => ({ ...prev, [field]: b64 }));
             }
@@ -239,7 +240,7 @@ export default function CasetaDetail() {
               base64: true,
             });
             if (!result.canceled && result.assets[0].base64) {
-              const b64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
+              const b64 = await compressImage(`data:image/jpeg;base64,${result.assets[0].base64}`);
               if (section === 'entry') setEntryForm((prev: any) => ({ ...prev, [field]: b64 }));
               else setExitData((prev: any) => ({ ...prev, [field]: b64 }));
             }

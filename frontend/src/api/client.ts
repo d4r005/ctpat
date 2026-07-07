@@ -22,9 +22,9 @@ export async function apiCall<T = any>(path: string, opts: ApiOptions = {}): Pro
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  // Configurar timeout de 60 segundos para subidas pesadas (fotos)
+  // Configurar timeout de 120 segundos para subidas pesadas (fotos)
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60000);
+  const timeoutId = setTimeout(() => controller.abort(), 120000);
 
   try {
     const res = await fetch(url, {
@@ -58,7 +58,7 @@ export async function apiCall<T = any>(path: string, opts: ApiOptions = {}): Pro
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
-      const err: any = new Error("La solicitud tardó demasiado tiempo (timeout). Posiblemente las fotos son muy pesadas para tu conexión actual.");
+      const err: any = new Error("Error de conexión con el servidor. Posiblemente las fotos son muy pesadas o el internet es inestable. Intenta de nuevo.");
       err.isNetworkError = true;
       throw err;
     }

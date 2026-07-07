@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { compressImage } from '@/src/utils/image';
 import Signature from '@/src/components/SignaturePad';
 import { apiCall } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
@@ -86,7 +87,8 @@ export default function EmbarqueDetail() {
       base64: true,
     });
     if (!result.canceled && result.assets[0].base64) {
-      setForm({ ...form, [field]: `data:image/jpeg;base64,${result.assets[0].base64}` });
+      const b64 = await compressImage(`data:image/jpeg;base64,${result.assets[0].base64}`);
+      setForm({ ...form, [field]: b64 });
     }
   };
 

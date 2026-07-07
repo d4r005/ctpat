@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as ImagePicker from 'expo-image-picker';
+import { compressImage } from '@/src/utils/image';
 import Signature from '@/src/components/SignaturePad';
 import { useInspections, Inspection, InspectionPoint } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
@@ -82,8 +83,9 @@ export default function InspectionDetail() {
             if (!perm.granted) { alert(t('acceso_restringido')); return; }
             const r = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.5, base64: true });
             if (!r.canceled && r.assets[0]?.base64) {
+              const b64 = await compressImage(`data:image/jpeg;base64,${r.assets[0].base64}`);
               const newPoints = [...(editData.points || insp?.points || [])];
-              newPoints[idx] = { ...newPoints[idx], photo: `data:image/jpeg;base64,${r.assets[0].base64}` };
+              newPoints[idx] = { ...newPoints[idx], photo: b64 };
               setEditData({ ...editData, points: newPoints });
             }
           }
@@ -95,8 +97,9 @@ export default function InspectionDetail() {
             if (!perm.granted) { alert(t('acceso_restringido')); return; }
             const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.5, base64: true });
             if (!r.canceled && r.assets[0]?.base64) {
+              const b64 = await compressImage(`data:image/jpeg;base64,${r.assets[0].base64}`);
               const newPoints = [...(editData.points || insp?.points || [])];
-              newPoints[idx] = { ...newPoints[idx], photo: `data:image/jpeg;base64,${r.assets[0].base64}` };
+              newPoints[idx] = { ...newPoints[idx], photo: b64 };
               setEditData({ ...editData, points: newPoints });
             }
           }
