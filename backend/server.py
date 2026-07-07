@@ -50,7 +50,9 @@ load_dotenv(ROOT_DIR / '.env')
 
 mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 client = AsyncIOMotorClient(mongo_url, maxPoolSize=50)
-db = client[os.environ.get('DB_NAME', 'naf_inspection')]
+# FORZADO: naf_inspection es la única DB con los registros reales.
+# Ignoramos cualquier variable de entorno que diga lo contrario.
+db = client['naf_inspection']
 
 JWT_SECRET = os.environ.get('JWT_SECRET', 'naf-secret')
 JWT_ALGORITHM = 'HS256'
@@ -566,6 +568,7 @@ app = FastAPI(); api_router = APIRouter(prefix="/api")
 
 # Fields to exclude in list/activity views to avoid massive payloads (timeouts)
 MINIMAL_RECORD_PROJECTION = {
+    "_id": 0,
     "entry.foto_frente_unidad": 0,
     "entry.foto_atras_caja": 0,
     "entry.foto_atras_caja_2": 0,
@@ -577,6 +580,7 @@ MINIMAL_RECORD_PROJECTION = {
 }
 
 MINIMAL_INSPECTION_PROJECTION = {
+    "_id": 0,
     "inspector_firma": 0,
     "guard_signature": 0,
     "approved_by_signature": 0,
@@ -585,6 +589,7 @@ MINIMAL_INSPECTION_PROJECTION = {
 }
 
 MINIMAL_TICKET_PROJECTION = {
+    "_id": 0,
     "foto_inicio_carga": 0,
     "foto_media_carga": 0,
     "foto_final_carga": 0,
@@ -711,7 +716,7 @@ async def login(body: UserLogin):
 async def me(u: Dict[str, Any] = Depends(get_current_user)): return UserPublic(**u)
 
 # --- Caseta ---
-@api_router.get("/vehicle-records", response_model=List[VehicleRecord])
+@api_router.get("/vehicle-records")
 async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Optional[str] = None):
     # Filtro opcional por status (entrada, inspeccionado, salida)
     filt: Dict[str, Any] = {}
@@ -774,7 +779,7 @@ async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Op
             doc["shipping_ticket_id"] = ticket_id
             doc["has_shipping_ticket"] = True
 
-        enriched.append(VehicleRecord(**doc))
+        enriched.append(doc)
 
     return enriched
 
@@ -1657,12 +1662,12 @@ async def create_inspection(body: InspectionCreate, background_tasks: Background
 
     return Inspection(**doc)
 
-@api_router.get("/inspections", response_model=List[Inspection])
+@api_router.get("/inspections")
 async def list_insps(u: Dict[str, Any] = Depends(get_current_user), scope: str = "mine"):
     filt = {} if scope == "all" and (u["role"] in ["supervisor", "admin"] or is_admin(u)) else {"user_id": u["id"]}
     # Proyectar fuera las fotos para la lista
     docs = await db.inspections.find(filt, MINIMAL_INSPECTION_PROJECTION).sort("created_at", -1).to_list(2000)
-    return [Inspection(**d) for d in docs]
+    return docs
 
 @api_router.get("/inspections/{insp_id}", response_model=Inspection)
 async def get_insp(insp_id: str, u: Dict[str, Any] = Depends(get_current_user)):
@@ -1823,7 +1828,7 @@ async def create_ticket(body: ShippingTicketCreate, background_tasks: Background
     )
     return {"id": tid}
 
-@api_router.get("/shipping-tickets", response_model=List[Dict[str, Any]])
+@api_router.get("/shipping-tickets")
 async def list_tickets(u: Dict[str, Any] = Depends(get_current_user)):
     # La lista NO necesita las fotos de carga (base64, pueden pesar cientos de
     # KB - varios MB cada una) -- incluirlas en cada ticket de la lista es lo
