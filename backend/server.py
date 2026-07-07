@@ -151,6 +151,31 @@ class InspectionPoint(BaseConfig):
     comentarios: Optional[str] = ""
     photo: Optional[str] = ""
 
+class Measures(BaseConfig):
+    alto: Optional[str] = ""
+    ancho: Optional[str] = ""
+    largo: Optional[str] = ""
+    capacidad: Optional[str] = ""
+
+class InspectionCreate(BaseConfig):
+    inspection_type: Optional[str] = ""
+    compania_transportista: Optional[str] = ""
+    placas_unidad: Optional[str] = ""
+    numero_trailer: Optional[str] = ""
+    numero_precinto: Optional[str] = ""
+    sello_alta_seguridad: Optional[str] = ""
+    sello_verificado: bool = False
+    points: List[InspectionPoint] = []
+    actividad_sospechosa: Optional[str] = ""
+    inspector_nombre: Optional[str] = ""
+    inspector_firma: Optional[str] = ""
+    record_id: Optional[str] = None
+    box_type: Optional[str] = ""
+    measures: Optional[Measures] = None
+    guard_name: Optional[str] = ""
+    guard_signature: Optional[str] = ""
+    client_uuid: Optional[str] = ""
+
 class Inspection(BaseConfig):
     id: str
     placas_unidad: Optional[str] = ""
