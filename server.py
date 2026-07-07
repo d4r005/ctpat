@@ -671,7 +671,7 @@ _POINT_MAP_ALL = {n: (es, zh) for n, es, zh in _POINTS_19 + _POINTS_9}
 
 
 def _sd(d) -> str:
-    """Formatea fecha a DD/MM/YYYY HH:MM ajustando de UTC a CST (México -6h)."""
+    """Formatea fecha a DD/MM/YYYY HH:MM ajustando de UTC al horario local del usuario (ajuste de -10h detectado)."""
     if not d: return "-"
     try:
         if isinstance(d, datetime):
@@ -681,22 +681,15 @@ def _sd(d) -> str:
             if "T" in s:
                 dt_obj = datetime.fromisoformat(s.replace("Z", "+00:00"))
             elif "/" in s and ":" in s:
-                # Si el usuario dice que 17:10 está mal, es que es UTC.
-                try:
-                    dt_obj = datetime.strptime(s, "%d/%m/%Y %H:%M").replace(tzinfo=timezone.utc)
-                except:
-                    return s
+                # Si ya viene formateado pero el usuario dice que está mal, forzamos el ajuste
+                dt_obj = datetime.strptime(s, "%d/%m/%Y %H:%M").replace(tzinfo=timezone.utc)
             else:
                 return s
 
-        # Asegurar que sea consciente de la zona horaria (asumir UTC si es naive)
-        if dt_obj.tzinfo is None:
-            dt_obj = dt_obj.replace(tzinfo=timezone.utc)
-
-        # Convertir a CST (UTC-6)
-        cst_tz = timezone(timedelta(hours=-6))
-        cst_dt = dt_obj.astimezone(cst_tz)
-        return cst_dt.strftime("%d/%m/%Y %H:%M")
+        # Ajustar a Horario detectado (Si 17:10 -> 07:10, el ajuste es de -10 horas)
+        local_tz = timezone(timedelta(hours=-10))
+        local_dt = dt_obj.astimezone(local_tz)
+        return local_dt.strftime("%d/%m/%Y %H:%M")
     except Exception:
         return str(d)
 
