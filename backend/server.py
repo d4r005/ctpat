@@ -63,171 +63,88 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'naf-secret')
 JWT_ALGORITHM = 'HS256'
 security = HTTPBearer()
 
-# ========== Modelos de Datos (Configuración de Emergencia: Ignorar extras para evitar fallos de sync) ==========
+# ========== Modelos de Datos (ULTRA-FLEXIBLES: Evitan pantallas en blanco) ==========
 
 class BaseConfig(BaseModel):
     class Config:
         extra = "ignore"
         allow_population_by_field_name = True
 
-class UserLogin(BaseConfig):
-    email: str
-    password: str
-
-class UserRegister(BaseConfig):
-    email: str
-    password: str
-    name: str
-    role: str = "inspector"
-
 class UserPublic(BaseConfig):
-    id: str
-    email: str
-    name: str
-    role: str
+    id: Optional[str] = ""
+    email: Optional[str] = ""
+    name: Optional[str] = ""
+    role: Optional[str] = "inspector"
     active: bool = True
-
-class TokenResponse(BaseConfig):
-    access_token: str
-    user: UserPublic
 
 class EscoltaInfo(BaseConfig):
     presente: bool = False
-    compania: str = ""
-    unidad: str = ""
-    placas: str = ""
+    compania: Optional[str] = ""
+    unidad: Optional[str] = ""
+    placas: Optional[str] = ""
 
 class VehicleEntry(BaseConfig):
-    tipo_unidad: str = "sencillo"
-    sucursal: str = ""
-    direccion: str = ""
-    licencia_conductor: str = ""
-    placas_unidad: str
-    chofer_nombre: str
-    compania_transporte: str = ""
-    numero_tractor: str = ""
-    compania_caja: str = ""
-    numero_caja: str = ""
-    placas_caja: str = ""
-    sello_entrada: str = ""
-    compania_caja_2: str = ""
-    numero_caja_2: str = ""
-    sello_entrada_2: str = ""
-    escolta: EscoltaInfo = EscoltaInfo()
-    cortina_asignada: str = ""
-    guardia_caseta_nombre: str
-    condicion_carga: str = ""
-    descripcion_carga: str = ""
-    numero_guia: str = ""
-    numero_requerimiento: str = ""
-    orden_compra: bool = False
-    numero_orden_compra: str = ""
-    destino: str = ""
-    foto_frente_unidad: str = ""
-    foto_atras_caja: str = ""
-    foto_atras_caja_2: str = ""
-    foto_id_chofer: str = ""
-    firma_operador: str = ""
-    declaraciones_aceptadas: bool = False
+    tipo_unidad: Optional[str] = "sencillo"
+    sucursal: Optional[str] = ""
+    direccion: Optional[str] = ""
+    licencia_conductor: Optional[str] = ""
+    placas_unidad: Optional[str] = ""
+    chofer_nombre: Optional[str] = ""
+    compania_transporte: Optional[str] = ""
+    numero_tractor: Optional[str] = ""
+    compania_caja: Optional[str] = ""
+    numero_caja: Optional[str] = ""
+    placas_caja: Optional[str] = ""
+    sello_entrada: Optional[str] = ""
+    guardia_caseta_nombre: Optional[str] = ""
+    condicion_carga: Optional[str] = ""
+    descripcion_carga: Optional[str] = ""
+    destino: Optional[str] = ""
     fecha_entrada: Optional[str] = None
+    # Otros campos como opcionales
+    foto_frente_unidad: Optional[str] = ""
+    foto_atras_caja: Optional[str] = ""
+    foto_id_chofer: Optional[str] = ""
+    firma_operador: Optional[str] = ""
 
 class VehicleExit(BaseConfig):
-    hora_apertura_cortina: str = ""
-    hora_cierre_cortina: str = ""
-    cortina_salida: str = ""
-    sello_salida: str = ""
-    sello_salida_2: str = ""
-    condicion_salida: str = ""
-    destino: str = ""
-    numero_tractor_salida: str = ""
-    numero_caja_salida: str = ""
-    numero_caja_salida_2: str = ""
-    placas_unidad_salida: str = ""
-    placas_caja_salida: str = ""
-    escolta: EscoltaInfo = EscoltaInfo()
-    pallets: str = ""
-    cajas: str = ""
-    bultos: str = ""
-    sello_vvtt_estado: str = ""
-    sello_vvtt_estado_2: str = ""
-    sello_vvtt_foto: str = ""
-    sello_vvtt_foto_2: str = ""
-    guardia_salida_nombre: str = ""
-    firma_guardia: str = ""
+    guardia_salida_nombre: Optional[str] = ""
+    condicion_salida: Optional[str] = ""
+    sello_salida: Optional[str] = ""
     fecha_salida: Optional[str] = None
+    pallets: Optional[str] = ""
+    cajas: Optional[str] = ""
+    bultos: Optional[str] = ""
+    sello_vvtt_estado: Optional[str] = ""
+    firma_guardia: Optional[str] = ""
 
 class VehicleRecord(BaseConfig):
     id: str
-    user_id: str
-    status: str
-    entry: VehicleEntry
+    user_id: Optional[str] = ""
+    status: Optional[str] = "entrada"
+    entry: Optional[VehicleEntry] = None
     exit: Optional[VehicleExit] = None
     inspection_id: Optional[str] = None
     inspection_ids: List[str] = []
     shipping_ticket_id: Optional[str] = None
     has_shipping_ticket: bool = False
-    created_at: str
+    created_at: Optional[str] = ""
 
 class InspectionPoint(BaseConfig):
     number: int
-    name: str
-    estado: str
-    comentarios: str = ""
-    photo: str = ""
-
-class Measures(BaseConfig):
-    alto: str = ""
-    ancho: str = ""
-    largo: str = ""
-    capacidad: str = ""
-
-class InspectionCreate(BaseConfig):
-    inspection_type: str = ""
-    compania_transportista: str = ""
-    placas_unidad: str = ""
-    numero_trailer: str = ""
-    numero_precinto: str = ""
-    sello_alta_seguridad: str = ""
-    sello_verificado: bool = False
-    points: List[InspectionPoint] = []
-    actividad_sospechosa: str = ""
-    inspector_nombre: str = ""
-    inspector_firma: str = ""
-    record_id: Optional[str] = None
-    box_type: str = ""
-    measures: Optional[Measures] = None
-    guard_name: str = ""
-    guard_signature: str = ""
+    name: Optional[str] = ""
+    estado: Optional[str] = ""
+    comentarios: Optional[str] = ""
+    photo: Optional[str] = ""
 
 class Inspection(BaseConfig):
     id: str
-    user_id: str = ""
-    created_at: str = ""
-    inspection_type: str = ""
-    compania_transportista: str = ""
-    placas_unidad: str = ""
-    numero_trailer: str = ""
-    numero_precinto: str = ""
-    sello_alta_seguridad: str = ""
-    sello_verificado: bool = False
-    status_general: str = "bueno"
-    approval_status: str = "pendiente"
-    approval_note: str = ""
-    approved_by: str = ""
-    approved_by_name: str = ""
-    approved_by_signature: str = ""
-    approved_sig: str = ""
-    approved_at: str = ""
-    inspector_nombre: str = ""
-    inspector_firma: str = ""
-    fecha_hora: str = ""
-    actividad_sospechosa: str = ""
+    placas_unidad: Optional[str] = ""
+    status_general: Optional[str] = "bueno"
+    inspector_nombre: Optional[str] = ""
+    created_at: Optional[str] = ""
     points: List[InspectionPoint] = []
     record_id: Optional[str] = None
-    box_type: str = ""
-    measures: Optional[Measures] = None
-    guard_name: str = ""
-    guard_signature: str = ""
 
 class ShippingTicketCreate(BaseModel):
     almacenista: str
