@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView,
   Platform, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Signature from '@/src/components/SignaturePad';
@@ -136,6 +136,55 @@ export default function CasetaNuevo() {
 
   // AI OCR state
   const [isScanning, setIsScanning] = useState(false);
+
+  const resetForm = useCallback(() => {
+    setStep(0);
+    setTipoUnidad('sencillo');
+    setLicencia('');
+    setPlacas('');
+    setChofer('');
+    setCompania('');
+    setTractor('');
+    setCompaniaCaja('');
+    setNumeroCaja('');
+    setPlacasCaja('');
+    setSelloEntrada('');
+    setSelloEntradaNA(false);
+    setTipoSelloEntrada(null);
+    setCompaniaCaja2('');
+    setNumeroCaja2('');
+    setSelloEntrada2('');
+    setSelloEntradaNA2(false);
+    setTipoSelloEntrada2(null);
+    setEscoltaPresente(false);
+    setEscoltaCompania('');
+    setEscoltaUnidad('');
+    setEscoltaPlacas('');
+    setFotoFrente('');
+    setFotoAtras('');
+    setFotoAtras2('');
+    setFotoId('');
+    setCortina('');
+    setGuardiaCaseta('');
+    setGuardiaOpcion('');
+    setCondicionCarga('');
+    setDescripcionCarga('');
+    setOrdenCompra(false);
+    setNumOrdenCompra('');
+    setDestino('');
+    setHoraLlegada(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }));
+    setAceptaTerminos(false);
+    setFirmaOperador('');
+  }, [t]);
+
+  useFocusEffect(
+    useCallback(() => {
+      // Si NO hay placas en los params, significa que es un registro totalmente nuevo y limpio
+      if (!params.placas) {
+        resetForm();
+      }
+    }, [params.placas, resetForm])
+  );
 
   const handleScanIA = async () => {
     try {
