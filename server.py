@@ -105,6 +105,7 @@ class VehicleEntry(BaseModel):
     firma_operador: str = ""
     declaraciones_aceptadas: bool = False
     fecha_entrada: Optional[str] = None
+    hora_llegada: Optional[str] = ""
 
 class VehicleExit(BaseModel):
     hora_apertura_cortina: str = ""

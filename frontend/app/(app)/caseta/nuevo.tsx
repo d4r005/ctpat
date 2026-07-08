@@ -127,6 +127,7 @@ export default function CasetaNuevo() {
   const [ordenCompra, setOrdenCompra] = useState(false);
   const [numOrdenCompra, setNumOrdenCompra] = useState('');
   const [destino, setDestino] = useState('');
+  const [horaLlegada, setHoraLlegada] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }));
 
   // Step 3 — Declaraciones + firma
   const [aceptaTerminos, setAceptaTerminos] = useState(false);
@@ -268,6 +269,7 @@ export default function CasetaNuevo() {
         orden_compra: ordenCompra,
         numero_orden_compra: ordenCompra ? numOrdenCompra.trim().toUpperCase() : '',
         destino: destino.trim().toUpperCase(),
+        hora_llegada: horaLlegada,
         firma_operador: firmaOperador, declaraciones_aceptadas: aceptaTerminos,
       };
 
@@ -594,9 +596,7 @@ export default function CasetaNuevo() {
                 ref={sigRef}
                 onOK={(sig) => { setFirmaOperador(sig); setShowSig(false); }}
                 onEmpty={() => alert(t('firma_vacia'))}
-                webStyle={`.m-signature-pad--footer{display:none;}.m-signature-pad{box-shadow:none;border:2px solid #09090B;}body,html{background:#FFF;height:100%;}`}
-                autoClear={false}
-                imageType="image/jpeg"
+                webStyle={`.m-signature-pad--footer{display:none;}`}
               />
             </View>
             <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>

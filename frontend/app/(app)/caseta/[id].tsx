@@ -118,7 +118,7 @@ export default function CasetaDetail() {
             destino: data.entry?.destino || '',
             // Si hay ticket de embarque, priorizamos los sellos y cantidades que puso el almacenista
             sello_salida: ticketData?.numero_sello || '',
-            pallets: ticketData?.pallets || '',
+            pallets: ticketData?.numero_pallets || '',
             cajas: ticketData?.cajas || '',
             bultos: ticketData?.bultos || '',
           }));

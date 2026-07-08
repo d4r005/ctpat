@@ -58,7 +58,9 @@ export default function EmbarqueNuevo() {
               linea_transporte: rec.entry.compania_transporte || prev.linea_transporte,
               placas_unidad: rec.entry.placas_unidad || prev.placas_unidad,
               numero_caja: rec.entry.numero_caja || prev.numero_caja,
-              hora_llegada: rec.entry.fecha_entrada ? new Date(rec.entry.fecha_entrada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : prev.hora_llegada,
+              placas_caja: rec.entry.placas_caja || prev.placas_caja || '',
+              numero_economico: rec.entry.numero_tractor || prev.numero_economico || '',
+              hora_llegada: rec.entry.hora_llegada || (rec.entry.fecha_entrada ? new Date(rec.entry.fecha_entrada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : prev.hora_llegada),
               numero_orden_compra: rec.entry.numero_orden_compra || prev.numero_orden_compra,
               observaciones: rec.entry.destino ? `${t('destino_caps')}: ${rec.entry.destino}` : prev.observaciones,
             }));
@@ -240,7 +242,19 @@ export default function EmbarqueNuevo() {
             {(almacenistaOpcion === 'OTRO' || !almacenistaOpcion) && (
               <F label={t('nombre_completo').toUpperCase()} v={form.almacenista} on={(t: string) => set('almacenista', t)} tid="emb-almacenista" placeholder={t('nombre_completo_placeholder')} />
             )}
-            <F label={t('area').toUpperCase()} v={form.area} on={(t: string) => set('area', t)} tid="emb-area" />
+
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <F label={t('area').toUpperCase()} v={form.area} on={(t: string) => set('area', t)} tid="emb-area" />
+              </View>
+              <Pressable
+                style={[styles.optionChip, { height: 48, justifyContent: 'center', marginBottom: 0 }]}
+                onPress={() => set('area', 'EMBARQUE')}
+              >
+                <Text style={styles.optionText}>EMBARQUE</Text>
+              </Pressable>
+            </View>
+
             <F label={t('sellos').toUpperCase()} v={form.sellos} on={(t: string) => set('sellos', t)} tid="emb-sellos" />
           </Section>
 
@@ -276,7 +290,7 @@ export default function EmbarqueNuevo() {
             <F label={t('hora_cierre_cortina_caps').toUpperCase()} v={form.hora_cierre_cortina} on={(t: string) => set('hora_cierre_cortina', t)} tid="emb-hora-cierre" placeholder="HH:MM" />
             <F label={t('hora_salida_desenrampe').toUpperCase()} v={form.hora_salida} on={(t: string) => set('hora_salida', t)} tid="emb-hora-salida" placeholder="HH:MM" />
             <F label={t('numero_pallets_caps').toUpperCase()} v={form.numero_pallets} on={(t: string) => set('numero_pallets', t)} tid="emb-pallets" kb="numeric" />
-            <F label={t('numero_sello_caps').toUpperCase()} v={form.numero_sello} on={(t: string) => set('numero_sello', t)} tid="emb-sello" />
+            <F label={t('numero_sello_caps').toUpperCase()} v={form.numero_sello} on={(t: string) => { set('numero_sello', t); set('sellos', t); }} tid="emb-sello" />
             <F label={t('orden_compra').toUpperCase()} v={form.numero_orden_compra} on={(t: string) => set('numero_orden_compra', t)} tid="emb-orden-compra" />
           </Section>
 
@@ -416,9 +430,7 @@ function SignatureModal({ sigTarget, onClose, sigRef, onOK, t }: any) {
             ref={sigRef}
             onOK={onOK}
             onEmpty={() => alert(t('firma_vacia'))}
-            webStyle={`.m-signature-pad--footer{display:none;}.m-signature-pad{box-shadow:none;border:2px solid #09090B;}body,html{background:#FFF;height:100%;}`}
-            autoClear={false}
-            imageType="image/jpeg"
+            webStyle={`.m-signature-pad--footer{display:none;}`}
             descriptionText={t('firme_dentro_desc')}
             clearText={t('borrar')}
             confirmText={t('guardar')}
