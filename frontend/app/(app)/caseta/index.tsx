@@ -23,7 +23,7 @@ export default function CasetaList() {
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<'todos' | 'entrada' | 'inspeccionado' | 'salida'>('todos');
+  const [filter, setFilter] = useState<'todos' | 'activo' | 'salida'>('activo');
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -40,7 +40,9 @@ export default function CasetaList() {
   const norm = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
 
   const filtered = records.filter(r => {
-    if (filter !== 'todos' && r.status !== filter) return false;
+    if (filter === 'activo' && r.status === 'salida') return false;
+    if (filter === 'salida' && r.status !== 'salida') return false;
+
     if (!query.trim()) return true;
     const q = query.toLowerCase();
     return (
@@ -107,10 +109,9 @@ export default function CasetaList() {
   };
 
   const FILTERS: Array<{ key: typeof filter; label: string }> = [
-    { key: 'todos', label: t('todos').toUpperCase() },
-    { key: 'entrada', label: t('en_patio').toUpperCase() },
-    { key: 'inspeccionado', label: t('inspeccionado').toUpperCase() },
+    { key: 'activo', label: t('en_patio').toUpperCase() },
     { key: 'salida', label: t('salio').toUpperCase() },
+    { key: 'todos', label: t('todos').toUpperCase() },
   ];
 
   return (

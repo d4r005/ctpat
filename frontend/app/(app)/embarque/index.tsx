@@ -26,17 +26,28 @@ export default function EmbarqueList() {
     setLoading(true);
     try {
       // El guardia de embarque ahora ve tanto los tickets ya creados como las
-      // unidades en patio que requieren un ticket (status=inspeccionado).
-      const [tickets, pendingUnits] = await Promise.all([
+      // unidades en patio que requieren un ticket.
+      // Quitamos el filtro status=inspeccionado del backend para capturar
+      // unidades que tengan inspeccion pero el status no haya cambiado.
+      const [tickets, allUnits] = await Promise.all([
         apiCall<any[]>('/shipping-tickets', { token }),
-        apiCall<any[]>('/vehicle-records?status=inspeccionado', { token })
+        apiCall<any[]>('/vehicle-records', { token })
       ]);
 
       const existingRecordsIds = new Set(tickets.map(t => t.record_id));
 
       // Convertimos las unidades pendientes al formato de la lista
-      const virtualTickets = pendingUnits
-        .filter(u => !existingRecordsIds.has(u.id) && u.entry?.condicion_carga !== 'descarga')
+      // Una unidad está pendiente de ticket si:
+      // 1. Está en patio (status != salida)
+      // 2. Tiene al menos una inspección (r.inspection_id o r.inspection_ids)
+      // 3. No tiene ticket aún
+      const virtualTickets = allUnits
+        .filter(u =>
+          u.status !== 'salida' &&
+          (u.inspection_id || (u.inspection_ids?.length > 0)) &&
+          !existingRecordsIds.has(u.id) &&
+          u.entry?.condicion_carga !== 'descarga'
+        )
         .map(u => ({
           id: `new-${u.id}`,
           record_id: u.id,

@@ -411,7 +411,8 @@ async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
 
         insps = await db.inspections.find(query).to_list(10)
         if insps:
-            record["inspection_ids"] = list(set(record.get("inspection_ids", []) + [i["id"] for i in insps]))
+            # Solo vincular IDs que coincidan con el día actual para evitar arrastrar historial viejo
+            record["inspection_ids"] = list(set([i["id"] for i in insps]))
             record["inspection_id"] = insps[-1]["id"]
             if record["status"] == "entrada": record["status"] = "inspeccionado"
 
@@ -1011,9 +1012,13 @@ async def _collect_report_data(record_id: str):
     if not inspections and placas:
         pat = _plate_regex_pattern(placas)
         if pat:
-            inspections = await db.inspections.find(
-                {"placas_unidad": {"$regex": f".*{pat}.*", "$options": "i"}},
-                {"_id": 0}).sort("created_at", -1).to_list(10)
+            # FILTRO CRÍTICO: Solo buscar inspecciones del MISMO DÍA que el registro
+            date_filter = rec.get("created_at", "")[:10]
+            q = {"placas_unidad": {"$regex": f".*{pat}.*", "$options": "i"}}
+            if date_filter:
+                q["created_at"] = {"$regex": f"^{date_filter}"}
+
+            inspections = await db.inspections.find(q, {"_id": 0}).sort("created_at", -1).to_list(10)
     ticket = None
     if rec.get("shipping_ticket_id"):
         ticket = await db.shipping_tickets.find_one({"id": rec["shipping_ticket_id"]}, {"_id": 0})
