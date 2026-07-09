@@ -745,7 +745,8 @@ async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Op
     def norm(s): return _canon_plate(s)
     def get_date(s): return s[:10] if s and len(s) >= 10 else None
 
-    insp_by_plate_date: Dict[tuple, List[str]] = {}
+    # FIX: guardar también el created_at de cada inspección para filtrar por tiempo
+    insp_by_plate_date: Dict[tuple, List[dict]] = {}  # (placa, fecha) -> [{id, created_at}]
     insp_by_record: Dict[str, List[str]] = {}
     for insp in all_insps:
         p = norm(insp.get("placas_unidad", ""))
@@ -753,8 +754,9 @@ async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Op
         if p and d:
             key = (p, d)
             insp_by_plate_date.setdefault(key, [])
-            if insp["id"] not in insp_by_plate_date[key]:
-                insp_by_plate_date[key].append(insp["id"])
+            ids_in_key = [x["id"] for x in insp_by_plate_date[key]]
+            if insp["id"] not in ids_in_key:
+                insp_by_plate_date[key].append({"id": insp["id"], "created_at": insp.get("created_at", "")})
 
         rid = insp.get("record_id")
         if rid:
@@ -789,16 +791,23 @@ async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Op
         # y antes de la salida (si existe). Esto evita arrastrar inspecciones de viajes anteriores.
         by_plates_date = set()
         if p and d:
-            potential_ids = insp_by_plate_date.get((p, d), [])
+            potential_entries = insp_by_plate_date.get((p, d), [])
+            # FIX: solo vincular inspecciones que ocurrieron DESPUÉS del registro de entrada
+            # Esto evita arrastrar inspecciones de viajes anteriores del mismo día
+            rec_created_at = doc.get("created_at", "")
             # Para mayor seguridad, si ya hay vínculos directos, ignoramos los de placa/fecha
             if not (existing | by_rec):
-                by_plates_date = set(potential_ids)
+                by_plates_date = set(
+                    e["id"] for e in potential_entries
+                    if e.get("created_at", "") >= rec_created_at
+                )
 
         merged_ids = sorted(list(existing | by_rec | by_plates_date))
 
         doc["inspection_ids"] = merged_ids
         if merged_ids:
             doc["inspection_id"] = merged_ids[-1]
+            # FIX: no sobreescribir 'salida' — solo promover 'entrada' a 'inspeccionado'
             if doc["status"] == "entrada":
                 doc["status"] = "inspeccionado"
 

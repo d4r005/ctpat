@@ -41,13 +41,20 @@ export default function EmbarqueList() {
       // 1. Está en patio (status != salida)
       // 2. Tiene al menos una inspección (r.inspection_id o r.inspection_ids)
       // 3. No tiene ticket aún
+      // FIX: solo mostrar como 'POR CREAR' las unidades del día de hoy
+      // Para no mezclar días distintos en el panel de embarque
+      const todayDate = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
       const virtualTickets = allUnits
-        .filter(u =>
-          u.status !== 'salida' &&
-          (u.inspection_id || (u.inspection_ids?.length > 0)) &&
-          !existingRecordsIds.has(u.id) &&
-          u.entry?.condicion_carga !== 'descarga'
-        )
+        .filter(u => {
+          const unitDate = u.created_at ? new Date(u.created_at).toLocaleDateString('en-CA') : null;
+          return (
+            u.status !== 'salida' &&
+            (u.inspection_id || (u.inspection_ids?.length > 0)) &&
+            !existingRecordsIds.has(u.id) &&
+            u.entry?.condicion_carga !== 'descarga' &&
+            unitDate === todayDate  // solo pendientes de HOY
+          );
+        })
         .map(u => ({
           id: `new-${u.id}`,
           record_id: u.id,

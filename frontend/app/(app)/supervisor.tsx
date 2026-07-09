@@ -211,6 +211,7 @@ export default function Supervisor() {
   }
 
   const [activeTab, setActiveTab] = useState<TabType>('caseta');
+  const [selectedDate, setSelectedDate] = useState<string>(''); // '' = hoy
   const [allRecords, setAllRecords] = useState<any[]>([]);
   const [allTickets, setAllTickets] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -277,32 +278,41 @@ export default function Supervisor() {
 
     const ticketPlatesDate = new Set(safeTickets.map(tk => `${normalize(tk.placas_unidad)}|${getDate(tk.created_at)}`));
 
-    if (activeTab === 'caseta') {
-      const recordsByPlateDate = new Set(safeRecords.map(r => `${normalize(r.entry?.placas_unidad)}|${getDate(r.created_at)}`));
-      const recordsById = new Set(safeRecords.map(r => r.id));
+    // FIX: filtrar por fecha seleccionada (hoy por default)
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    const activeDateStr = selectedDate || todayStr;
 
-      const virtuals = safeInsps
+    if (activeTab === 'caseta') {
+      // FIX: solo registros e inspecciones del día activo
+      const dayRecords = safeRecords.filter(r => getDate(r.created_at) === activeDateStr);
+      const dayInsps = safeInsps.filter(i => getDate(i.created_at) === activeDateStr);
+      const recordsByPlateDate = new Set(dayRecords.map(r => `${normalize(r.entry?.placas_unidad)}|${getDate(r.created_at)}`));
+      const recordsById = new Set(dayRecords.map(r => r.id));
+
+      const virtuals = dayInsps
         .filter(i => {
           const normP = normalize(i.placas_unidad);
           const date = getDate(i.created_at);
-          // Si la inspección ya tiene record_id y ese registro existe, no es virtual
           if (i.record_id && recordsById.has(i.record_id)) return false;
-          // Si la placa+fecha coincide con un registro de caseta, no es virtual
           if (recordsByPlateDate.has(`${normP}|${date}`)) return false;
           return true;
         })
         .map(i => ({
-           ...i, // Importante: conservar record_id si existe
+           ...i,
            _is_virtual: true, status: 'inspeccionado', created_at: i.created_at,
            entry: { placas_unidad: i.placas_unidad, chofer_nombre: i.inspector_nombre, compania_transporte: i.compania_transportista, fecha_entrada: i.created_at, numero_caja: i.numero_trailer, sello_entrada: i.numero_precinto }
         }));
-      source = [...safeRecords, ...virtuals];
+      source = [...dayRecords, ...virtuals];
     } else if (activeTab === 'inspeccion') {
-      // Mostrar todas las inspecciones cargadas en el contexto
-      source = Array.isArray(allInspections) ? allInspections : [];
+      // FIX: solo inspecciones del día activo
+      source = safeInsps.filter(i => getDate(i.created_at) === activeDateStr);
     } else if (activeTab === 'embarque') {
-      const pendingShipping = safeInsps
-        .filter(i => !ticketPlatesDate.has(`${normalize(i.placas_unidad)}|${getDate(i.created_at)}`))
+      // FIX: tickets y pendientes del día activo
+      const dayTickets = safeTickets.filter(tk => getDate(tk.created_at) === activeDateStr);
+      const dayInsps = safeInsps.filter(i => getDate(i.created_at) === activeDateStr);
+      const dayTicketPlatesDate = new Set(dayTickets.map(tk => `${normalize(tk.placas_unidad)}|${getDate(tk.created_at)}`));
+      const pendingShipping = dayInsps
+        .filter(i => !dayTicketPlatesDate.has(`${normalize(i.placas_unidad)}|${getDate(i.created_at)}`))
         .map(i => ({
           id: `p-${i.id}`,
           _is_pending_ticket: true,
@@ -311,7 +321,7 @@ export default function Supervisor() {
           operador: i.inspector_nombre,
           created_at: i.created_at
         }));
-      source = [...safeTickets, ...pendingShipping];
+      source = [...dayTickets, ...pendingShipping];
     }
 
     if (!q) return source;
@@ -320,7 +330,7 @@ export default function Supervisor() {
       const name = (item.chofer_nombre || item.entry?.chofer_nombre || item.inspector_nombre || item.cliente || '').toLowerCase();
       return plates.includes(q) || name.includes(q);
     });
-  }, [activeTab, query, allRecords, allInspections, allTickets, i18n.language]);
+  }, [activeTab, query, allRecords, allInspections, allTickets, i18n.language, selectedDate]);
 
   const handlePdf = async (item: any) => {
     setReportLoading(item.id);
@@ -440,6 +450,48 @@ export default function Supervisor() {
             <TabBtn label={t('caseta').toUpperCase()} icon="business" active={activeTab === 'caseta'} on={() => setActiveTab('caseta')} />
             <TabBtn label={t('inspeccion').toUpperCase()} icon="clipboard" active={activeTab === 'inspeccion'} on={() => setActiveTab('inspeccion')} />
             <TabBtn label={t('embarque').toUpperCase()} icon="truck-fast" active={activeTab === 'embarque'} on={() => setActiveTab('embarque')} isMCI />
+          </View>
+          {/* Selector de fecha — por default muestra HOY */}
+          <View style={styles.dateRow}>
+            <Ionicons name="calendar-outline" size={16} color={colors.muted} />
+            <Pressable
+              style={styles.dateChip}
+              onPress={() => {
+                // Ir al día anterior
+                const base = selectedDate || new Date().toLocaleDateString('en-CA');
+                const d = new Date(base + 'T12:00:00');
+                d.setDate(d.getDate() - 1);
+                setSelectedDate(d.toLocaleDateString('en-CA'));
+              }}
+            >
+              <Ionicons name="chevron-back" size={14} color={colors.onSurface} />
+            </Pressable>
+            <Text style={styles.dateLabel}>
+              {(() => {
+                const todayStr = new Date().toLocaleDateString('en-CA');
+                const active = selectedDate || todayStr;
+                if (active === todayStr) return 'HOY · ' + new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }).toUpperCase();
+                return new Date(active + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'short', day: '2-digit', month: 'short' }).toUpperCase();
+              })()}
+            </Text>
+            <Pressable
+              style={styles.dateChip}
+              onPress={() => {
+                const base = selectedDate || new Date().toLocaleDateString('en-CA');
+                const d = new Date(base + 'T12:00:00');
+                d.setDate(d.getDate() + 1);
+                const next = d.toLocaleDateString('en-CA');
+                const today = new Date().toLocaleDateString('en-CA');
+                setSelectedDate(next >= today ? '' : next);
+              }}
+            >
+              <Ionicons name="chevron-forward" size={14} color={colors.onSurface} />
+            </Pressable>
+            {selectedDate ? (
+              <Pressable onPress={() => setSelectedDate('')} style={{ marginLeft: 4 }}>
+                <Ionicons name="close-circle" size={16} color={colors.warning} />
+              </Pressable>
+            ) : null}
           </View>
           <View style={styles.searchCont}>
             <Ionicons name="search" size={20} color={colors.muted} />
@@ -820,6 +872,9 @@ const styles = StyleSheet.create({
   // Header/Tabs
   headerFixed: { backgroundColor: '#FFF', borderBottomWidth: 2, borderBottomColor: '#000' },
   tabRow: { flexDirection: 'row' },
+  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 12, backgroundColor: colors.surfaceSecondary, borderBottomWidth: 1, borderBottomColor: colors.border },
+  dateChip: { padding: 4, borderRadius: 4, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  dateLabel: { fontSize: 12, fontWeight: '900', color: colors.onSurface, letterSpacing: 0.5, flex: 1, textAlign: 'center' },
   tab: { flex: 1, padding: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRightWidth: 1, borderRightColor: '#EEE' },
   tabActive: { backgroundColor: '#0A2540', borderBottomWidth: 4, borderBottomColor: '#F59E0B' },
   tabText: { fontWeight: '900', fontSize: 11, color: '#333' },
