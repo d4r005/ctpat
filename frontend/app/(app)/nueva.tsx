@@ -196,6 +196,8 @@ export default function InspeccionDashboard() {
         record_id: record.id,
         isFull,
         inspectionsDone: doneCount,
+        condicion_carga: record.entry.condicion_carga,
+        chofer_nombre: record.entry.chofer_nombre,
         numero_caja_2: record.entry.numero_caja_2,
         sello_entrada_2: record.entry.sello_entrada_2,
         compania: record.entry.compania_transporte || '',
@@ -350,6 +352,7 @@ const BOX_TYPES = [
 
 // Implementación COMPLETA del Wizard de Inspección
 function InspectionWizard({ type, onClose, initialData, t, saveInspection, user }: any) {
+  const router = useRouter();
   const [selectedType, setSelectedType] = useState(type);
   const [step, setStep] = useState(0);
   const [data, setData] = useState(initialData);
@@ -439,7 +442,35 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
           ]
         );
       } else {
-        onClose();
+        const cond = (data.condicion_carga || '').toLowerCase();
+        const isDescarga = cond.includes('descarga') || cond.includes('recibo');
+        if (!isDescarga && data.record_id) {
+          Alert.alert(
+            t('inspeccion_guardada'),
+            t('desea_generar_ticket') || "¿Desea generar el ticket de embarque ahora?",
+            [
+              { text: t('mas_tarde') || "Más tarde", onPress: () => onClose() },
+              {
+                text: t('si_generar_ticket_caps') || "Sí, generar ticket",
+                onPress: () => {
+                  onClose();
+                  router.push({
+                    pathname: '/(app)/embarque/nuevo',
+                    params: {
+                      record_id: data.record_id,
+                      placas: data.placas,
+                      compania: data.compania,
+                      trailer: data.trailer,
+                      operador: data.chofer_nombre
+                    }
+                  });
+                }
+              }
+            ]
+          );
+        } else {
+          onClose();
+        }
       }
     } catch (e: any) { alert(e.message); }
     finally { setSaving(false); }
