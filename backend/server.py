@@ -401,16 +401,23 @@ async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         regex = _plate_regex_pattern(placas)
-        # 1. Vincular Inspecciones
-        insps = await db.inspections.find({"placas_unidad": {"$regex": f".*{regex}.*", "$options": "i"}}).to_list(10)
+        created_at = record.get("created_at", "")
+        date_str = created_at[:10] if created_at else None
+
+        # 1. Vincular Inspecciones (mismo día)
+        query = {"placas_unidad": {"$regex": f".*{regex}.*", "$options": "i"}}
+        if date_str:
+            query["created_at"] = {"$regex": f"^{date_str}"}
+
+        insps = await db.inspections.find(query).to_list(10)
         if insps:
             record["inspection_ids"] = list(set(record.get("inspection_ids", []) + [i["id"] for i in insps]))
             record["inspection_id"] = insps[-1]["id"]
             if record["status"] == "entrada": record["status"] = "inspeccionado"
 
-        # 2. Vincular Ticket
+        # 2. Vincular Ticket (mismo día)
         if not record.get("shipping_ticket_id"):
-            tick = await db.shipping_tickets.find_one({"placas_unidad": {"$regex": f".*{regex}.*", "$options": "i"}}, sort=[("created_at", -1)])
+            tick = await db.shipping_tickets.find_one(query, sort=[("created_at", -1)])
             if tick:
                 record["shipping_ticket_id"] = tick["id"]
                 record["has_shipping_ticket"] = True
@@ -728,45 +735,54 @@ async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Op
 
     # Enriquecer con vínculos (inspection_ids, shipping_ticket_id) en batch
     # para que el ProcessTracker del frontend sea preciso sin llamadas adicionales
-    all_insps = await db.inspections.find({}, {"_id": 0, "id": 1, "placas_unidad": 1, "record_id": 1}).to_list(5000)
-    all_tickets = await db.shipping_tickets.find({}, {"_id": 0, "id": 1, "placas_unidad": 1, "record_id": 1}).to_list(5000)
+    all_insps = await db.inspections.find({}, {"_id": 0, "id": 1, "placas_unidad": 1, "record_id": 1, "created_at": 1}).to_list(5000)
+    all_tickets = await db.shipping_tickets.find({}, {"_id": 0, "id": 1, "placas_unidad": 1, "record_id": 1, "created_at": 1}).to_list(5000)
 
-    # Índice por placas normalizadas
+    # Índice por placas normalizadas y fecha
     def norm(s): return _canon_plate(s)
+    def get_date(s): return s[:10] if s and len(s) >= 10 else None
 
-    insp_by_plates: Dict[str, List[str]] = {}
+    insp_by_plate_date: Dict[tuple, List[str]] = {}
     insp_by_record: Dict[str, List[str]] = {}
     for insp in all_insps:
         p = norm(insp.get("placas_unidad", ""))
-        if p:
-            insp_by_plates.setdefault(p, [])
-            if insp["id"] not in insp_by_plates[p]:
-                insp_by_plates[p].append(insp["id"])
+        d = get_date(insp.get("created_at", ""))
+        if p and d:
+            key = (p, d)
+            insp_by_plate_date.setdefault(key, [])
+            if insp["id"] not in insp_by_plate_date[key]:
+                insp_by_plate_date[key].append(insp["id"])
+
         rid = insp.get("record_id")
         if rid:
             insp_by_record.setdefault(rid, [])
             if insp["id"] not in insp_by_record[rid]:
                 insp_by_record[rid].append(insp["id"])
 
-    ticket_by_plates: Dict[str, str] = {}
+    ticket_by_plate_date: Dict[tuple, str] = {}
     ticket_by_record: Dict[str, str] = {}
     for tk in all_tickets:
         p = norm(tk.get("placas_unidad", ""))
-        if p: ticket_by_plates[p] = tk["id"]
+        d = get_date(tk.get("created_at", ""))
+        if p and d:
+            ticket_by_plate_date[(p, d)] = tk["id"]
+
         rid = tk.get("record_id")
         if rid: ticket_by_record[rid] = tk["id"]
 
     enriched = []
     for doc in docs:
         p = norm(doc.get("entry", {}).get("placas_unidad", ""))
+        d = get_date(doc.get("created_at", ""))
         rid = doc.get("id", "")
 
-        # Merge inspection_ids: los que ya estaban + los de record_id + los de placas
+        # Merge inspection_ids: los que ya estaban + los de record_id + los de placa/fecha
         existing = set(doc.get("inspection_ids", []))
         if doc.get("inspection_id"): existing.add(doc["inspection_id"])
         by_rec = set(insp_by_record.get(rid, []))
-        by_plates = set(insp_by_plates.get(p, []))
-        merged_ids = list(existing | by_rec | by_plates)
+        by_plates_date = set(insp_by_plate_date.get((p, d), [])) if p and d else set()
+
+        merged_ids = list(existing | by_rec | by_plates_date)
 
         doc["inspection_ids"] = merged_ids
         if merged_ids:
@@ -774,8 +790,11 @@ async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Op
             if doc["status"] == "entrada":
                 doc["status"] = "inspeccionado"
 
-        # Ticket
-        ticket_id = doc.get("shipping_ticket_id") or ticket_by_record.get(rid) or ticket_by_plates.get(p)
+        # Ticket: prioridad record_id, luego placa+fecha
+        ticket_id = doc.get("shipping_ticket_id") or ticket_by_record.get(rid)
+        if not ticket_id and p and d:
+            ticket_id = ticket_by_plate_date.get((p, d))
+
         if ticket_id:
             doc["shipping_ticket_id"] = ticket_id
             doc["has_shipping_ticket"] = True

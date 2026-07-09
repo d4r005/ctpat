@@ -267,6 +267,7 @@ export default function Supervisor() {
   const filteredData = useMemo(() => {
     const q = query.toLowerCase().trim();
     const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
+    const getDate = (s: string) => s?.substring(0, 10) || '';
 
     const safeRecords = Array.isArray(allRecords) ? allRecords : [];
     const safeTickets = Array.isArray(allTickets) ? allTickets : [];
@@ -274,20 +275,20 @@ export default function Supervisor() {
 
     let source: any[] = [];
 
-    const recordsPlates = new Set(safeRecords.map(r => normalize(r.entry?.placas_unidad)));
-    const ticketPlates = new Set(safeTickets.map(tk => normalize(tk.placas_unidad)));
+    const ticketPlatesDate = new Set(safeTickets.map(tk => `${normalize(tk.placas_unidad)}|${getDate(tk.created_at)}`));
 
     if (activeTab === 'caseta') {
-      const recordsByPlate = new Map(safeRecords.map(r => [normalize(r.entry?.placas_unidad), r.id]));
+      const recordsByPlateDate = new Set(safeRecords.map(r => `${normalize(r.entry?.placas_unidad)}|${getDate(r.created_at)}`));
       const recordsById = new Set(safeRecords.map(r => r.id));
 
       const virtuals = safeInsps
         .filter(i => {
           const normP = normalize(i.placas_unidad);
+          const date = getDate(i.created_at);
           // Si la inspección ya tiene record_id y ese registro existe, no es virtual
           if (i.record_id && recordsById.has(i.record_id)) return false;
-          // Si la placa coincide exactamente con un registro de caseta, no es virtual
-          if (recordsByPlate.has(normP)) return false;
+          // Si la placa+fecha coincide con un registro de caseta, no es virtual
+          if (recordsByPlateDate.has(`${normP}|${date}`)) return false;
           return true;
         })
         .map(i => ({
@@ -301,7 +302,7 @@ export default function Supervisor() {
       source = Array.isArray(allInspections) ? allInspections : [];
     } else if (activeTab === 'embarque') {
       const pendingShipping = safeInsps
-        .filter(i => !ticketPlates.has(normalize(i.placas_unidad)))
+        .filter(i => !ticketPlatesDate.has(`${normalize(i.placas_unidad)}|${getDate(i.created_at)}`))
         .map(i => ({
           id: `p-${i.id}`,
           _is_pending: true,
@@ -324,20 +325,17 @@ export default function Supervisor() {
   const handlePdf = async (item: any) => {
     setReportLoading(item.id);
     try {
-      // Usamos el MISMO generador de HTML que el correo (backend), que ya
-      // resuelve fotos y firmas de Google Drive a base64 inline. Antes se
-      // armaba el HTML en el cliente con generateConsolidatedReportHtml()
-      // usando URLs crudas de Drive, que no cargan en el PDF porque no hay
-      // sesión de Google — de ahí que "faltaran" las fotos en el reporte.
       let recordId = item.id;
+      const getDate = (s: string) => s?.substring(0, 10) || '';
       if (item._is_virtual || !recordId || recordId.startsWith('p-')) {
         // Registro virtual (solo de inspección/embarque, sin caseta real) —
         // caemos al generador local como respaldo.
         const norm = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
         const plates = item.placas_unidad || item.entry?.placas_unidad;
         const normPlates = norm(plates);
-        const matchTicket = allTickets.find(tk => norm(tk.placas_unidad) === normPlates);
-        const matchInsps = allInspections.filter(i => i.record_id === item.id || norm(i.placas_unidad) === normPlates);
+        const itemDate = getDate(item.created_at || item.entry?.fecha_entrada);
+        const matchTicket = allTickets.find(tk => norm(tk.placas_unidad) === normPlates && getDate(tk.created_at) === itemDate);
+        const matchInsps = allInspections.filter(i => i.record_id === item.id || (norm(i.placas_unidad) === normPlates && getDate(i.created_at) === itemDate));
         const html = generateConsolidatedReportHtml({
           inspection: matchInsps[0] || { points: [] } as any,
           inspections: matchInsps,
