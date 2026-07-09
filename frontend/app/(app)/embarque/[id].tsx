@@ -120,6 +120,8 @@ export default function EmbarqueDetail() {
           </View>
           <View style={styles.sectionBody}>
             <EditableRow label={t('almacenista')} value={form.almacenista} onEdit={editMode ? (v: string) => setForm({...form, almacenista: v}) : null} />
+            <EditableRow label={'ÁREA'} value={form.area} onEdit={editMode ? (v: string) => setForm({...form, area: v}) : null} />
+            <EditableRow label={'SELLOS'} value={form.sellos} onEdit={editMode ? (v: string) => setForm({...form, sellos: v}) : null} />
             <EditableRow label={t('cliente')} value={form.cliente} onEdit={editMode ? (v: string) => setForm({...form, cliente: v}) : null} />
             <EditableRow label={t('pallets')} value={form.numero_pallets} onEdit={editMode ? (v: string) => setForm({...form, numero_pallets: v}) : null} />
             <EditableRow label={t('orden_compra')} value={form.numero_orden_compra} onEdit={editMode ? (v: string) => setForm({...form, numero_orden_compra: v}) : null} />
@@ -133,8 +135,24 @@ export default function EmbarqueDetail() {
           <View style={styles.sectionBody}>
             <EditableRow label={t('placas_unidad')} value={form.placas_unidad} onEdit={editMode ? (v: string) => setForm({...form, placas_unidad: sanitizePlate(v)}) : null} />
             <EditableRow label={t('numero_caja_caps')} value={form.numero_caja} onEdit={editMode ? (v: string) => setForm({...form, numero_caja: v}) : null} />
+            <EditableRow label={'LÍNEA DE TRANSPORTE'} value={form.linea_transporte} onEdit={editMode ? (v: string) => setForm({...form, linea_transporte: v}) : null} />
+            <EditableRow label={'NO. ECONÓMICO'} value={form.numero_economico} onEdit={editMode ? (v: string) => setForm({...form, numero_economico: v}) : null} />
             <EditableRow label={t('sello')} value={form.numero_sello} onEdit={editMode ? (v: string) => setForm({...form, numero_sello: v}) : null} />
+            <EditableRow label={'DAÑO EN CAJA'} value={form.daño_caja} onEdit={editMode ? (v: string) => setForm({...form, daño_caja: v}) : null} />
             <EditableRow label={t('chofer')} value={form.operador} onEdit={editMode ? (v: string) => setForm({...form, operador: v}) : null} />
+          </View>
+        </View>
+
+
+        <View style={styles.section}>
+          <View style={[styles.sectionHeader, { backgroundColor: '#5B6AF5' }]}>
+            <Text style={styles.sectionTitle}>HORARIOS</Text>
+          </View>
+          <View style={styles.sectionBody}>
+            <EditableRow label={'HORA LLEGADA'} value={form.hora_llegada} onEdit={editMode ? (v: string) => setForm({...form, hora_llegada: v}) : null} />
+            <EditableRow label={'APERTURA DE CORTINA'} value={form.hora_apertura_cortina} onEdit={editMode ? (v: string) => setForm({...form, hora_apertura_cortina: v}) : null} />
+            <EditableRow label={'CIERRE DE CORTINA'} value={form.hora_cierre_cortina} onEdit={editMode ? (v: string) => setForm({...form, hora_cierre_cortina: v}) : null} />
+            <EditableRow label={'HORA SALIDA'} value={form.hora_salida} onEdit={editMode ? (v: string) => setForm({...form, hora_salida: v}) : null} />
           </View>
         </View>
 
@@ -143,6 +161,7 @@ export default function EmbarqueDetail() {
             <Text style={styles.sectionTitle}>{t('firmas').toUpperCase()}</Text>
           </View>
           <View style={styles.sectionBody}>
+            <EditableRow label={'NOMBRE GUARDIA'} value={form.nombre_guardia} onEdit={editMode ? (v: string) => setForm({...form, nombre_guardia: v}) : null} />
              <View style={styles.photoGrid}>
                 <SigItem
                   label={t('firma_almacenista')}
@@ -323,3 +342,4 @@ const styles = StyleSheet.create({
   sigModalBtn: { flex: 1, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#DDD', borderRadius: 4 },
   sigModalBtnPrimary: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }
 });
+
