@@ -10,29 +10,37 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+
       - name: Push to Hugging Face
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
         run: |
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
-          
-          # Crear un repo temporal para el Space
+
           mkdir hf_sync_dir
-          
-          # 1. Copiamos todo el contenido de backend (donde está el Dockerfile)
-          cp -r backend/* hf_sync_dir/
-          
-          # 2. Copiamos el README principal a la raíz del Space para que sea el que se visualice
+
+          # Copiar backend excluyendo archivos binarios / de debug que no se necesitan en el Space
+          rsync -av --exclude='server_recovered.py' \
+                    --exclude='server_stable.py' \
+                    --exclude='__pycache__' \
+                    --exclude='*.pyc' \
+                    backend/ hf_sync_dir/
+
+          # README principal
           cp README.md hf_sync_dir/README.md
 
+          # Crear .env con las variables de entorno necesarias en el Space
+          echo "MONGODB_URI=${MONGODB_URI}" >> hf_sync_dir/.env
+
           cd hf_sync_dir
-          
+
           git init
           git checkout -b main
           git add .
           git commit -m "Sync version: ${{ github.sha }}"
-          
+
           # Subida forzada al Space
           git remote add hf https://d4r005:$HF_TOKEN@huggingface.co/spaces/d4r005/SRIUC
           git push hf main --force
