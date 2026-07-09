@@ -793,7 +793,24 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
               if (type === 'inspeccion') {
                 router.push(`/inspection/${item.id}`);
               } else if (type === 'embarque') {
-                router.push(`/embarque/${item.id}`);
+                if (item._is_pending_ticket) {
+                  // Si es un ticket pendiente de despacho, vamos a "nuevo" con los datos precargados
+                  router.push({
+                    pathname: '/embarque/nuevo',
+                    params: {
+                      inspection_id: item.id.replace('p-', ''),
+                      record_id: relatedRecord?.id || '',
+                      placas: item.placas_unidad || '',
+                      compania: relatedRecord?.entry?.compania_transporte || '',
+                      trailer: relatedRecord?.entry?.numero_caja || '',
+                      sello: relatedRecord?.entry?.sello_entrada || '',
+                      operador: item.operador || relatedRecord?.entry?.chofer_nombre || '',
+                      destino: relatedRecord?.entry?.destino || '',
+                    },
+                  });
+                } else {
+                  router.push(`/embarque/${item.id}`);
+                }
               } else {
                 // Caso Caseta
                 const targetId = item.record_id || relatedRecord?.id || (item._is_virtual ? null : item.id);

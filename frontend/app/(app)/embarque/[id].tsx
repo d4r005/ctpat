@@ -34,11 +34,17 @@ export default function EmbarqueDetail() {
 
   const load = async () => {
     try {
+      if (!id) return;
+      console.log(`[EmbarqueDetail] Loading ticket ID: ${id}`);
       const data = await apiCall<any>(`/shipping-tickets/${id}`, { token });
+      if (!data) {
+        throw new Error("Ticket no encontrado");
+      }
       setTicket(data);
       setForm(JSON.parse(JSON.stringify(data)));
     } catch (e: any) {
-      Alert.alert(t('error'), t('error_cargar_datos'));
+      console.error(`[EmbarqueDetail] Error loading ticket ${id}:`, e);
+      Alert.alert(t('error'), `${t('error_cargar_datos')}: ${e.message}`);
     }
   };
 

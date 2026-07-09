@@ -1970,9 +1970,11 @@ async def list_tickets(u: Dict[str, Any] = Depends(get_current_user)):
 
 @api_router.get("/shipping-tickets/{id}")
 async def get_ticket(id: str, u: Dict[str, Any] = Depends(get_current_user)):
-    d = await db.shipping_tickets.find_one({"id": id}, {"_id": 0})
-    if not d: d = await db.shipping_tickets.find_one({"record_id": id}, {"_id": 0})
-    if not d: raise HTTPException(404)
+    # Limpiar posibles prefijos de la UI si llegaran (p- o new-)
+    clean_id = id.replace("p-", "").replace("new-", "")
+    d = await db.shipping_tickets.find_one({"id": clean_id}, {"_id": 0})
+    if not d: d = await db.shipping_tickets.find_one({"record_id": clean_id}, {"_id": 0})
+    if not d: raise HTTPException(404, detail=f"Ticket {id} no encontrado")
     return d
 
 @api_router.put("/shipping-tickets/{id}")
