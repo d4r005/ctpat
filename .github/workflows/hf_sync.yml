@@ -2,8 +2,6 @@ name: Sync Backend to Hugging Face
 on:
   push:
     branches: [main]
-    paths:
-      - 'backend/**'
 
 jobs:
   deploy:
@@ -19,9 +17,15 @@ jobs:
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
           
-          # Método ultra-rápido: Crear un repo temporal limpio con solo el contenido de backend
+          # Crear un repo temporal para el Space
           mkdir hf_sync_dir
+          
+          # 1. Copiamos todo el contenido de backend (donde está el Dockerfile)
           cp -r backend/* hf_sync_dir/
+          
+          # 2. Copiamos el README principal a la raíz del Space para que sea el que se visualice
+          cp README.md hf_sync_dir/README.md
+
           cd hf_sync_dir
           
           git init
