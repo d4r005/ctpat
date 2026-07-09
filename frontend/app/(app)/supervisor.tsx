@@ -265,6 +265,29 @@ export default function Supervisor() {
     }
   };
 
+  const handleDeepRepair = async () => {
+    Alert.alert(
+      '🔧 Reparación Profunda',
+      'Esto analizará y corregirá vínculos rotos, inspecciones de otros días, duplicados y tickets sin ligar. ¿Continuar?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Reparar', style: 'destructive', onPress: async () => {
+          setSyncing(true);
+          try {
+            const res = await apiCall<any>('/admin/deep-repair-links', { method: 'POST', token });
+            const msg = `Correcciones realizadas: ${res.total_fixed}\n• Inspecciones huérfanas: ${res.fixed_insp_orphans}\n• Tickets huérfanos: ${res.fixed_ticket_orphans}\n• Vínculos cruzados: ${res.removed_cross_links}`;
+            Alert.alert('✅ Reparación Completada', msg);
+            await fetchEverything();
+          } catch (e: any) {
+            Alert.alert('Error', e.message);
+          } finally {
+            setSyncing(false);
+          }
+        }}
+      ]
+    );
+  };
+
   const filteredData = useMemo(() => {
     const q = query.toLowerCase().trim();
     const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
@@ -438,6 +461,10 @@ export default function Supervisor() {
           <Pressable style={[styles.adminBtn, { marginTop: 8, backgroundColor: '#FEF3C7' }]} onPress={() => setDuplicatesModalVisible(true)}>
             <Ionicons name="git-merge-outline" size={16} color="#92400E" />
             <Text style={[styles.adminBtnText, { color: '#92400E' }]}>DUPLICADOS POR OCR (FUSIONAR)</Text>
+          </Pressable>
+          <Pressable style={[styles.adminBtn, { marginTop: 8, backgroundColor: '#FEE2E2' }]} onPress={handleDeepRepair} disabled={syncing}>
+            {syncing ? <ActivityIndicator size={14} color="#991B1B" /> : <Ionicons name="build-outline" size={16} color="#991B1B" />}
+            <Text style={[styles.adminBtnText, { color: '#991B1B' }]}>REPARACIÓN PROFUNDA (VÍNCULOS + FECHAS)</Text>
           </Pressable>
           <Pressable style={[styles.adminBtn, { marginTop: 8, backgroundColor: '#E0E7FF' }]} onPress={() => router.push('/(app)/analitica')}>
             <Ionicons name="stats-chart" size={16} color="#4338CA" />

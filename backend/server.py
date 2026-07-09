@@ -393,6 +393,14 @@ def _canon_plate(plates: str) -> str:
 
 
 async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Vincula inspecciones y tickets a un vehicle_record.
+    FIX: Solo vincula objetos que:
+      1. Tienen record_id == este registro (vínculo directo), O
+      2. No tienen record_id (huérfanos) Y su placa/fecha coincide Y su
+         created_at >= created_at del registro (no son de viaje anterior).
+    Nunca roba inspecciones/tickets que ya pertenecen a otro registro.
+    """
     if not record: return record
     placas = record.get("entry", {}).get("placas_unidad", "").strip().upper()
     if not placas: return record
@@ -400,40 +408,78 @@ async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
     if not pl_norm: return record
 
     try:
+        rid = record["id"]
         regex = _plate_regex_pattern(placas)
         created_at = record.get("created_at", "")
-        date_str = created_at[:10] if created_at else None
 
-        # 1. Vincular Inspecciones (mismo día y POSTERIOR a la entrada)
-        query = {"placas_unidad": {"$regex": f".*{regex}.*", "$options": "i"}}
-        if date_str:
-            query["created_at"] = {"$gte": created_at} # Solo inspecciones desde este registro
+        # 1. Vincular Inspecciones
+        # Prioridad: record_id directo → huérfanos por placa (misma fecha, posterior a entrada)
+        direct_insps = await db.inspections.find(
+            {"record_id": rid}, {"_id": 0, "id": 1, "created_at": 1}
+        ).to_list(50)
+        direct_ids = {i["id"] for i in direct_insps}
 
-        insps = await db.inspections.find(query, sort=[("created_at", 1)]).to_list(10)
-        if insps:
-            # Si el registro ya tiene IDs, los preservamos y añadimos los nuevos
-            existing_ids = set(record.get("inspection_ids", []))
-            new_ids = set([i["id"] for i in insps])
-            record["inspection_ids"] = list(existing_ids | new_ids)
-            record["inspection_id"] = insps[-1]["id"]
-            if record["status"] == "entrada": record["status"] = "inspeccionado"
+        orphan_insps = await db.inspections.find(
+            {"placas_unidad": {"$regex": f".*{regex}.*", "$options": "i"},
+             "record_id": {"$in": [None, ""]},  # solo huérfanos
+             "created_at": {"$gte": created_at}},
+            {"_id": 0, "id": 1}
+        ).to_list(10)
+        orphan_ids = {i["id"] for i in orphan_insps}
 
-        # 2. Vincular Ticket (mismo día y POSTERIOR a la entrada)
+        existing_ids = set(record.get("inspection_ids", []))
+        if record.get("inspection_id"): existing_ids.add(record["inspection_id"])
+
+        merged = list(existing_ids | direct_ids | orphan_ids)
+        if merged:
+            record["inspection_ids"] = merged
+            record["inspection_id"] = merged[-1]
+            # FIX: no sobreescribir "salida"
+            if record["status"] == "entrada":
+                record["status"] = "inspeccionado"
+
+        # Actualizar record_id en inspecciones huérfanas que ahora vinculamos
+        if orphan_ids:
+            await db.inspections.update_many(
+                {"id": {"$in": list(orphan_ids)}},
+                {"$set": {"record_id": rid}}
+            )
+
+        # 2. Vincular Ticket
         if not record.get("shipping_ticket_id"):
-            tick = await db.shipping_tickets.find_one(query, sort=[("created_at", -1)])
-            if tick:
-                record["shipping_ticket_id"] = tick["id"]
+            # Buscar ticket con record_id directo primero
+            direct_ticket = await db.shipping_tickets.find_one(
+                {"record_id": rid}, {"_id": 0, "id": 1}
+            )
+            if direct_ticket:
+                record["shipping_ticket_id"] = direct_ticket["id"]
                 record["has_shipping_ticket"] = True
+            else:
+                # Ticket huérfano por placa
+                orphan_ticket = await db.shipping_tickets.find_one(
+                    {"placas_unidad": {"$regex": f".*{regex}.*", "$options": "i"},
+                     "record_id": {"$in": [None, ""]},
+                     "created_at": {"$gte": created_at}},
+                    sort=[("created_at", -1)]
+                )
+                if orphan_ticket:
+                    record["shipping_ticket_id"] = orphan_ticket["id"]
+                    record["has_shipping_ticket"] = True
+                    await db.shipping_tickets.update_one(
+                        {"id": orphan_ticket["id"]},
+                        {"$set": {"record_id": rid}}
+                    )
 
-        # Actualizar en DB
-        await db.vehicle_records.update_one({"id": record["id"]}, {"$set": {
+        # Persistir vínculos actualizados en DB
+        await db.vehicle_records.update_one({"id": rid}, {"$set": {
             "inspection_ids": record.get("inspection_ids", []),
             "inspection_id": record.get("inspection_id"),
             "shipping_ticket_id": record.get("shipping_ticket_id"),
             "has_shipping_ticket": record.get("has_shipping_ticket", False),
             "status": record["status"]
         }})
-    except: pass
+    except Exception as e:
+        logger.error(f"_ensure_record_links error para {record.get('id')}: {e}")
     return record
 
 async def sync_orden_compra(record_id: Optional[str] = None, ticket_id: Optional[str] = None):
@@ -746,7 +792,8 @@ async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Op
     def get_date(s): return s[:10] if s and len(s) >= 10 else None
 
     # FIX: guardar también el created_at de cada inspección para filtrar por tiempo
-    insp_by_plate_date: Dict[tuple, List[dict]] = {}  # (placa, fecha) -> [{id, created_at}]
+    # FIX-D: indexar inspecciones incluyendo record_id para evitar robo cruzado
+    insp_by_plate_date: Dict[tuple, List[dict]] = {}  # (placa, fecha) -> [{id, created_at, record_id}]
     insp_by_record: Dict[str, List[str]] = {}
     for insp in all_insps:
         p = norm(insp.get("placas_unidad", ""))
@@ -756,7 +803,11 @@ async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Op
             insp_by_plate_date.setdefault(key, [])
             ids_in_key = [x["id"] for x in insp_by_plate_date[key]]
             if insp["id"] not in ids_in_key:
-                insp_by_plate_date[key].append({"id": insp["id"], "created_at": insp.get("created_at", "")})
+                insp_by_plate_date[key].append({
+                    "id": insp["id"],
+                    "created_at": insp.get("created_at", ""),
+                    "record_id": insp.get("record_id")  # FIX: preservar record_id
+                })
 
         rid = insp.get("record_id")
         if rid:
@@ -766,6 +817,7 @@ async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Op
 
     ticket_by_plate_date: Dict[tuple, str] = {}
     ticket_by_record: Dict[str, str] = {}
+    ticket_record_id_map: Dict[str, str] = {}  # FIX-D: ticket_id -> record_id que ya tiene
     for tk in all_tickets:
         p = norm(tk.get("placas_unidad", ""))
         d = get_date(tk.get("created_at", ""))
@@ -773,7 +825,9 @@ async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Op
             ticket_by_plate_date[(p, d)] = tk["id"]
 
         rid = tk.get("record_id")
-        if rid: ticket_by_record[rid] = tk["id"]
+        if rid:
+            ticket_by_record[rid] = tk["id"]
+            ticket_record_id_map[tk["id"]] = rid
 
     enriched = []
     for doc in docs:
@@ -792,14 +846,15 @@ async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Op
         by_plates_date = set()
         if p and d:
             potential_entries = insp_by_plate_date.get((p, d), [])
-            # FIX: solo vincular inspecciones que ocurrieron DESPUÉS del registro de entrada
-            # Esto evita arrastrar inspecciones de viajes anteriores del mismo día
             rec_created_at = doc.get("created_at", "")
-            # Para mayor seguridad, si ya hay vínculos directos, ignoramos los de placa/fecha
+            # FIX-D: solo huérfanas (sin record_id) o las del propio registro
+            # Y solo si ocurrieron >= created_at del registro
+            # Evita robo cruzado: si una inspección ya tiene record_id de OTRO registro, no tocar
             if not (existing | by_rec):
                 by_plates_date = set(
                     e["id"] for e in potential_entries
                     if e.get("created_at", "") >= rec_created_at
+                    and (not e.get("record_id") or e.get("record_id") == rid)
                 )
 
         merged_ids = sorted(list(existing | by_rec | by_plates_date))
@@ -811,10 +866,15 @@ async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Op
             if doc["status"] == "entrada":
                 doc["status"] = "inspeccionado"
 
-        # Ticket: prioridad record_id, luego placa+fecha
+        # FIX-D: Ticket por record_id primero; si no, por placa+fecha solo si el ticket es huérfano
         ticket_id = doc.get("shipping_ticket_id") or ticket_by_record.get(rid)
-        if not ticket_id and p and d and not (existing | by_rec):
-            ticket_id = ticket_by_plate_date.get((p, d))
+        if not ticket_id and p and d:
+            candidate_tk_id = ticket_by_plate_date.get((p, d))
+            if candidate_tk_id:
+                # Solo asignar si el ticket no pertenece ya a OTRO registro
+                owner_of_ticket = ticket_record_id_map.get(candidate_tk_id)
+                if not owner_of_ticket or owner_of_ticket == rid:
+                    ticket_id = candidate_tk_id
 
         if ticket_id:
             doc["shipping_ticket_id"] = ticket_id
@@ -826,6 +886,18 @@ async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Op
 
 @api_router.post("/vehicle-records", response_model=VehicleRecord)
 async def create_record(body: VehicleEntry, background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
+    # FIX-A: Bloquear duplicados — no crear si la unidad ya está activa en patio
+    pl_clean = re.sub(r'[^A-Z0-9]', '', (body.placas_unidad or "").upper())
+    if pl_clean:
+        existing_active = await db.vehicle_records.find_one({
+            "entry.placas_unidad": {"$regex": f"^{re.escape(pl_clean)}$", "$options": "i"},
+            "status": {"$ne": "salida"}
+        })
+        if existing_active:
+            raise HTTPException(
+                status_code=400,
+                detail=f"La unidad {body.placas_unidad} ya tiene un registro activo en patio (creado el {existing_active.get('created_at','')[:16]}). Finalice el registro anterior antes de crear uno nuevo."
+            )
     rid = str(uuid.uuid4())
     doc = body.dict()
     full_doc = {
@@ -1671,13 +1743,23 @@ async def create_inspection(body: InspectionCreate, background_tasks: Background
              "$addToSet": {"inspection_ids": iid}}
         )
     else:
-        # Auto-vincular por placas si no viene record_id
+        # FIX-F: Auto-vincular por placas; priorizar registro del MISMO DÍA
         pl = _plate_regex_pattern(body.placas_unidad or "")
         if pl:
+            today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            # Primero buscar registro activo del mismo día
             rec_by_plates = await db.vehicle_records.find_one(
-                {"entry.placas_unidad": {"$regex": pl, "$options": "i"}, "status": {"$ne": "salida"}},
+                {"entry.placas_unidad": {"$regex": pl, "$options": "i"},
+                 "status": {"$ne": "salida"},
+                 "created_at": {"$regex": f"^{today_str}"}},
                 sort=[("created_at", -1)]
             )
+            # Si no hay del día de hoy, buscar cualquier activo reciente
+            if not rec_by_plates:
+                rec_by_plates = await db.vehicle_records.find_one(
+                    {"entry.placas_unidad": {"$regex": pl, "$options": "i"}, "status": {"$ne": "salida"}},
+                    sort=[("created_at", -1)]
+                )
             if rec_by_plates:
                 await db.vehicle_records.update_one(
                     {"id": rec_by_plates["id"]},
@@ -1685,6 +1767,8 @@ async def create_inspection(body: InspectionCreate, background_tasks: Background
                      "$addToSet": {"inspection_ids": iid}}
                 )
                 doc["record_id"] = rec_by_plates["id"]
+                # Persistir record_id en la inspección para vínculos futuros
+                await db.inspections.update_one({"id": iid}, {"$set": {"record_id": rec_by_plates["id"]}})
     # Sincronizar automáticamente al sheet
     background_tasks.add_task(sync_to_google_sheets, "inspeccion", doc)
 
@@ -2587,6 +2671,124 @@ async def merge_vehicle_records(body: MergeRecordsBody, u: Dict[str, Any] = Depe
     }
 
 
+@api_router.post("/admin/deep-repair-links")
+async def deep_repair_links(u: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Reparación profunda de vínculos:
+    - Corrige inspecciones huérfanas (sin record_id) → las vincula al registro correcto
+    - Corrige tickets huérfanos → los vincula al registro correcto
+    - Elimina IDs de inspección de registros que apuntan a inspecciones de otra placa
+    - Reporta estadísticas de lo que se reparó
+    """
+    if not is_admin(u): raise HTTPException(403)
+
+    report = {"fixed_insp_orphans": 0, "fixed_ticket_orphans": 0, "removed_cross_links": 0, "details": []}
+
+    # Obtener todos los datos (sin fotos)
+    proj_min = {"_id": 0, "id": 1, "placas_unidad": 1, "record_id": 1, "created_at": 1}
+    proj_rec = {"_id": 0, "id": 1, "entry.placas_unidad": 1, "created_at": 1, "status": 1,
+                "inspection_ids": 1, "inspection_id": 1, "shipping_ticket_id": 1, "has_shipping_ticket": 1}
+
+    all_records = await db.vehicle_records.find({}, proj_rec).to_list(10000)
+    all_insps = await db.inspections.find({}, proj_min).to_list(10000)
+    all_tickets = await db.shipping_tickets.find({}, {"_id": 0, "id": 1, "placas_unidad": 1, "record_id": 1, "created_at": 1}).to_list(10000)
+
+    # Índice de registros por id
+    rec_by_id = {r["id"]: r for r in all_records}
+    # Índice de registros por placa+fecha (placa canónica)
+    rec_by_plate_date: Dict[tuple, list] = {}
+    for r in all_records:
+        p = _canon_plate(r.get("entry", {}).get("placas_unidad", ""))
+        d = (r.get("created_at") or "")[:10]
+        if p and d:
+            rec_by_plate_date.setdefault((p, d), [])
+            rec_by_plate_date[(p, d)].append(r)
+
+    def find_best_record(placas: str, created_at_obj: str) -> Optional[Dict]:
+        """Encuentra el registro más apropiado para una inspección/ticket."""
+        p = _canon_plate(placas)
+        d = (created_at_obj or "")[:10]
+        candidates = rec_by_plate_date.get((p, d), [])
+        if not candidates:
+            return None
+        # El registro con created_at <= created_at_obj más cercano
+        before = [r for r in candidates if (r.get("created_at") or "") <= created_at_obj]
+        if before:
+            return max(before, key=lambda r: r.get("created_at") or "")
+        # Si todos son posteriores, tomar el más temprano del día
+        return min(candidates, key=lambda r: r.get("created_at") or "")
+
+    # 1. Reparar inspecciones huérfanas (sin record_id)
+    for insp in all_insps:
+        if insp.get("record_id"):
+            continue  # ya tiene vínculo, revisar solo si el record existe
+        best = find_best_record(insp.get("placas_unidad", ""), insp.get("created_at", ""))
+        if best:
+            await db.inspections.update_one({"id": insp["id"]}, {"$set": {"record_id": best["id"]}})
+            await db.vehicle_records.update_one(
+                {"id": best["id"]},
+                {"$addToSet": {"inspection_ids": insp["id"]},
+                 "$set": {"inspection_id": insp["id"]}}
+            )
+            report["fixed_insp_orphans"] += 1
+            report["details"].append(f"Insp {insp['id'][:8]} ({insp.get('placas_unidad')}) → rec {best['id'][:8]}")
+
+    # 2. Reparar inspecciones con record_id apuntando a un registro de DISTINTA placa (vínculo cruzado)
+    for insp in all_insps:
+        rid = insp.get("record_id")
+        if not rid: continue
+        rec = rec_by_id.get(rid)
+        if not rec: continue
+        rec_plate = _canon_plate(rec.get("entry", {}).get("placas_unidad", ""))
+        insp_plate = _canon_plate(insp.get("placas_unidad", ""))
+        if rec_plate and insp_plate and rec_plate != insp_plate:
+            # Vínculo cruzado — reasignar al registro correcto
+            best = find_best_record(insp.get("placas_unidad", ""), insp.get("created_at", ""))
+            if best and best["id"] != rid:
+                await db.inspections.update_one({"id": insp["id"]}, {"$set": {"record_id": best["id"]}})
+                # Quitar del registro equivocado
+                await db.vehicle_records.update_one({"id": rid}, {"$pull": {"inspection_ids": insp["id"]}})
+                # Agregar al correcto
+                await db.vehicle_records.update_one(
+                    {"id": best["id"]},
+                    {"$addToSet": {"inspection_ids": insp["id"]},
+                     "$set": {"inspection_id": insp["id"]}}
+                )
+                report["removed_cross_links"] += 1
+                report["details"].append(f"Insp cruzada {insp['id'][:8]} ({insp.get('placas_unidad')}) movida de rec {rid[:8]} a {best['id'][:8]}")
+
+    # 3. Reparar tickets huérfanos (sin record_id)
+    for tk in all_tickets:
+        if tk.get("record_id"):
+            continue
+        best = find_best_record(tk.get("placas_unidad", ""), tk.get("created_at", ""))
+        if best:
+            await db.shipping_tickets.update_one({"id": tk["id"]}, {"$set": {"record_id": best["id"]}})
+            await db.vehicle_records.update_one(
+                {"id": best["id"]},
+                {"$set": {"shipping_ticket_id": tk["id"], "has_shipping_ticket": True}}
+            )
+            report["fixed_ticket_orphans"] += 1
+            report["details"].append(f"Ticket {tk['id'][:8]} ({tk.get('placas_unidad')}) → rec {best['id'][:8]}")
+
+    # 4. Limpiar inspection_ids en registros que apuntan a IDs inexistentes
+    all_insp_ids = {i["id"] for i in all_insps}
+    for rec in all_records:
+        current_ids = rec.get("inspection_ids") or []
+        valid_ids = [iid for iid in current_ids if iid in all_insp_ids]
+        if len(valid_ids) != len(current_ids):
+            await db.vehicle_records.update_one(
+                {"id": rec["id"]},
+                {"$set": {"inspection_ids": valid_ids,
+                          "inspection_id": valid_ids[-1] if valid_ids else None}}
+            )
+            report["details"].append(f"Rec {rec['id'][:8]}: limpiados {len(current_ids)-len(valid_ids)} insp_ids fantasma")
+
+    report["total_fixed"] = report["fixed_insp_orphans"] + report["fixed_ticket_orphans"] + report["removed_cross_links"]
+    logger.info(f"deep-repair-links completado: {report['total_fixed']} correcciones por {u.get('email')}")
+    return report
+
+
 @api_router.post("/admin/repair-links")
 async def repair_links(background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
     """
@@ -2627,26 +2829,28 @@ async def repair_links(background_tasks: BackgroundTasks, u: Dict[str, Any] = De
                         missing_plates_data[nm] = {"p": p, "date": tick.get("created_at"), "company": tick.get("linea_transporte"), "box": tick.get("numero_caja"), "sello": tick.get("numero_sello"), "driver": tick.get("operador")}
 
             for nm, data in missing_plates_data.items():
-                # Bloqueo de duplicados: No permitir crear un registro si ya hay uno activo para la misma placa
-    # Esto evita el problema de unidades que aparecen múltiples veces en el panel de inicio.
-    pl_clean = re.sub(r'[^A-Z0-9]', '', body.placas_unidad.upper())
-    if pl_clean:
-        # Buscamos cualquier registro activo (que no sea salida) con la misma placa
-        # Usamos un regex exacto para la placa normalizada para ser precisos
-        existing_active = await db.vehicle_records.find_one({
-            "entry.placas_unidad": {"$regex": f"^{body.placas_unidad}$", "$options": "i"},
-            "status": {"$ne": "salida"}
-        })
-        if existing_active:
-            raise HTTPException(
-                status_code=400,
-                detail=f"La unidad {body.placas_unidad} ya tiene un registro activo en patio (creado el {existing_active['created_at'][:16]}). Por favor finalice el registro anterior antes de crear uno nuevo para evitar duplicados."
-            )
-
-    rid = str(uuid.uuid4())
+                # FIX-E: no crear duplicado si ya existe registro de esa placa en esa misma fecha
+                date_str = (data.get("date") or "")[:10]
+                already_exists = any(
+                    norm(r.get("entry", {}).get("placas_unidad", "")) == nm
+                    and (r.get("created_at") or "")[:10] == date_str
+                    for r in all_records
+                )
+                if already_exists:
+                    continue
+                rid = str(uuid.uuid4())
                 await db.vehicle_records.insert_one({
-                    "id": rid, "user_id": u["id"], "status": "inspeccionado", "created_at": data["date"],
-                    "entry": {"tipo_unidad": "sencillo", "placas_unidad": data["p"], "chofer_nombre": data["driver"] or "HISTÓRICO", "compania_transporte": data["company"] or "", "numero_caja": data["box"] or "", "sello_entrada": data["sello"] or "", "guardia_caseta_nombre": "RECONSTRUIDO", "fecha_entrada": data["date"]}
+                    "id": rid, "user_id": "system", "status": "inspeccionado",
+                    "created_at": data["date"],
+                    "entry": {
+                        "tipo_unidad": "sencillo", "placas_unidad": data["p"],
+                        "chofer_nombre": data["driver"] or "HISTÓRICO",
+                        "compania_transporte": data["company"] or "",
+                        "numero_caja": data["box"] or "",
+                        "sello_entrada": data["sello"] or "",
+                        "guardia_caseta_nombre": "RECONSTRUIDO",
+                        "fecha_entrada": data["date"]
+                    }
                 })
                 existing_plates.add(nm)
 
