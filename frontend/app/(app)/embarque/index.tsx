@@ -177,16 +177,22 @@ export default function EmbarqueList() {
           <Text style={styles.statLabel}>{t('total').toUpperCase()}</Text>
         </View>
         <View style={styles.stat}>
-          <Text style={[styles.statNum, { color: colors.success }]}>
-            {tickets.filter(tk => !!tk.firma_guardia && !!tk.almacenista).length}
+          <Text style={[styles.statNum, { color: colors.info }]}>
+            {tickets.filter(tk => !!tk.is_virtual).length}
           </Text>
-          <Text style={styles.statLabel}>{t('completos').toUpperCase()}</Text>
+          <Text style={styles.statLabel}>{t('por_crear').toUpperCase()}</Text>
         </View>
         <View style={styles.stat}>
           <Text style={[styles.statNum, { color: colors.warning }]}>
-            {tickets.filter(tk => !tk.firma_guardia || !tk.almacenista).length}
+            {tickets.filter(tk => !tk.is_virtual && (!tk.firma_guardia || !tk.almacenista)).length}
           </Text>
-          <Text style={styles.statLabel}>{t('pendientes').toUpperCase()}</Text>
+          <Text style={styles.statLabel}>{t('en_proceso').toUpperCase()}</Text>
+        </View>
+        <View style={styles.stat}>
+          <Text style={[styles.statNum, { color: colors.success }]}>
+            {tickets.filter(tk => !tk.is_virtual && (!!tk.firma_guardia && !!tk.almacenista)).length}
+          </Text>
+          <Text style={styles.statLabel}>{t('realizados').toUpperCase()}</Text>
         </View>
       </View>
 

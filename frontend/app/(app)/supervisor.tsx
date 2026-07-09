@@ -305,7 +305,7 @@ export default function Supervisor() {
         .filter(i => !ticketPlatesDate.has(`${normalize(i.placas_unidad)}|${getDate(i.created_at)}`))
         .map(i => ({
           id: `p-${i.id}`,
-          _is_pending: true,
+          _is_pending_ticket: true,
           placas_unidad: i.placas_unidad,
           cliente: t('pendiente_despacho').toUpperCase(),
           operador: i.inspector_nombre,
@@ -593,18 +593,21 @@ function TabBtn({ label, icon, active, on, isMCI }: any) {
 function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records, tickets, inspections, isAdmin, token, onDeleted }: any) {
   const [deleting, setDeleting] = useState(false);
   const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
+  const getDate = (s: string) => s?.substring(0, 10) || '';
   const plates = item.placas_unidad || item.entry?.placas_unidad || 'S/P';
   const normPlates = normalize(plates);
+  const itemDate = getDate(item.created_at || item.entry?.fecha_entrada);
+
   const subtitle = item.entry?.chofer_nombre || item.chofer_nombre || item.inspector_nombre || item.cliente || '-';
   const company = item.entry?.compania_transporte || item.compania_transportista || '-';
 
-  const relatedRecord = type === 'caseta' ? (item._is_virtual ? null : item) : records.find((r: any) => normalize(r.entry?.placas_unidad) === normPlates);
+  const relatedRecord = type === 'caseta' ? (item._is_virtual ? null : item) : records.find((r: any) => normalize(r.entry?.placas_unidad) === normPlates && getDate(r.created_at) === itemDate);
   const isFull = (relatedRecord?.entry?.tipo_unidad === 'full') || (item.inspection_type === '19_puntos' && item.numero_trailer?.includes('-2'));
   const isDescarga = relatedRecord?.entry?.condicion_carga === 'descarga';
   const showShipping = !isFull && !isDescarga;
 
-  const relatedInsps = inspections.filter((i: any) => i.record_id === relatedRecord?.id || normalize(i.placas_unidad) === normPlates);
-  const matchTicket = tickets.find((tk: any) => normalize(tk.placas_unidad) === normPlates);
+  const relatedInsps = inspections.filter((i: any) => i.record_id === relatedRecord?.id || (normalize(i.placas_unidad) === normPlates && getDate(i.created_at) === itemDate));
+  const matchTicket = tickets.find((tk: any) => normalize(tk.placas_unidad) === normPlates && getDate(tk.created_at) === itemDate);
 
   const recordInspCount = (relatedRecord?.inspection_ids?.length || 0) + (relatedRecord?.inspection_id && !relatedRecord?.inspection_ids?.includes(relatedRecord.inspection_id) ? 1 : 0);
   const localInspCount = relatedInsps.length;
@@ -770,6 +773,13 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
       </View>
 
       <View style={styles.statusSide}>
+        {type === 'embarque' && (
+          <View style={[styles.statusChip, { backgroundColor: item._is_pending_ticket ? colors.warning : colors.success, marginBottom: 4 }]}>
+            <Text style={styles.statusChipText}>
+              {item._is_pending_ticket ? t('pendiente').toUpperCase() : t('realizados').toUpperCase()}
+            </Text>
+          </View>
+        )}
         <View style={[styles.statusChip, {
           backgroundColor: steps.exit ? '#10B981'
             : status === 'INSPECCIONADO' ? '#0284C7'
