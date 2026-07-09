@@ -23,33 +23,51 @@ Notifications.setNotificationHandler({
 // Task Manager definition (Top level)
 TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async () => {
   try {
-    const token = await AsyncStorage.getItem('userToken'); // Need to ensure token is here
+    const token = await AsyncStorage.getItem('userToken');
     if (!token) return BackgroundFetch.BackgroundFetchResult.NoData;
 
-    const res = await fetch(`https://d4r005-sriuc.hf.space/api/notifications`, {
+    const res = await fetch('https://d4r005-sriuc.hf.space/api/notifications', {
       headers: { 'Authorization': `Bearer ${token}` }
     });
+    if (!res.ok) return BackgroundFetch.BackgroundFetchResult.Failed;
     const data = await res.json();
     const lastNotifId = await AsyncStorage.getItem('last_notif_id');
+    const lastNotifTs = await AsyncStorage.getItem('last_notif_ts');
 
     if (data && data.length > 0) {
-      const newest = data[0];
-      if (!newest.read && newest.id !== lastNotifId) {
+      // Disparar todas las notificaciones no leídas más nuevas que la última vista
+      const unread = data.filter((n: any) => !n.read && n.id !== lastNotifId);
+      if (unread.length > 0) {
+        const newest = unread[0];
+        // Evitar re-disparar notificaciones muy recientes (ventana de 30s)
+        const now = Date.now();
+        const lastTs = lastNotifTs ? parseInt(lastNotifTs) : 0;
+        if (now - lastTs < 30000 && newest.id === lastNotifId) {
+          return BackgroundFetch.BackgroundFetchResult.NoData;
+        }
+        
+        const isUrgent = newest.urgent || newest.kind === 'falla' || newest.kind === 'mention';
         await Notifications.scheduleNotificationAsync({
           content: {
-            title: `🚨 ${newest.title}`,
+            title: `${isUrgent ? '🔴' : '📋'} ${newest.title}`,
             body: newest.message,
-            data: { inspection_id: newest.inspection_id },
-            sound: true,
+            data: {
+              inspection_id: newest.inspection_id,
+              record_id: newest.record_id,
+              chat_room: newest.chat_room,
+            },
+            sound: 'default',
           },
           trigger: null,
         });
         await AsyncStorage.setItem('last_notif_id', newest.id);
+        await AsyncStorage.setItem('last_notif_ts', String(now));
         return BackgroundFetch.BackgroundFetchResult.NewData;
       }
     }
     return BackgroundFetch.BackgroundFetchResult.NoData;
   } catch (error) {
+    console.error('[BGTask] Error:', error);
     return BackgroundFetch.BackgroundFetchResult.Failed;
   }
 });
@@ -156,9 +174,9 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_NOTIFICATION_TASK);
       if (!isRegistered) {
         await BackgroundFetch.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK, {
-          minimumInterval: 60 * 15, // 15 minutes (OS minimum)
-          stopOnTerminate: false,
-          startOnBoot: true,
+          minimumInterval: 60 * 15, // 15 min es el mínimo que permite Android (el OS decide cuándo ejecutar)
+          stopOnTerminate: false, // continúa aunque se cierre la app
+          startOnBoot: true,  // se reactiva al reiniciar el dispositivo
         });
       }
     } catch (err) {
@@ -205,7 +223,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     })();
 
     const t = setInterval(refresh, 5000); // Polling cada 5s para mayor agilidad en chat/alertas
-    return () => clearInterval(t);
+    // return handled above
   }, [token, refresh]);
 
   const markRead = async (id: string) => {
