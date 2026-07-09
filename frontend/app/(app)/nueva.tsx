@@ -389,9 +389,15 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
   const canNext = () => {
     if (step === 0) return data.placas && data.trailer;
     if (step === 1) return data.box_type && data.measures?.alto && data.measures?.ancho;
-    if (step === 2) return points.every(p => p.estado !== '');
-    if (step === 3) return points.filter(p => p.estado === 'malo').every(p => p.comentarios && p.photo);
-    if (step === 4) return data.inspectorFirma;
+    if (step === 2) {
+      // Todos los puntos deben tener un estado.
+      // Además, si un punto tiene falla, debe tener foto y comentario.
+      const allSelected = points.every(p => p.estado !== '');
+      if (!allSelected) return false;
+      const failuresIncomplete = points.filter(p => p.estado === 'malo').some(p => !p.comentarios || !p.photo);
+      return !failuresIncomplete;
+    }
+    if (step === 3) return data.inspectorFirma;
     return true;
   };
 
@@ -708,7 +714,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
             <View>
               <Text style={{ fontWeight: '900', marginBottom: 10, letterSpacing: 1 }}>{t('puntos_inspeccion').toUpperCase()} ({points.filter(p=>p.estado!=='').length}/{points.length})</Text>
               {points.map((p, idx) => (
-                <View key={p.number} style={styles.pointRow}>
+                <View key={p.number} style={[styles.pointRow, p.estado === 'malo' && { borderColor: colors.error, borderWidth: 2 }]}>
                   <Text style={styles.pointName}>{p.number}. {p.name}</Text>
                   <View style={styles.toggleRow}>
                     <Pressable onPress={() => { const n = [...points]; n[idx].estado = 'bueno'; setPoints(n); }} style={[styles.toggleBtn, p.estado === 'bueno' && { backgroundColor: colors.success }]}>
@@ -718,54 +724,41 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
                       <Text style={[styles.toggleText, p.estado === 'malo' && { color: '#FFF' }]}>{t('falla').toUpperCase()}</Text>
                     </Pressable>
                   </View>
+
+                  {p.estado === 'malo' && (
+                    <View style={{ marginTop: 15, borderTopWidth: 1, borderTopColor: '#EEE', paddingTop: 10 }}>
+                      <Text style={[styles.label, { color: colors.error, marginBottom: 8 }]}>{t('detalles_falla').toUpperCase()}</Text>
+                      <TextInput
+                        style={styles.failInput}
+                        placeholder={t('comentarios_falla')}
+                        autoCapitalize="characters"
+                        autoCorrect={false}
+                        value={p.comentarios}
+                        onChangeText={v => {
+                          const n = [...points];
+                          n[idx].comentarios = v.toUpperCase();
+                          setPoints(n);
+                        }}
+                      />
+                      <Pressable style={[styles.photoBtn, !p.photo && { borderColor: colors.error }]} onPress={() => pickPointPhoto(idx)}>
+                        {p.photo ? (
+                          <Image source={{ uri: p.photo }} style={styles.photoPreview} />
+                        ) : (
+                          <View style={styles.photoCta}>
+                            <Ionicons name="camera" size={32} color={colors.error} />
+                            <Text style={[styles.photoText, { color: colors.error }]}>{t('tomar_foto_evidencia')}</Text>
+                            <Text style={{ fontSize: 9, color: colors.error, fontWeight: '700', marginTop: 2 }}>{t('foto_obligatoria_falla')}</Text>
+                          </View>
+                        )}
+                      </Pressable>
+                    </View>
+                  )}
                 </View>
               ))}
             </View>
           )}
 
           {step === 3 && (
-            <View>
-              <Text style={{ fontWeight: '900', marginBottom: 15, letterSpacing: 1 }}>{t('detalles_fallas').toUpperCase()}</Text>
-              {points.filter(p => p.estado === 'malo').map((p, idx) => {
-                const originalIdx = points.findIndex(orig => orig.number === p.number);
-                return (
-                  <View key={p.number} style={styles.failCard}>
-                    <Text style={styles.failTitle}>{p.number}. {p.name}</Text>
-                    <TextInput
-                      style={styles.failInput}
-                      placeholder={t('comentarios_falla')}
-                      autoCapitalize="characters"
-                      autoCorrect={false}
-                      value={p.comentarios}
-                      onChangeText={v => {
-                        const upper = v.toUpperCase();
-                        if (upper !== p.comentarios) {
-                          const n = [...points];
-                          n[originalIdx].comentarios = upper;
-                          setPoints(n);
-                        }
-                      }}
-                    />
-                    <Pressable style={styles.photoBtn} onPress={() => pickPointPhoto(originalIdx)}>
-                      {p.photo ? (
-                        <Image source={{ uri: p.photo }} style={styles.photoPreview} />
-                      ) : (
-                        <View style={styles.photoCta}>
-                          <Ionicons name="camera" size={24} color={colors.brandPrimary} />
-                          <Text style={styles.photoText}>{t('tomar_foto_evidencia')}</Text>
-                        </View>
-                      )}
-                    </Pressable>
-                  </View>
-                );
-              })}
-              {points.filter(p => p.estado === 'malo').length === 0 && (
-                <View style={styles.center}><Text style={{ color: colors.muted }}>{t('no_hay_fallas')}</Text></View>
-              )}
-            </View>
-          )}
-
-          {step === 4 && (
             <View>
               <Text style={styles.label}>{t('actividad_sospechosa').toUpperCase()}</Text>
               <TextInput
@@ -831,10 +824,10 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
          {step > 0 && <Pressable style={styles.wizBtnSec} onPress={() => setStep(step-1)}><Text style={styles.wizBtnText}>{t('atras').toUpperCase()}</Text></Pressable>}
          <Pressable
            style={[styles.wizBtnPri, !canNext() && { opacity: 0.5 }]}
-           onPress={() => step < 4 ? setStep(step+1) : handleFinish()}
+           onPress={() => step < 3 ? setStep(step+1) : handleFinish()}
            disabled={!canNext() || saving}
          >
-           {saving ? <ActivityIndicator color="#FFF" /> : <Text style={[styles.wizBtnText, { color: '#FFF' }]}>{step === 4 ? t('finalizar').toUpperCase() : t('siguiente').toUpperCase()}</Text>}
+           {saving ? <ActivityIndicator color="#FFF" /> : <Text style={[styles.wizBtnText, { color: '#FFF' }]}>{step === 3 ? t('finalizar').toUpperCase() : t('siguiente').toUpperCase()}</Text>}
          </Pressable>
       </View>
 
