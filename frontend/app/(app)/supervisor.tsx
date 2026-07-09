@@ -699,7 +699,7 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
     entry: !!relatedRecord || item._is_virtual,
     inspection: inspectionComplete,
     shipping: hasTicket,
-    exit: relatedRecord?.status?.toLowerCase() === 'salida'
+    exit: relatedRecord?.status?.toLowerCase() === 'salida' || item.status?.toLowerCase() === 'salida' || !!(item.exit?.fecha_salida)
   };
 
   const rawStatus = relatedRecord?.status || (inspectionComplete ? 'inspeccionado' : 'entrada');
@@ -712,7 +712,7 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
   // todavía no existe ticket de embarque para esta unidad — este botón no
   // existía antes, así que no había forma directa de saltar a crear el
   // ticket con los datos ya prellenados (placas, compañía, caja, etc.).
-  const canGenerateTicket = !item._is_pending && inspectionComplete && !hasTicket;
+  const canGenerateTicket = !item._is_pending && inspectionComplete && !hasTicket && showShipping;
   const linkedInspectionId = relatedRecord?.inspection_id || relatedInsps[0]?.id || (type === 'inspeccion' ? item.id : '');
   const handleGenerateTicket = () => {
     router.push({
@@ -821,7 +821,7 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
           >
             <Ionicons name="create-outline" size={14} color="#333" />
             <Text style={styles.actionLinkText}>
-              {type === 'inspeccion' ? t('editar_inspeccion').toUpperCase() : type === 'embarque' ? t('editar_ticket').toUpperCase() : (item._is_virtual ? t('registrar_entrada').toUpperCase() : t('editor_caseta').toUpperCase())}
+              {type === 'inspeccion' ? t('editar_inspeccion').toUpperCase() : type === 'embarque' ? t('editar_ticket').toUpperCase() : ((item._is_virtual && !relatedRecord) ? t('registrar_entrada').toUpperCase() : t('editor_caseta').toUpperCase())}
             </Text>
           </Pressable>
 
@@ -956,3 +956,4 @@ const styles = StyleSheet.create({
   sendBtn: { flex: 2, padding: 14, backgroundColor: '#0A2540', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   sendBtnText: { color: '#FFF', fontWeight: '900', fontSize: 12 },
 });
+
