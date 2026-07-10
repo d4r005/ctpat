@@ -18,6 +18,7 @@ export default function EmbarqueDetail() {
   const { t } = useTranslation();
   const { token, user } = useAuth();
   const [ticket, setTicket] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState<any>(null);
   const [saving, setSaving] = useState(false);
@@ -35,6 +36,7 @@ export default function EmbarqueDetail() {
   const load = async () => {
     try {
       if (!id) return;
+      setLoading(true);
       console.log(`[EmbarqueDetail] Loading ticket ID: ${id}`);
       const data = await apiCall<any>(`/shipping-tickets/${id}`, { token });
       if (!data) {
@@ -45,6 +47,8 @@ export default function EmbarqueDetail() {
     } catch (e: any) {
       console.error(`[EmbarqueDetail] Error loading ticket ${id}:`, e);
       Alert.alert(t('error'), `${t('error_cargar_datos')}: ${e.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -98,7 +102,21 @@ export default function EmbarqueDetail() {
     }
   };
 
-  if (!ticket) return <SafeAreaView style={styles.safe}><View style={styles.center}><ActivityIndicator color={colors.brandPrimary} /></View></SafeAreaView>;
+  if (loading) return <SafeAreaView style={styles.safe}><View style={styles.center}><ActivityIndicator color={colors.brandPrimary} /></View></SafeAreaView>;
+
+  if (!ticket || !form) return (
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.topBar}>
+        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={28} color="#FFF" />
+        </Pressable>
+        <Text style={styles.topTitle}>{t('embarque').toUpperCase()}</Text>
+      </View>
+      <View style={styles.center}>
+        <Text>{t('no_hay_registros')}</Text>
+      </View>
+    </SafeAreaView>
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
