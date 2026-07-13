@@ -482,6 +482,36 @@ export default function CasetaDetail() {
             </View>
           </View>
 
+          {/* SECCIÓN TICKET EMBARQUE */}
+          <View style={styles.section}>
+            <View style={[styles.sectionHeader, { backgroundColor: '#FF8C00' }]}>
+              <Ionicons name="cube" size={20} color="#FFF" />
+              <Text style={styles.sectionTitle}>TICKET EMBARQUE</Text>
+            </View>
+            <View style={styles.sectionBody}>
+              {rec.has_shipping_ticket || rec.shipping_ticket_id ? (
+                <Pressable
+                  style={[styles.inspectionLink]}
+                  onPress={() => router.push(`/embarque/${rec.shipping_ticket_id}`)}
+                >
+                  <Ionicons name="document-text" size={16} color="#FF8C00" />
+                  <Text style={[styles.inspectionLinkText, { color: '#FF8C00' }]}>Ver Ticket de Embarque</Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.muted} style={{ marginLeft: 'auto' }} />
+                </Pressable>
+              ) : (
+                <Pressable
+                  style={[styles.actionBtn, { backgroundColor: '#FF8C00' }]}
+                  onPress={() => router.push(
+                    `/(app)/embarque/nuevo?record_id=${rec.id}&placas=${rec.entry?.placas_unidad || ''}&compania=${rec.entry?.compania_transporte || ''}&operador=${rec.entry?.chofer_nombre || ''}&trailer=${rec.entry?.numero_caja || ''}&economico=${rec.entry?.numero_tractor || ''}&hora_llegada=${rec.entry?.hora_llegada || ''}&orden_compra=${rec.entry?.numero_orden_compra || ''}`
+                  )}
+                >
+                  <Ionicons name="add-circle" size={20} color="#FFF" />
+                  <Text style={styles.actionBtnText}>GENERAR TICKET EMBARQUE</Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+
           {/* SECCIÓN SALIDA */}
           <View style={styles.section}>
             <Pressable

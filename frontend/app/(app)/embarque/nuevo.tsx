@@ -162,7 +162,9 @@ export default function EmbarqueNuevo() {
 
   const save = async () => {
     const finalCliente = form.cliente === 'OTRO' ? form.cliente_otro : form.cliente;
-    if (!form.almacenista.trim() || !finalCliente.trim()) {
+    // Si eligió opción predefinida, usar esa; si eligió OTRO o nada, usar el texto del campo
+    const finalAlmacenista = (almacenistaOpcion && almacenistaOpcion !== 'OTRO') ? almacenistaOpcion : form.almacenista.trim();
+    if (!finalAlmacenista || !finalCliente.trim()) {
       alert(t('obligatorios_msg'));
       return;
     }
@@ -170,6 +172,7 @@ export default function EmbarqueNuevo() {
     try {
       const payload = {
         ...form,
+        almacenista: finalAlmacenista,
         cliente: finalCliente,
         record_id: params.record_id || '' // Enviar record_id para vínculo atómico
       };
@@ -239,7 +242,7 @@ export default function EmbarqueNuevo() {
                 </Pressable>
               ))}
             </View>
-            {(almacenistaOpcion === 'OTRO' || !almacenistaOpcion) && (
+            {(almacenistaOpcion === 'OTRO' || almacenistaOpcion === '') && (
               <F label={t('nombre_completo').toUpperCase()} v={form.almacenista} on={(t: string) => set('almacenista', t)} tid="emb-almacenista" placeholder={t('nombre_completo_placeholder')} />
             )}
 
