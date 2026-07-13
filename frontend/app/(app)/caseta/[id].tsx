@@ -336,7 +336,7 @@ export default function CasetaDetail() {
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <ScrollView contentContainerStyle={[styles.scroll, isTablet && styles.scrollTablet]}>
           {/* SECCIÓN ENTRADA */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -433,8 +433,8 @@ export default function CasetaDetail() {
               </View>
 
               <View style={styles.metaRow}>
-                <Text style={styles.metaText}>{t('fecha')}: {new Date(rec.entry.fecha_entrada || rec.created_at).toLocaleString()}</Text>
-                <Text style={styles.metaText}>{t('guardia')}: {rec.entry.guardia_caseta_nombre}</Text>
+                <Text style={styles.metaText}>{t('fecha')}: {new Date(rec.entry?.fecha_entrada || rec.created_at).toLocaleString()}</Text>
+                <Text style={styles.metaText}>{t('guardia')}: {rec.entry?.guardia_caseta_nombre}</Text>
               </View>
             </View>
           </View>
@@ -465,7 +465,7 @@ export default function CasetaDetail() {
               <View style={styles.btnRow}>
                 <Pressable
                   style={[styles.actionBtn, { backgroundColor: colors.brandPrimary }]}
-                  onPress={() => router.push(`/(app)/nueva?record_id=${rec.id}&placas=${rec.entry.placas_unidad}&trailer=${rec.entry.numero_caja}&sello=${rec.entry.sello_entrada}`)}
+                  onPress={() => router.push(`/(app)/nueva?record_id=${rec.id}&placas=${rec.entry?.placas_unidad || ""}&trailer=${rec.entry?.numero_caja || ""}&sello=${rec.entry?.sello_entrada || ""}`)}
                 >
                   <Ionicons name="add-circle" size={20} color="#FFF" />
                   <Text style={styles.actionBtnText}>{t('inspeccionar').toUpperCase()} {isFull ? '1' : ''}</Text>
@@ -474,7 +474,7 @@ export default function CasetaDetail() {
                 {isFull && (
                   <Pressable
                     style={[styles.actionBtn, { backgroundColor: colors.brandSecondary }]}
-                    onPress={() => router.push(`/(app)/nueva?record_id=${rec.id}&placas=${rec.entry.placas_unidad}&trailer=${rec.entry.numero_caja_2}&sello=${rec.entry.sello_entrada_2}`)}
+                    onPress={() => router.push(`/(app)/nueva?record_id=${rec.id}&placas=${rec.entry?.placas_unidad || ""}&trailer=${rec.entry?.numero_caja_2 || ""}&sello=${rec.entry?.sello_entrada_2 || ""}`)}
                   >
                     <Ionicons name="add-circle" size={20} color="#FFF" />
                     <Text style={styles.actionBtnText}>{t('inspeccionar').toUpperCase()} 2</Text>
@@ -809,6 +809,7 @@ const styles = StyleSheet.create({
   backBtn: { padding: 5 },
   topTitle: { color: '#FFF', fontWeight: '900', fontSize: 16, letterSpacing: 1 },
   scroll: { padding: spacing.md, gap: spacing.md, paddingBottom: 100 },
+  scrollTablet: { maxWidth: 860, alignSelf: 'center', width: '100%' },
   section: { backgroundColor: '#FFF', borderWidth: 2, borderColor: colors.borderStrong, overflow: 'hidden' },
   sectionHeader: { backgroundColor: colors.brandPrimary, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 10 },
   sectionTitle: { color: '#FFF', fontWeight: '900', fontSize: 12, letterSpacing: 1, flex: 1 },
@@ -860,3 +861,4 @@ const styles = StyleSheet.create({
   modalBtn: { padding: 10, paddingHorizontal: 20 },
   modalBtnPrimary: { backgroundColor: colors.brandPrimary, borderRadius: 4 },
 });
+
