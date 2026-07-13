@@ -105,6 +105,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const lastShownTsRef = useRef<number>(0);
   // Flag para saber si es la primera carga (al abrir la app no disparar alerta)
   const isFirstLoadRef = useRef<boolean>(true);
+  // Lock para evitar race conditions cuando polling y primer refresh() corren simultáneamente
+  const isRefreshingRef = useRef<boolean>(false);
 
   // ── Disparar alerta local (vibración + notif) ───────────────────────────
   const triggerLocalAlert = useCallback(async (notif: Notification) => {
@@ -145,6 +147,9 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   // ── Refresh: obtener notificaciones del servidor ────────────────────────
   const refresh = useCallback(async () => {
     if (!token) return;
+    // Lock: evitar ejecuciones concurrentes del polling + primera carga
+    if (isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
     try {
       const data = await apiCall<Notification[]>('/notifications', { token });
       if (!data || !Array.isArray(data)) return;
@@ -171,6 +176,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       }
     } catch (e) {
       console.warn('[Notifications] refresh error:', e);
+    } finally {
+      isRefreshingRef.current = false;
     }
   }, [token, triggerLocalAlert]);
 
@@ -186,7 +193,11 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       }
       if (finalStatus !== 'granted') return;
 
-      const expoToken = (await Notifications.getExpoPushTokenAsync()).data;
+      // projectId es OBLIGATORIO en builds de producción (EAS).
+      // Sin él, getExpoPushTokenAsync falla silenciosamente en APKs standalone.
+      const expoToken = (await Notifications.getExpoPushTokenAsync({
+        projectId: 'north-america-flooring/sriuc', // slug del proyecto en expo.dev
+      })).data;
       await apiCall('/users/push-token', { method: 'POST', body: { token: expoToken }, token });
     } catch (err) {
       console.warn('[Notifications] Push token error:', err);
@@ -285,3 +296,4 @@ export function useNotifications() {
   if (!ctx) throw new Error('useNotifications debe usarse dentro de NotificationsProvider');
   return ctx;
 }
+
