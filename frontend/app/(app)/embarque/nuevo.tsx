@@ -295,7 +295,7 @@ export default function EmbarqueNuevo() {
             <F label={t('hora_cierre_cortina_caps').toUpperCase()} v={form.hora_cierre_cortina} on={(t: string) => set('hora_cierre_cortina', t)} tid="emb-hora-cierre" placeholder="HH:MM" />
             <F label={t('hora_salida_desenrampe').toUpperCase()} v={form.hora_salida} on={(t: string) => set('hora_salida', t)} tid="emb-hora-salida" placeholder="HH:MM" />
             <F label={t('numero_pallets_caps').toUpperCase()} v={form.numero_pallets} on={(t: string) => set('numero_pallets', t)} tid="emb-pallets" kb="numeric" />
-            <F label={t('numero_sello_caps').toUpperCase()} v={form.numero_sello} on={(t: string) => { set('numero_sello', t); set('sellos', t); }} tid="emb-sello" />
+            <F label={t('numero_sello_caps').toUpperCase()} v={form.numero_sello} on={(t: string) => { set('numero_sello', t); set('sellos', t); set('sello_salida', t); }} tid="emb-sello" />
             <F label={t('orden_compra').toUpperCase()} v={form.numero_orden_compra} on={(t: string) => set('numero_orden_compra', t)} tid="emb-orden-compra" />
           </Section>
 
@@ -530,3 +530,4 @@ const styles = StyleSheet.create({
   optionTextActive: { color: colors.onBrandPrimary },
   removeBtnSig: { position: 'absolute', top: 5, right: 5, padding: 5, backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: 15 },
 });
+
