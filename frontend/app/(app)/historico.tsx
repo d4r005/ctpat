@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, TextInput, RefreshControl } from 'react-native';
+import { useIsTablet } from '@/src/hooks/useIsTablet';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +19,7 @@ export default function Historico() {
   const { t } = useTranslation();
   const { inspections, refresh, loading, token } = useInspections();
   const { user } = useAuth();
+  const isTablet = useIsTablet();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('todos');
   const [records, setRecords] = useState<any[]>([]);

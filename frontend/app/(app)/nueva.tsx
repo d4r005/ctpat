@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, Pressable, TextInput, RefreshControl,
   ActivityIndicator, ScrollView, Platform, Alert, Image, KeyboardAvoidingView
 } from 'react-native';
+import { useIsTablet } from '@/src/hooks/useIsTablet';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +25,7 @@ const TOTAL_STEPS = 4;
 
 export default function InspeccionDashboard() {
   const router = useRouter();
+  const isTablet = useIsTablet();
   const params = useLocalSearchParams<{
     record_id?: string;
     compania?: string;

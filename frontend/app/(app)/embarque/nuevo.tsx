@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Image, Alert } from 'react-native';
+import { useIsTablet } from '@/src/hooks/useIsTablet';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +16,7 @@ import { compressImage } from '@/src/utils/image';
 
 export default function EmbarqueNuevo() {
   const router = useRouter();
+  const isTablet = useIsTablet();
   const { t } = useTranslation();
   const { token, user } = useAuth();
   const { saveShippingTicket } = useInspections();

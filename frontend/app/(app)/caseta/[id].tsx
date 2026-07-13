@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, Pressable, TextInput,
   ActivityIndicator, KeyboardAvoidingView, Platform, Image, Alert, TouchableOpacity
 } from 'react-native';
+import { useIsTablet } from '@/src/hooks/useIsTablet';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +20,7 @@ import { compressImage } from '@/src/utils/image';
 export default function CasetaDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const isTablet = useIsTablet();
   const { t } = useTranslation();
   const { token, user } = useAuth();
   const { patchVehicleExit } = useInspections();

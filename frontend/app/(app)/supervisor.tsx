@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, Pressable, TextInput, RefreshControl, Platform,
   ActivityIndicator, Alert, ScrollView, Modal, KeyboardAvoidingView, TouchableOpacity
 } from 'react-native';
+import { useIsTablet } from '@/src/hooks/useIsTablet';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -35,6 +36,7 @@ function EmailModal({
 }) {
   const { t } = useTranslation();
   const DEFAULT_EMAIL = 'd.trujillo@brancoindustries.com';
+  const isTablet = useIsTablet();
   const [extraInput, setExtraInput] = useState('');
   const [extraList, setExtraList] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
