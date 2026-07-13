@@ -43,7 +43,21 @@ export default function EmbarqueDetail() {
         throw new Error("Ticket no encontrado");
       }
       setTicket(data);
-      setForm(JSON.parse(JSON.stringify(data)));
+      // Auto-prellenar sección del guardia con datos del almacenista
+      // Si el guardia aún no firmó/guardó su sección, pre-llenamos con lo
+      // que capturó el almacenista para evitar doble captura.
+      const prefilled = JSON.parse(JSON.stringify(data));
+      if (!prefilled.nombre_guardia) {
+        // El sello que puso el almacenista se copia al campo del guardia
+        if (!prefilled.sello_salida && prefilled.numero_sello) {
+          prefilled.sello_salida = prefilled.numero_sello;
+        }
+        // El campo 'sellos' (texto libre) también recibe el numero_sello si está vacío
+        if (!prefilled.sellos && prefilled.numero_sello) {
+          prefilled.sellos = prefilled.numero_sello;
+        }
+      }
+      setForm(prefilled);
     } catch (e: any) {
       console.error(`[EmbarqueDetail] Error loading ticket ${id}:`, e);
       Alert.alert(t('error'), `${t('error_cargar_datos')}: ${e.message}`);
@@ -366,4 +380,5 @@ const styles = StyleSheet.create({
   sigModalBtn: { flex: 1, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#DDD', borderRadius: 4 },
   sigModalBtnPrimary: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }
 });
+
 
