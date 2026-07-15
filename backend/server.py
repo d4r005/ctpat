@@ -419,11 +419,18 @@ async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
         ).to_list(50)
         direct_ids = {i["id"] for i in direct_insps}
 
+        # Buscar inspecciones huérfanas de esta placa posteriores a la entrada
+        # Límite superior: si el registro tiene salida, la inspección debe ser anterior
+        exit_ts = (record.get("exit") or {}).get("fecha_salida", "")
+        orphan_filter: Dict[str, Any] = {
+            "placas_unidad": {"$regex": f".*{regex}.*", "$options": "i"},
+            "$or": [{"record_id": {"$exists": False}}, {"record_id": None}, {"record_id": ""}],
+            "created_at": {"$gte": created_at}
+        }
+        if exit_ts:
+            orphan_filter["created_at"]["$lte"] = exit_ts
         orphan_insps = await db.inspections.find(
-            {"placas_unidad": {"$regex": f".*{regex}.*", "$options": "i"},
-             "record_id": {"$in": [None, ""]},  # solo huérfanos
-             "created_at": {"$gte": created_at}},
-            {"_id": 0, "id": 1}
+            orphan_filter, {"_id": 0, "id": 1}
         ).to_list(10)
         orphan_ids = {i["id"] for i in orphan_insps}
 
@@ -841,21 +848,31 @@ async def list_records(u: Dict[str, Any] = Depends(get_current_user), status: Op
         if doc.get("inspection_id"): existing.add(doc["inspection_id"])
         by_rec = set(insp_by_record.get(rid, []))
 
-        # Filtro temporal: solo vincular inspecciones por placa si ocurrieron DESPUÉS del registro
-        # y antes de la salida (si existe). Esto evita arrastrar inspecciones de viajes anteriores.
+        # Filtro temporal estricto: solo vincular inspecciones por placa cuando:
+        #   1. La inspección ocurrió DESPUÉS (>=) del timestamp exacto del registro (no solo la fecha)
+        #   2. La inspección NO tiene record_id de OTRO registro (jamás robar vínculos)
+        #   3. La inspección ocurrió ANTES de la salida del registro (si existe)
+        # Esto elimina los cruces cuando la misma placa tiene 2 visitas el mismo día.
         by_plates_date = set()
         if p and d:
             potential_entries = insp_by_plate_date.get((p, d), [])
             rec_created_at = doc.get("created_at", "")
-            # FIX-D: solo huérfanas (sin record_id) o las del propio registro
-            # Y solo si ocurrieron >= created_at del registro
-            # Evita robo cruzado: si una inspección ya tiene record_id de OTRO registro, no tocar
-            if not (existing | by_rec):
-                by_plates_date = set(
-                    e["id"] for e in potential_entries
-                    if e.get("created_at", "") >= rec_created_at
-                    and (not e.get("record_id") or e.get("record_id") == rid)
-                )
+            # Límite superior: si el registro ya tiene salida, la inspección debe ser anterior
+            exit_ts = (doc.get("exit") or {}).get("fecha_salida", "")
+            for e in potential_entries:
+                e_id = e["id"]
+                e_ts = e.get("created_at", "")
+                e_rid = e.get("record_id")
+                # Nunca robar inspecciones de otro registro
+                if e_rid and e_rid != rid:
+                    continue
+                # Debe ocurrir DESPUÉS (timestamp exacto) de la entrada
+                if e_ts < rec_created_at:
+                    continue
+                # Si hay salida registrada, la inspección debe ser anterior a ella
+                if exit_ts and e_ts > exit_ts:
+                    continue
+                by_plates_date.add(e_id)
 
         merged_ids = sorted(list(existing | by_rec | by_plates_date))
 
@@ -1743,21 +1760,25 @@ async def create_inspection(body: InspectionCreate, background_tasks: Background
              "$addToSet": {"inspection_ids": iid}}
         )
     else:
-        # FIX-F: Auto-vincular por placas; priorizar registro del MISMO DÍA
+        # FIX-F + FIX-G: Auto-vincular por placas con filtro estricto.
+        # Buscar el registro cuyo created_at sea <= al de la inspección
+        # (la unidad debió entrar ANTES de ser inspeccionada).
+        # Priorizar: activo > salida, y más cercano en tiempo.
         pl = _plate_regex_pattern(body.placas_unidad or "")
+        insp_created_at = datetime.now(timezone.utc).isoformat()
         if pl:
-            today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            # Primero buscar registro activo del mismo día
+            # 1. Registro activo con entrada antes de la inspección
             rec_by_plates = await db.vehicle_records.find_one(
                 {"entry.placas_unidad": {"$regex": pl, "$options": "i"},
                  "status": {"$ne": "salida"},
-                 "created_at": {"$regex": f"^{today_str}"}},
+                 "created_at": {"$lte": insp_created_at}},
                 sort=[("created_at", -1)]
             )
-            # Si no hay del día de hoy, buscar cualquier activo reciente
+            # 2. Fallback: registro con salida (inspección llegó tarde)
             if not rec_by_plates:
                 rec_by_plates = await db.vehicle_records.find_one(
-                    {"entry.placas_unidad": {"$regex": pl, "$options": "i"}, "status": {"$ne": "salida"}},
+                    {"entry.placas_unidad": {"$regex": pl, "$options": "i"},
+                     "created_at": {"$lte": insp_created_at}},
                     sort=[("created_at", -1)]
                 )
             if rec_by_plates:
