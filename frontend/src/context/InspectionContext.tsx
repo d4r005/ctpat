@@ -215,6 +215,17 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     if (isOnline && token && pendingCount > 0) syncQueue();
   }, [isOnline, token, pendingCount, syncQueue]);
 
+  // Reintento periódico cada 30 s mientras haya elementos en la cola.
+  // Esto resuelve el caso en que el servidor (HF Space) estaba dormido
+  // cuando se intentó el primer sync y el usuario no cerró/abrió la app.
+  useEffect(() => {
+    if (!isOnline || !token || pendingCount === 0) return;
+    const interval = setInterval(() => {
+      syncQueue();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [isOnline, token, pendingCount, syncQueue]);
+
   const addToQueue = useCallback(async (item: SyncItem) => {
     const queue = await getQueue();
     queue.push(item);
