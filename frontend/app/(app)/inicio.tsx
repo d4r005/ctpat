@@ -21,7 +21,7 @@ import MainHeader from '@/src/components/MainHeader';
 export default function Inicio() {
   const { user, token } = useAuth();
   const { t } = useTranslation();
-  const { inspections, allInspections, refresh: refreshInspections, loading: inspectionsLoading } = useInspections();
+  const { inspections, allInspections, refresh: refreshInspections, loading: inspectionsLoading, pendingCount, syncQueue } = useInspections();
   const { refresh: refreshNotifications } = useNotifications();
   const [showNotifs, setShowNotifs] = useState(false);
   const router = useRouter();
@@ -146,7 +146,13 @@ export default function Inicio() {
 
   const ListEmpty = () => (
     <View style={styles.emptyInline}>
+      <Ionicons name="checkmark-circle-outline" size={32} color={colors.muted} style={{ marginBottom: 6 }} />
       <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '700' }}>{t('no_hay_unidades_patio')}</Text>
+      {pendingCount > 0 && (
+        <Text style={{ color: '#FF8C00', fontSize: 11, marginTop: 4, textAlign: 'center' }}>
+          {pendingCount} registro(s) en cola, esperando conexión...
+        </Text>
+      )}
     </View>
   );
 
@@ -181,6 +187,32 @@ export default function Inicio() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <MainHeader title="NAF" subtitle={t('inicio').toUpperCase()} />
+
+      {/* Banner de sincronización pendiente */}
+      {pendingCount > 0 && (
+        <Pressable
+          style={{
+            backgroundColor: '#FF8C00',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+          }}
+          onPress={() => syncQueue()}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="cloud-upload-outline" size={18} color="#FFF" />
+            <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 13 }}>
+              {pendingCount} {pendingCount === 1 ? 'registro pendiente' : 'registros pendientes'} de sincronizar
+            </Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Text style={{ color: '#FFF', fontSize: 12, opacity: 0.9 }}>Reintentar</Text>
+            <Ionicons name="refresh" size={16} color="#FFF" />
+          </View>
+        </Pressable>
+      )}
 
       <FlatList
         data={inProcessUnits}
