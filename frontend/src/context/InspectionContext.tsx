@@ -180,11 +180,21 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     for (const item of queue) {
       try {
         await apiCall(item.endpoint, { method: item.method, body: item.payload, token });
-      } catch (err) {
-        remaining.push(item);
+        // Éxito: no agregar a remaining → se elimina de la cola
+      } catch (err: any) {
+        if (err?.isNetworkError) {
+          // Error de RED (timeout, sin conexión, HF dormido) → reintentar después
+          remaining.push(item);
+        } else {
+          // Error de SERVIDOR (4xx, validación, etc.) → no reintentar indefinidamente.
+          // Si ya se guardó con client_uuid, el servidor lo deduplica y retorna 200.
+          // Si es un error real de validación, guardamos en log pero no bloqueamos la cola.
+          console.warn('[SyncQueue] Item descartado por error de servidor:', item.endpoint, err?.message);
+        }
       }
     }
     await setQueue(remaining);
+    setPendingCount(remaining.length);
     await refresh();
   }, [token, refresh, getQueue, setQueue]);
 
