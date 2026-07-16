@@ -74,6 +74,7 @@ interface InspectionContextValue {
   pendingCount: number;
   isOnline: boolean;
   loading: boolean;
+  offlineRecords: any[];
   refresh: () => Promise<void>;
   refreshAll: () => Promise<void>;
   saveInspection: (payload: InspectionPayload) => Promise<any>;
@@ -109,6 +110,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   const [pendingCount, setPendingCount] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [offlineRecords, setOfflineRecords] = useState<any[]>([]);
 
   const getQueue = useCallback(async (): Promise<SyncItem[]> => {
     const raw = await AsyncStorage.getItem(QUEUE_KEY);
@@ -195,6 +197,10 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     }
     await setQueue(remaining);
     setPendingCount(remaining.length);
+    // Limpiar registros offline que ya se subieron
+    if (remaining.length === 0) {
+      setOfflineRecords([]);
+    }
     await refresh();
   }, [token, refresh, getQueue, setQueue]);
 
@@ -216,6 +222,18 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
       if (cached) { try { setInspections(JSON.parse(cached)); } catch {} }
       const queue = await getQueue();
       setPendingCount(queue.length);
+      // Recuperar registros de caseta offline de la cola
+      const offlineRecs = queue
+        .filter((item: SyncItem) => item.type === 'vehicle_record')
+        .map((item: SyncItem) => ({
+          id: item.id, _offline: true, _pending: true,
+          status: 'entrada',
+          created_at: new Date().toISOString(),
+          entry: item.payload,
+          exit: null, inspection_id: null, inspection_ids: [],
+          shipping_ticket_id: null, has_shipping_ticket: false
+        }));
+      setOfflineRecords(offlineRecs);
       await refresh();
       await refreshAll();
     })();
@@ -274,12 +292,25 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   const saveVehicleRecord = useCallback(async (payload: any): Promise<any> => {
     const tempId = uuid();
     if (isOnline) {
-      try { return await apiCall('/vehicle-records', { method: 'POST', body: payload, token }); }
-      catch (err: any) { if (!err?.isNetworkError) throw err; }
+      try {
+        const res = await apiCall('/vehicle-records', { method: 'POST', body: payload, token });
+        await refresh();
+        return res;
+      } catch (err: any) { if (!err?.isNetworkError) throw err; }
     }
+    // OFFLINE: guardar en cola Y hacerlo visible en el dispositivo
     await addToQueue({ id: tempId, type: 'vehicle_record', method: 'POST', endpoint: '/vehicle-records', payload });
-    return { id: tempId, _offline: true, entry: payload };
-  }, [token, isOnline, addToQueue]);
+    const offlineRec = {
+      id: tempId, _offline: true, _pending: true,
+      status: 'entrada',
+      created_at: new Date().toISOString(),
+      entry: payload,
+      exit: null, inspection_id: null, inspection_ids: [],
+      shipping_ticket_id: null, has_shipping_ticket: false
+    };
+    setOfflineRecords(prev => [offlineRec, ...prev]);
+    return offlineRec;
+  }, [token, isOnline, addToQueue, refresh]);
 
   const saveShippingTicket = useCallback(async (payload: any): Promise<any> => {
     const tempId = uuid();
@@ -350,7 +381,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   return (
     <InspectionContext.Provider
       value={{
-        inspections, allInspections, pendingCount, isOnline, loading,
+        inspections, allInspections, pendingCount, isOnline, loading, offlineRecords,
         refresh, refreshAll, saveInspection, saveVehicleRecord, saveShippingTicket, patchVehicleExit, getById, syncQueue,
         approveInspection, rejectInspection, updateInspection, updateVehicleRecord, updateShippingTicket, sendManualReport, exportCsvUrl,
         token

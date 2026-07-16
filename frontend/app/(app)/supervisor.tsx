@@ -218,6 +218,7 @@ export default function Supervisor() {
   const [allTickets, setAllTickets] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [forceSyncing, setForceSyncing] = useState(false);
   const [query, setQuery] = useState('');
   const [reportLoading, setReportLoading] = useState<string | null>(null);
 
@@ -284,6 +285,29 @@ export default function Supervisor() {
             Alert.alert('Error', e.message);
           } finally {
             setSyncing(false);
+          }
+        }}
+      ]
+    );
+  };
+
+  const handleForceSync = async () => {
+    Alert.alert(
+      '🔄 Forzar Sincronización',
+      'Esto buscará inspecciones y tickets que se generaron en otros dispositivos sin conexión y los vinculará a sus registros correspondientes. ¿Continuar?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Forzar Sync', onPress: async () => {
+          setForceSyncing(true);
+          try {
+            const res = await apiCall<any>('/admin/force-sync-orphans', { method: 'POST', token });
+            const msg = `Resultados:\n• Inspecciones vinculadas: ${res.fixed_inspections}\n• Tickets vinculados: ${res.fixed_tickets}\n• Registros creados: ${res.created_records}`;
+            Alert.alert('✅ Sincronización Completada', msg);
+            await fetchEverything();
+          } catch (e: any) {
+            Alert.alert('Error', e.message);
+          } finally {
+            setForceSyncing(false);
           }
         }}
       ]
@@ -467,6 +491,10 @@ export default function Supervisor() {
           <Pressable style={[styles.adminBtn, { marginTop: 8, backgroundColor: '#FEE2E2' }]} onPress={handleDeepRepair} disabled={syncing}>
             {syncing ? <ActivityIndicator size={14} color="#991B1B" /> : <Ionicons name="build-outline" size={16} color="#991B1B" />}
             <Text style={[styles.adminBtnText, { color: '#991B1B' }]}>REPARACIÓN PROFUNDA (VÍNCULOS + FECHAS)</Text>
+          </Pressable>
+          <Pressable style={[styles.adminBtn, { marginTop: 8, backgroundColor: '#D1FAE5' }]} onPress={handleForceSync} disabled={forceSyncing}>
+            {forceSyncing ? <ActivityIndicator size={14} color="#065F46" /> : <Ionicons name="cloud-upload-outline" size={16} color="#065F46" />}
+            <Text style={[styles.adminBtnText, { color: '#065F46' }]}>FORZAR SYNC OTROS DISPOSITIVOS</Text>
           </Pressable>
           <Pressable style={[styles.adminBtn, { marginTop: 8, backgroundColor: '#E0E7FF' }]} onPress={() => router.push('/(app)/analitica')}>
             <Ionicons name="stats-chart" size={16} color="#4338CA" />

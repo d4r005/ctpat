@@ -21,7 +21,7 @@ import MainHeader from '@/src/components/MainHeader';
 export default function Inicio() {
   const { user, token } = useAuth();
   const { t } = useTranslation();
-  const { inspections, allInspections, refresh: refreshInspections, loading: inspectionsLoading, pendingCount, syncQueue } = useInspections();
+  const { inspections, allInspections, refresh: refreshInspections, loading: inspectionsLoading, pendingCount, syncQueue, offlineRecords } = useInspections();
   const { refresh: refreshNotifications } = useNotifications();
   const [showNotifs, setShowNotifs] = useState(false);
   const router = useRouter();
@@ -44,8 +44,9 @@ export default function Inicio() {
 
       setActivities(Array.isArray(actData) ? actData : []);
 
-      const combined = [...(Array.isArray(recordsEntrada) ? recordsEntrada : []), ...(Array.isArray(recordsInsp) ? recordsInsp : [])];
-      setInProcessUnits(combined.sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+      // Incluir registros offline generados en este dispositivo
+      const combined = [...offlineRecords, ...(Array.isArray(recordsEntrada) ? recordsEntrada : []), ...(Array.isArray(recordsInsp) ? recordsInsp : [])];
+      setInProcessUnits(combined.sort((a,b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()));
 
       if (!isInitial && actData.length > 0 && actData[0].id !== lastActivityId) {
         setLastActivityId(actData[0].id);
@@ -58,7 +59,7 @@ export default function Inicio() {
     } finally {
       if (isInitial) setLoadingActivities(false);
     }
-  }, [token, lastActivityId]);
+  }, [token, lastActivityId, offlineRecords]);
 
   const refreshAll = async () => {
     await Promise.all([refreshInspections(), refreshNotifications(), loadActivities(true)]);

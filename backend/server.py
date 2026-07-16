@@ -2831,86 +2831,195 @@ async def deep_repair_links(u: Dict[str, Any] = Depends(get_current_user)):
 
 
 @api_router.post("/admin/repair-links")
-async def repair_links(background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
+async def repair_links(u: Dict[str, Any] = Depends(get_current_user)):
     """
-    Inicia una reconstrucción y sincronización masiva en segundo plano.
-    Evita el error de Timeout procesando los datos sin fotos y delegando
-    la tarea pesada a un hilo de background.
+    Reconstruye y vincula registros huérfanos. Versión síncrona que devuelve
+    conteos reales para que el frontend muestre resultados al usuario.
     """
     if not is_admin(u): raise HTTPException(403)
 
-    async def _do_work():
-        logger.info("ADMIN: Iniciando tarea de background para REPARACIÓN Y RESINC...")
-        try:
-            # 1. Obtener datos proyectando fuera las fotos para velocidad
-            proj = {"_id": 0, "entry.foto_frente_unidad": 0, "entry.foto_atras_caja": 0, "entry.foto_id_chofer": 0, "entry.firma_operador": 0, "exit.sello_vvtt_foto": 0, "exit.firma_guardia": 0, "inspector_firma": 0, "guard_signature": 0, "foto_inicio_carga": 0, "foto_media_carga": 0, "foto_final_carga": 0, "firma_almacenista": 0}
+    proj = {"_id": 0, "entry.foto_frente_unidad": 0, "entry.foto_atras_caja": 0,
+            "entry.foto_id_chofer": 0, "entry.firma_operador": 0, "exit.sello_vvtt_foto": 0,
+            "exit.firma_guardia": 0, "inspector_firma": 0, "guard_signature": 0,
+            "foto_inicio_carga": 0, "foto_media_carga": 0, "foto_final_carga": 0,
+            "firma_almacenista": 0, "points.photo": 0}
 
-            all_insps = await db.inspections.find({}, proj).to_list(10000)
-            all_tickets = await db.shipping_tickets.find({}, proj).to_list(10000)
-            all_records = await db.vehicle_records.find({}, proj).to_list(10000)
+    all_insps = await db.inspections.find({}, proj).to_list(10000)
+    all_tickets = await db.shipping_tickets.find({}, proj).to_list(10000)
+    all_records = await db.vehicle_records.find({}, proj).to_list(10000)
 
-            # Mapas para vinculacion rapida
-            def norm(p): return _canon_plate(p)
+    def norm(p): return _canon_plate(p)
+    existing_plates = {norm(r.get("entry", {}).get("placas_unidad", "")) for r in all_records}
+    missing_plates_data = {}
+    reconstructed = 0
 
-            # 2. Reconstruir registros faltantes
-            existing_plates = {norm(r.get("entry", {}).get("placas_unidad", "")) for r in all_records}
-            missing_plates_data = {}
+    for insp in all_insps:
+        p = insp.get("placas_unidad", "").strip().upper()
+        nm = norm(p)
+        if nm and nm not in existing_plates:
+            missing_plates_data[nm] = {"p": p, "date": insp.get("created_at"),
+                "company": insp.get("compania_transportista"), "box": insp.get("numero_trailer"),
+                "sello": insp.get("numero_precinto"), "driver": insp.get("inspector_nombre")}
 
-            for insp in all_insps:
-                p = insp.get("placas_unidad", "").strip().upper()
-                nm = norm(p)
-                if nm and nm not in existing_plates:
-                    missing_plates_data[nm] = {"p": p, "date": insp.get("created_at"), "company": insp.get("compania_transportista"), "box": insp.get("numero_trailer"), "sello": insp.get("numero_precinto"), "driver": insp.get("inspector_nombre")}
+    for tick in all_tickets:
+        p = tick.get("placas_unidad", "").strip().upper()
+        nm = norm(p)
+        if nm and nm not in existing_plates:
+            if nm not in missing_plates_data:
+                missing_plates_data[nm] = {"p": p, "date": tick.get("created_at"),
+                    "company": tick.get("linea_transporte"), "box": tick.get("numero_caja"),
+                    "sello": tick.get("numero_sello"), "driver": tick.get("operador")}
 
-            for tick in all_tickets:
-                p = tick.get("placas_unidad", "").strip().upper()
-                nm = norm(p)
-                if nm and nm not in existing_plates:
-                    if nm not in missing_plates_data:
-                        missing_plates_data[nm] = {"p": p, "date": tick.get("created_at"), "company": tick.get("linea_transporte"), "box": tick.get("numero_caja"), "sello": tick.get("numero_sello"), "driver": tick.get("operador")}
+    for nm, data in missing_plates_data.items():
+        date_str = (data.get("date") or "")[:10]
+        already_exists = any(
+            norm(r.get("entry", {}).get("placas_unidad", "")) == nm
+            and (r.get("created_at") or "")[:10] == date_str
+            for r in all_records
+        )
+        if already_exists:
+            continue
+        rid = str(uuid.uuid4())
+        await db.vehicle_records.insert_one({
+            "id": rid, "user_id": "system", "status": "inspeccionado",
+            "created_at": data["date"],
+            "entry": {
+                "tipo_unidad": "sencillo", "placas_unidad": data["p"],
+                "chofer_nombre": data["driver"] or "HISTÓRICO",
+                "compania_transporte": data["company"] or "",
+                "numero_caja": data["box"] or "",
+                "sello_entrada": data["sello"] or "",
+                "guardia_caseta_nombre": "RECONSTRUIDO",
+                "fecha_entrada": data["date"]
+            }
+        })
+        existing_plates.add(nm)
+        reconstructed += 1
 
-            for nm, data in missing_plates_data.items():
-                # FIX-E: no crear duplicado si ya existe registro de esa placa en esa misma fecha
-                date_str = (data.get("date") or "")[:10]
-                already_exists = any(
-                    norm(r.get("entry", {}).get("placas_unidad", "")) == nm
-                    and (r.get("created_at") or "")[:10] == date_str
-                    for r in all_records
-                )
-                if already_exists:
-                    continue
-                rid = str(uuid.uuid4())
-                await db.vehicle_records.insert_one({
-                    "id": rid, "user_id": "system", "status": "inspeccionado",
-                    "created_at": data["date"],
-                    "entry": {
-                        "tipo_unidad": "sencillo", "placas_unidad": data["p"],
-                        "chofer_nombre": data["driver"] or "HISTÓRICO",
-                        "compania_transporte": data["company"] or "",
-                        "numero_caja": data["box"] or "",
-                        "sello_entrada": data["sello"] or "",
-                        "guardia_caseta_nombre": "RECONSTRUIDO",
-                        "fecha_entrada": data["date"]
-                    }
-                })
-                existing_plates.add(nm)
+    records = await db.vehicle_records.find({}, proj).to_list(10000)
+    for r in records:
+        await _ensure_record_links(r)
 
-            # 3. Re-vincular y RESINCRONIZAR AL SHEET
-            records = await db.vehicle_records.find({}, proj).to_list(10000)
-            for r in records:
-                # Actualizar vinculos internos
-                updated_r = await _ensure_record_links(r)
-                # Forzar sincronizacion al sheet con el formato nuevo corregido
-                await sync_to_google_sheets("entrada", updated_r)
-                if updated_r.get("exit"):
-                    await sync_to_google_sheets("salida", updated_r)
+    logger.info(f"ADMIN: repair-links completado. {reconstructed} reconstruidos, {len(records)} totales.")
+    return {"status": "ok", "reconstructed": reconstructed, "total_records": len(records)}
 
-            logger.info(f"ADMIN: Tarea finalizada. Procesados {len(records)} registros.")
-        except Exception as e:
-            logger.error(f"ADMIN: Error en tarea de reparación: {e}")
 
-    background_tasks.add_task(_do_work)
-    return {"status": "started", "message": "Proceso de vinculación y sincronización masiva iniciado. Verás los cambios en el Google Sheet gradualmente."}
+@api_router.post("/admin/force-sync-orphans")
+async def force_sync_orphans(u: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Fuerza la vinculación de inspecciones y tickets huérfanos (sin record_id)
+    que pueden haberse generado en otros dispositivos sin conexión.
+    Crea registros de caseta fantasma si no existe uno para esa placa+fecha.
+    """
+    if not is_admin(u): raise HTTPException(403)
+
+    proj = {"_id": 0, "entry.foto_frente_unidad": 0, "entry.foto_atras_caja": 0,
+            "entry.foto_id_chofer": 0, "entry.firma_operador": 0, "inspector_firma": 0,
+            "guard_signature": 0, "points.photo": 0, "foto_inicio_carga": 0,
+            "foto_media_carga": 0, "foto_final_carga": 0, "firma_almacenista": 0,
+            "firma_guardia": 0}
+
+    all_records = await db.vehicle_records.find({}, proj).to_list(10000)
+    rec_by_plate_date = {}
+    for r in all_records:
+        p = _canon_plate(r.get("entry", {}).get("placas_unidad", ""))
+        d = (r.get("created_at") or "")[:10]
+        if p and d:
+            rec_by_plate_date[(p, d)] = r
+
+    # 1. Inspecciones huérfanas
+    orphan_insps = await db.inspections.find(
+        {"$or": [{"record_id": {"$exists": False}}, {"record_id": ""}, {"record_id": None}]},
+        {"_id": 0, "id": 1, "placas_unidad": 1, "created_at": 1, "inspector_nombre": 1}
+    ).to_list(1000)
+
+    fixed_insps = 0
+    created_records = 0
+    for insp in orphan_insps:
+        p = _canon_plate(insp.get("placas_unidad", ""))
+        d = (insp.get("created_at") or "")[:10]
+        if not p or not d:
+            continue
+        rec = rec_by_plate_date.get((p, d))
+        if not rec:
+            rid = str(uuid.uuid4())
+            rec = {
+                "id": rid, "user_id": "system", "status": "inspeccionado",
+                "created_at": insp["created_at"],
+                "entry": {
+                    "tipo_unidad": "sencillo",
+                    "placas_unidad": insp.get("placas_unidad", ""),
+                    "chofer_nombre": insp.get("inspector_nombre") or "PENDIENTE",
+                    "compania_transporte": "",
+                    "numero_caja": "",
+                    "sello_entrada": "",
+                    "guardia_caseta_nombre": "RECUPERADO",
+                    "fecha_entrada": insp["created_at"]
+                },
+                "exit": None, "inspection_id": None, "inspection_ids": [],
+                "shipping_ticket_id": None, "has_shipping_ticket": False
+            }
+            await db.vehicle_records.insert_one(rec)
+            rec_by_plate_date[(p, d)] = rec
+            created_records += 1
+        await db.inspections.update_one({"id": insp["id"]}, {"$set": {"record_id": rec["id"]}})
+        await db.vehicle_records.update_one(
+            {"id": rec["id"]},
+            {"$set": {"status": "inspeccionado"}, "$addToSet": {"inspection_ids": insp["id"]}}
+        )
+        fixed_insps += 1
+
+    # 2. Tickets huérfanos
+    orphan_tix = await db.shipping_tickets.find(
+        {"$or": [{"record_id": {"$exists": False}}, {"record_id": ""}, {"record_id": None}]},
+        {"_id": 0, "id": 1, "placas_unidad": 1, "created_at": 1, "operador": 1}
+    ).to_list(1000)
+
+    fixed_tix = 0
+    for t in orphan_tix:
+        p = _canon_plate(t.get("placas_unidad", ""))
+        d = (t.get("created_at") or "")[:10]
+        if not p or not d:
+            continue
+        rec = rec_by_plate_date.get((p, d))
+        if not rec:
+            rid = str(uuid.uuid4())
+            rec = {
+                "id": rid, "user_id": "system", "status": "entrada",
+                "created_at": t["created_at"],
+                "entry": {
+                    "tipo_unidad": "sencillo",
+                    "placas_unidad": t.get("placas_unidad", ""),
+                    "chofer_nombre": t.get("operador") or "PENDIENTE",
+                    "compania_transporte": "",
+                    "numero_caja": "",
+                    "sello_entrada": "",
+                    "guardia_caseta_nombre": "RECUPERADO",
+                    "fecha_entrada": t["created_at"]
+                },
+                "exit": None, "inspection_id": None, "inspection_ids": [],
+                "shipping_ticket_id": None, "has_shipping_ticket": False
+            }
+            await db.vehicle_records.insert_one(rec)
+            rec_by_plate_date[(p, d)] = rec
+            created_records += 1
+        await db.shipping_tickets.update_one({"id": t["id"]}, {"$set": {"record_id": rec["id"]}})
+        await db.vehicle_records.update_one(
+            {"id": rec["id"]},
+            {"$set": {"shipping_ticket_id": t["id"], "has_shipping_ticket": True}}
+        )
+        fixed_tix += 1
+
+    total_fixed = fixed_insps + fixed_tix
+    logger.info(f"ADMIN: force-sync-orphans by {u.get('email')}: {fixed_insps} insps, {fixed_tix} tickets, {created_records} records created")
+
+    return {
+        "status": "ok",
+        "fixed_inspections": fixed_insps,
+        "fixed_tickets": fixed_tix,
+        "created_records": created_records,
+        "total_fixed": total_fixed
+    }
 
 @api_router.get("/analytics")
 async def get_analytics(u: Dict[str, Any] = Depends(get_current_user), date_from: Optional[str] = None, date_to: Optional[str] = None):
