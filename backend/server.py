@@ -1793,12 +1793,11 @@ async def create_inspection(body: InspectionCreate, background_tasks: Background
                  "created_at": {"$gte": today_start, "$lt": today_end}},
                 sort=[("created_at", -1)]
             )
-            # Si no hay del día de hoy, buscar cualquier activo reciente
+            # Si no hay registro activo de HOY, NO vincular a uno de otro día
+            # (evitar el cruce de inspecciones entre días)
             if not rec_by_plates:
-                rec_by_plates = await db.vehicle_records.find_one(
-                    {"entry.placas_unidad": {"$regex": pl, "$options": "i"}, "status": {"$ne": "salida"}},
-                    sort=[("created_at", -1)]
-                )
+                logger.warning(f"create_inspection: no hay registro activo HOY para {body.placas_unidad} — inspección quedará huérfana hasta que llegue el registro de caseta")
+                rec_by_plates = None
             if rec_by_plates:
                 await db.vehicle_records.update_one(
                     {"id": rec_by_plates["id"]},
