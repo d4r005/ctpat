@@ -419,7 +419,7 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
         inspector_nombre: data.inspectorNombre,
         inspector_firma: data.inspectorFirma,
         fecha_hora: new Date().toISOString(),
-        client_uuid: '', // context takes care if empty
+        client_uuid: `insp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
         record_id: data.record_id,
         box_type: data.box_type,
         measures: data.measures,
@@ -480,7 +480,19 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
           onClose();
         }
       }
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) {
+      console.error('Error saving inspection:', e);
+      let msg = e?.message || 'Error desconocido';
+      if (msg === 'Failed to fetch' || msg.includes('network') || msg.includes('Network')) {
+        Alert.alert(
+          '✅ Inspección guardada en tu dispositivo',
+          'No hay señal ahora. La inspección se enviará automáticamente cuando haya conexión. NO necesitas volver a hacerla.',
+          [{ text: 'Entendido', onPress: () => onClose() }]
+        );
+        return;
+      }
+      Alert.alert('Error al guardar', msg);
+    }
     finally { setSaving(false); }
   };
 

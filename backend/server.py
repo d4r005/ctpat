@@ -422,10 +422,15 @@ async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
         ).to_list(50)
         direct_ids = {i["id"] for i in direct_insps}
 
+        # CLÁUSULA ANTI-CRUCE: solo vincular inspecciones del mismo día calendario
+        # (zona America/Mexico_City) que el registro de caseta.
+        rec_date_mx = datetime.fromisoformat(created_at.replace("Z", "+00:00")).astimezone(MX_TZ)
+        day_start = rec_date_mx.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).isoformat()
+        day_end = (rec_date_mx.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).astimezone(timezone.utc).isoformat()
         orphan_insps = await db.inspections.find(
             {"placas_unidad": {"$regex": f".*{regex}.*", "$options": "i"},
              "record_id": {"$in": [None, ""]},  # solo huérfanos
-             "created_at": {"$gte": created_at}},
+             "created_at": {"$gte": day_start, "$lt": day_end}},
             {"_id": 0, "id": 1}
         ).to_list(10)
         orphan_ids = {i["id"] for i in orphan_insps}
@@ -462,7 +467,7 @@ async def _ensure_record_links(record: Dict[str, Any]) -> Dict[str, Any]:
                 orphan_ticket = await db.shipping_tickets.find_one(
                     {"placas_unidad": {"$regex": f".*{regex}.*", "$options": "i"},
                      "record_id": {"$in": [None, ""]},
-                     "created_at": {"$gte": created_at}},
+                     "created_at": {"$gte": day_start, "$lt": day_end}},
                     sort=[("created_at", -1)]
                 )
                 if orphan_ticket:
@@ -1751,8 +1756,15 @@ async def create_inspection(body: InspectionCreate, background_tasks: Background
                 return dup_by_content  # reintento offline: mismo guardia, mismo sello, misma unidad en 90 min
 
     iid = str(uuid.uuid4()); doc = body.dict()
+    # Si es admin y hay record_id, usar la fecha del registro de caseta (anti-cruce)
+    is_admin = u.get("role") in ("admin", "supervisor")
+    created_at_val = datetime.now(timezone.utc).isoformat()
+    if is_admin and body.record_id:
+        ref_rec = await db.vehicle_records.find_one({"id": body.record_id}, {"_id": 0, "created_at": 1})
+        if ref_rec and ref_rec.get("created_at"):
+            created_at_val = ref_rec["created_at"]
     doc.update({
-        "id": iid, "user_id": u["id"], "created_at": datetime.now(timezone.utc).isoformat(),
+        "id": iid, "user_id": u["id"], "created_at": created_at_val,
         "status_general": "malo" if any(p.estado == "malo" for p in body.points) else "bueno",
         "approval_status": "pendiente"
     })
@@ -1771,12 +1783,14 @@ async def create_inspection(body: InspectionCreate, background_tasks: Background
         # FIX-F: Auto-vincular por placas; priorizar registro del MISMO DÍA
         pl = _plate_regex_pattern(body.placas_unidad or "")
         if pl:
-            today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            # Primero buscar registro activo del mismo día
+            # CLÁUSULA ANTI-CRUCE: buscar registro del mismo día calendario MX
+            now_mx = datetime.now(timezone.utc).astimezone(MX_TZ)
+            today_start = now_mx.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).isoformat()
+            today_end = (now_mx.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).astimezone(timezone.utc).isoformat()
             rec_by_plates = await db.vehicle_records.find_one(
                 {"entry.placas_unidad": {"$regex": pl, "$options": "i"},
                  "status": {"$ne": "salida"},
-                 "created_at": {"$regex": f"^{today_str}"}},
+                 "created_at": {"$gte": today_start, "$lt": today_end}},
                 sort=[("created_at", -1)]
             )
             # Si no hay del día de hoy, buscar cualquier activo reciente
