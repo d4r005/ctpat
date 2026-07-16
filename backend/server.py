@@ -1728,11 +1728,27 @@ async def exit_record(rec_id: str, body: VehicleExit, background_tasks: Backgrou
 # --- Inspecciones ---
 @api_router.post("/inspections", response_model=Inspection)
 async def create_inspection(body: InspectionCreate, background_tasks: BackgroundTasks, u: Dict[str, Any] = Depends(get_current_user)):
-    # Idempotencia: si client_uuid ya existe en la BD, devolver el registro existente
+    # Idempotencia nivel 1: si client_uuid ya existe, retornar el existente
     if body.client_uuid:
         existing = await db.inspections.find_one({"client_uuid": body.client_uuid}, {"_id": 0})
         if existing:
             return existing  # reintento seguro — no crea duplicado
+
+    # Idempotencia nivel 2: misma inspección enviada 2 veces por sync offline
+    # Si en los últimos 90 min hay una insp con el mismo sello + placa + inspector → retornar existente
+    if body.sello_alta_seguridad and body.placas_unidad and body.inspector_nombre:
+        from datetime import timedelta
+        window_start = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
+        pl_pattern = _plate_regex_pattern(body.placas_unidad)
+        if pl_pattern:
+            dup_by_content = await db.inspections.find_one({
+                "sello_alta_seguridad": body.sello_alta_seguridad,
+                "placas_unidad": {"$regex": pl_pattern, "$options": "i"},
+                "inspector_nombre": body.inspector_nombre,
+                "created_at": {"$gte": window_start}
+            }, {"_id": 0})
+            if dup_by_content:
+                return dup_by_content  # reintento offline: mismo guardia, mismo sello, misma unidad en 90 min
 
     iid = str(uuid.uuid4()); doc = body.dict()
     doc.update({
