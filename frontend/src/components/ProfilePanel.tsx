@@ -15,7 +15,7 @@ interface Props {
 
 export default function ProfilePanel({ visible, onClose }: Props) {
   const { user, signOut } = useAuth();
-  const { inspections, pendingCount, isOnline, syncQueue } = useInspections();
+  const { inspections, pendingCount, isOnline, syncQueue, isSyncing } = useInspections();
   const { t, i18n } = useTranslation();
   const router = useRouter();
 
@@ -72,7 +72,7 @@ export default function ProfilePanel({ visible, onClose }: Props) {
             </View>
 
             {pendingCount > 0 && isOnline && (
-              <Pressable testID="profile-sync-button" style={styles.syncBtn} onPress={syncQueue}>
+              <Pressable testID="profile-sync-button" style={[styles.syncBtn, isSyncing && { opacity: 0.6 }]} onPress={syncQueue} disabled={isSyncing}>
                 <Ionicons name="cloud-upload" size={20} color={colors.onInfo} />
                 <Text style={styles.syncBtnText}>{t('sincronizar_ahora')} ({pendingCount})</Text>
               </Pressable>

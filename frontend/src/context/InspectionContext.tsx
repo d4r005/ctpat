@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, ReactNode, useCa
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import { Platform } from 'react-native';
-import { apiCall, API_BASE } from '../api/client';
+import { apiCall, API_BASE, wakeUpServer } from '../api/client';
 import { useAuth } from './AuthContext';
 
 const QUEUE_KEY = 'naf_universal_sync_queue';
@@ -75,6 +75,7 @@ interface InspectionContextValue {
   isOnline: boolean;
   loading: boolean;
   offlineRecords: any[];
+  isSyncing: boolean;
   refresh: () => Promise<void>;
   refreshAll: () => Promise<void>;
   saveInspection: (payload: InspectionPayload) => Promise<any>;
@@ -111,6 +112,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   const [isOnline, setIsOnline] = useState(true);
   const [loading, setLoading] = useState(false);
   const [offlineRecords, setOfflineRecords] = useState<any[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const getQueue = useCallback(async (): Promise<SyncItem[]> => {
     const raw = await AsyncStorage.getItem(QUEUE_KEY);
@@ -178,30 +180,77 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     const queue = await getQueue();
     if (queue.length === 0) return;
 
+    setIsSyncing(true);
+
+    // Despertar el servidor de HuggingFace si está dormido (cold start)
+    const serverAwake = await wakeUpServer();
+    if (!serverAwake) {
+      // No se pudo despertar el servidor — mantener items en cola
+      const { Alert } = require('react-native');
+      Alert.alert(
+        '⚠️ Sin conexión al servidor',
+        'El servidor no responde. Los registros seguirán en cola y se enviarán automáticamente cuando el servidor esté disponible.',
+        [{ text: 'Entendido' }]
+      );
+      setIsSyncing(false);
+      return;
+    }
+    let successCount = 0;
+    let networkFailCount = 0;
+    let serverFailCount = 0;
+    const serverErrors: string[] = [];
+
     const remaining: SyncItem[] = [];
     for (const item of queue) {
       try {
         await apiCall(item.endpoint, { method: item.method, body: item.payload, token });
-        // Éxito: no agregar a remaining → se elimina de la cola
+        successCount++;
       } catch (err: any) {
         if (err?.isNetworkError) {
-          // Error de RED (timeout, sin conexión, HF dormido) → reintentar después
+          // Error de RED → reintentar después
+          networkFailCount++;
           remaining.push(item);
         } else {
-          // Error de SERVIDOR (4xx, validación, etc.) → no reintentar indefinidamente.
-          // Si ya se guardó con client_uuid, el servidor lo deduplica y retorna 200.
-          // Si es un error real de validación, guardamos en log pero no bloqueamos la cola.
-          console.warn('[SyncQueue] Item descartado por error de servidor:', item.endpoint, err?.message);
+          // Error de SERVIDOR (4xx, validación, etc.)
+          serverFailCount++;
+          serverErrors.push(`${item.type}: ${err?.message || 'error desconocido'}`);
+          // Si el servidor ya tiene el registro (client_uuid dedup), lo descartamos.
+          // Si es un error real de validación, lo guardamos en cola de errores
+          // pero NO lo descartamos silenciosamente.
+          // Para inspecciones con client_uuid, el servidor las deduplica → 200 OK.
+          // Si llega aquí es un error real: lo dejamos en cola para que el admin lo revise.
+          remaining.push(item);
         }
       }
     }
     await setQueue(remaining);
     setPendingCount(remaining.length);
-    // Limpiar registros offline que ya se subieron
     if (remaining.length === 0) {
       setOfflineRecords([]);
     }
     await refresh();
+    setIsSyncing(false);
+
+    // Feedback para el usuario
+    if (successCount > 0 && networkFailCount === 0 && serverFailCount === 0) {
+      // Todo se subió OK
+      const { Alert } = require('react-native');
+      Alert.alert('✅ Sincronización completa', `${successCount} registro(s) subido(s) correctamente.`);
+    } else if (networkFailCount > 0) {
+      const { Alert } = require('react-native');
+      Alert.alert(
+        '⚠️ Sin conexión al servidor',
+        `No se pudo conectar con el servidor. ${networkFailCount} registro(s) seguirán en cola y se enviarán automáticamente cuando haya conexión.`,
+        [{ text: 'Entendido' }]
+      );
+    } else if (serverFailCount > 0) {
+      const { Alert } = require('react-native');
+      Alert.alert(
+        '⚠️ Algunos registros no se pudieron subir',
+        `${successCount} subido(s) OK. ${serverFailCount} con error del servidor:\n${serverErrors.slice(0, 3).join('\n')}`,
+        [{ text: 'Entendido' }]
+      );
+    }
   }, [token, refresh, getQueue, setQueue]);
 
   useEffect(() => {
@@ -381,7 +430,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   return (
     <InspectionContext.Provider
       value={{
-        inspections, allInspections, pendingCount, isOnline, loading, offlineRecords,
+        inspections, allInspections, pendingCount, isOnline, loading, offlineRecords, isSyncing,
         refresh, refreshAll, saveInspection, saveVehicleRecord, saveShippingTicket, patchVehicleExit, getById, syncQueue,
         approveInspection, rejectInspection, updateInspection, updateVehicleRecord, updateShippingTicket, sendManualReport, exportCsvUrl,
         token

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useWindowDimensions } from 'react-native';
 import { useIsTablet } from '@/src/hooks/useIsTablet';
-import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl, Platform, FlatList, Image, Vibration } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl, Platform, FlatList, Image, Vibration, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -193,7 +193,7 @@ export default function Inicio() {
       {pendingCount > 0 && (
         <Pressable
           style={{
-            backgroundColor: '#FF8C00',
+            backgroundColor: isSyncing ? '#3B82F6' : '#FF8C00',
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -201,17 +201,24 @@ export default function Inicio() {
             paddingVertical: 10,
           }}
           onPress={() => syncQueue()}
+          disabled={isSyncing}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Ionicons name="cloud-upload-outline" size={18} color="#FFF" />
+            {isSyncing ? (
+              <ActivityIndicator size="small" color="#FFF" />
+            ) : (
+              <Ionicons name="cloud-upload-outline" size={18} color="#FFF" />
+            )}
             <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 13 }}>
-              {pendingCount} {pendingCount === 1 ? 'registro pendiente' : 'registros pendientes'} de sincronizar
+              {isSyncing ? 'Sincronizando...' : `${pendingCount} ${pendingCount === 1 ? 'registro pendiente' : 'registros pendientes'} de sincronizar`}
             </Text>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Text style={{ color: '#FFF', fontSize: 12, opacity: 0.9 }}>Reintentar</Text>
-            <Ionicons name="refresh" size={16} color="#FFF" />
-          </View>
+          {!isSyncing && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={{ color: '#FFF', fontSize: 12, opacity: 0.9 }}>Reintentar</Text>
+              <Ionicons name="refresh" size={16} color="#FFF" />
+            </View>
+          )}
         </Pressable>
       )}
 

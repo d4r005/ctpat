@@ -13,6 +13,24 @@ export interface ApiOptions {
   token?: string | null;
 }
 
+// Ping para despertar el servidor de HuggingFace (cold start)
+export async function wakeUpServer(timeoutMs = 15000): Promise<boolean> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    await fetch(`${API_BASE}/inspections?summary=true&limit=1`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return true;
+  } catch {
+    clearTimeout(timeoutId);
+    return false;
+  }
+}
+
 export async function apiCall<T = any>(path: string, opts: ApiOptions = {}): Promise<T> {
   const { method = 'GET', body, token } = opts;
   const url = `${API_BASE}${path}`;

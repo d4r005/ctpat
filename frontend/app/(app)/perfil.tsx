@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -12,7 +12,7 @@ import MainHeader from '@/src/components/MainHeader';
 
 export default function Perfil() {
   const { user, signOut } = useAuth();
-  const { inspections, pendingCount, isOnline, syncQueue } = useInspections();
+  const { inspections, pendingCount, isOnline, syncQueue, isSyncing } = useInspections();
   const { t, i18n } = useTranslation();
   const router = useRouter();
 
@@ -60,9 +60,9 @@ export default function Perfil() {
         </View>
 
         {pendingCount > 0 && isOnline && (
-          <Pressable testID="perfil-sync-button" style={styles.syncBtn} onPress={syncQueue}>
-            <Ionicons name="cloud-upload" size={20} color={colors.onInfo} />
-            <Text style={styles.syncBtnText}>{t('sincronizar_ahora')} ({pendingCount})</Text>
+          <Pressable testID="perfil-sync-button" style={[styles.syncBtn, isSyncing && { opacity: 0.6 }]} onPress={syncQueue} disabled={isSyncing}>
+            {isSyncing ? <ActivityIndicator size="small" color={colors.onInfo} /> : <Ionicons name="cloud-upload" size={20} color={colors.onInfo} />}
+            <Text style={styles.syncBtnText}>{isSyncing ? 'Sincronizando...' : `${t('sincronizar_ahora')} (${pendingCount})`}</Text>
           </Pressable>
         )}
 
