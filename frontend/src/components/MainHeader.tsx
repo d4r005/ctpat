@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useInspections } from '../context/InspectionContext';
-import { colors, spacing } from '../constants/theme';
+import { colors, spacing, radius, shadows } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import NotificationsPanel from './NotificationsPanel';
@@ -37,9 +37,12 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack, onBa
       <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
         {showBack && (
           <Pressable onPress={() => (onBack ? onBack() : router.back())} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color="#FFF" />
+            <Ionicons name="arrow-back" size={24} color={colors.onBrandPrimary} />
           </Pressable>
         )}
+        <View style={styles.logoBadge}>
+          <Ionicons name="shield-checkmark" size={20} color={colors.brandSecondary} />
+        </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.brandLogo}>{title || 'NAF'}</Text>
           <Text style={styles.brandSubtitle}>
@@ -50,15 +53,15 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack, onBa
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
         {rightAction && (
           <Pressable onPress={rightAction.onPress} style={styles.headerBtn}>
-            <Ionicons name={rightAction.icon} size={26} color="#FFF" />
+            <Ionicons name={rightAction.icon} size={24} color={colors.onBrandPrimary} />
           </Pressable>
         )}
         <Pressable onPress={() => router.push('/(app)/chat')} style={styles.headerBtn}>
-          <Ionicons name={hasUnreadChat ? "chatbubbles" : "chatbubbles-outline"} size={24} color="#FFF" />
+          <Ionicons name={hasUnreadChat ? "chatbubbles" : "chatbubbles-outline"} size={22} color={colors.onBrandPrimary} />
           {hasUnreadChat && <View style={styles.chatDot} />}
         </Pressable>
         <Pressable onPress={() => setShowNotifs(true)} style={styles.notifBtn}>
-          <Ionicons name={unreadCount > 0 ? "notifications" : "notifications-outline"} size={24} color="#FFF" />
+          <Ionicons name={unreadCount > 0 ? "notifications" : "notifications-outline"} size={22} color={colors.onBrandPrimary} />
           {unreadCount > 0 && (
             <View style={styles.notifBadge}>
               <Text style={styles.notifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
@@ -70,7 +73,7 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack, onBa
             <Text style={styles.avatarText}>{user?.name?.charAt(0).toUpperCase() || 'D'}</Text>
             <View style={[styles.onlineIndicator, !isOnline && { backgroundColor: colors.error }]} />
           </View>
-          <Text style={[styles.onlineStatusText, !isOnline && { color: colors.error }]}>● {isOnline ? t('online') : t('fuera_linea')}</Text>
+          <Text style={[styles.onlineStatusText, !isOnline && { color: '#FCA5A5' }]}>● {isOnline ? t('online') : t('fuera_linea')}</Text>
         </Pressable>
       </View>
       <NotificationsPanel visible={showNotifs} onClose={() => setShowNotifs(false)} />
@@ -82,10 +85,25 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack, onBa
 const styles = StyleSheet.create({
   brandHeader: {
     backgroundColor: colors.brandPrimary,
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingBottom: spacing.xl,
+    borderBottomLeftRadius: radius.lg,
+    borderBottomRightRadius: radius.lg,
+    ...shadows.md,
+  },
+  logoBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
   },
   notifBtn: {
     padding: 8,
@@ -121,7 +139,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   notifBadgeText: {
-    color: '#FFF',
+    color: colors.onBrandPrimary,
     fontSize: 9,
     fontWeight: '900',
   },
@@ -130,52 +148,52 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   brandLogo: {
-    color: '#FFF',
-    fontSize: 28,
-    fontWeight: '900',
-    letterSpacing: 2,
+    color: colors.onBrandPrimary,
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: 1.5,
   },
-// ... rest of styles
   brandSubtitle: {
-    color: '#FFF',
+    color: 'rgba(255,255,255,0.75)',
     fontSize: 10,
-    opacity: 0.8,
     marginTop: 2,
+    fontWeight: '600',
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   userContainer: {
     alignItems: 'center',
   },
   avatarCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#FFF',
+    borderColor: 'rgba(255,255,255,0.4)',
   },
   avatarText: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
+    color: colors.onBrandPrimary,
+    fontSize: 16,
+    fontWeight: '800',
   },
   onlineIndicator: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    width: 12,
-    height: 12,
+    width: 11,
+    height: 11,
     borderRadius: 6,
     backgroundColor: colors.success,
     borderWidth: 2,
     borderColor: colors.brandPrimary,
   },
   onlineStatusText: {
-    color: colors.success,
+    color: '#86EFAC',
     fontSize: 8,
-    fontWeight: '900',
+    fontWeight: '800',
     marginTop: 4,
   },
 });

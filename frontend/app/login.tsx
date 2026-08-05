@@ -9,7 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/context/AuthContext';
-import { colors, spacing, typography } from '@/src/constants/theme';
+import { colors, spacing, radius, typography, shadows } from '@/src/constants/theme';
 
 const REMEMBER_KEY = 'naf_remembered_email';
 
@@ -19,6 +19,7 @@ export default function Login() {
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,24 +65,22 @@ export default function Login() {
       >
         <ScrollView contentContainerStyle={styles.centerWrap} keyboardShouldPersistTaps="handled">
           <View style={styles.card}>
-            {/* Top Avatar Circle */}
-            <View style={styles.topAvatar}>
-              <Text style={styles.avatarText}>D</Text>
-            </View>
-
-            <View style={styles.header}>
-              <View style={styles.logoRow}>
-                <Text style={styles.logoText}>NAF</Text>
-                <View style={{ flex: 1, marginLeft: spacing.md }}>
-                  <Text style={styles.title}>{t('sistema_registro')}</Text>
-                </View>
+            {/* Brand mark */}
+            <View style={styles.brandBlock}>
+              <View style={styles.shieldBadge}>
+                <Ionicons name="shield-checkmark" size={30} color={colors.brandSecondary} />
               </View>
+              <Text style={styles.brandName}>NAF</Text>
+              <Text style={styles.brandSub}>SRIUC</Text>
+              <View style={styles.goldDivider} />
+              <Text style={styles.title}>{t('sistema_registro')}</Text>
               <Text style={styles.subtitle}>{t('sistema_inspeccion_sub')}</Text>
             </View>
 
             <View style={styles.form}>
               <Text style={styles.label}>{t('correo_electronico').toUpperCase()}</Text>
               <View style={styles.inputWrapper}>
+                <Ionicons name="person-outline" size={18} color={colors.muted} style={{ marginRight: 8 }} />
                 <TextInput
                   testID="login-email-input"
                   style={styles.input}
@@ -90,24 +89,25 @@ export default function Login() {
                   autoCapitalize="none"
                   keyboardType="email-address"
                   placeholder={t('email_placeholder')}
-                  placeholderTextColor="#A1A1AA"
+                  placeholderTextColor={colors.mutedLight}
                 />
               </View>
 
               <Text style={styles.label}>{t('contrasena').toUpperCase()}</Text>
               <View style={styles.inputWrapper}>
-                <View style={styles.iconInputInner}>
-                   <Ionicons name="lock-closed-outline" size={20} color="#71717A" style={{ marginRight: 8 }} />
-                   <TextInput
-                    testID="login-password-input"
-                    style={[styles.input, { borderWidth: 0, padding: 0, flex: 1 }]}
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry
-                    placeholder="••••••••"
-                    placeholderTextColor="#A1A1AA"
-                  />
-                </View>
+                <Ionicons name="lock-closed-outline" size={18} color={colors.muted} style={{ marginRight: 8 }} />
+                <TextInput
+                  testID="login-password-input"
+                  style={[styles.input, { flex: 1 }]}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  placeholder="••••••••"
+                  placeholderTextColor={colors.mutedLight}
+                />
+                <Pressable onPress={() => setShowPassword((v) => !v)} hitSlop={8}>
+                  <Text style={styles.showToggle}>{showPassword ? t('ocultar') || 'Ocultar' : t('ver') || 'Ver'}</Text>
+                </Pressable>
               </View>
 
               <Pressable
@@ -115,13 +115,14 @@ export default function Login() {
                 style={styles.rememberRow}
               >
                 <View style={[styles.checkbox, rememberMe && styles.checkboxActive]}>
-                  {rememberMe && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                  {rememberMe && <Ionicons name="checkmark" size={14} color={colors.onBrandPrimary} />}
                 </View>
                 <Text style={styles.rememberText}>{t('recordar_usuario')}</Text>
               </Pressable>
 
               {error ? (
                 <View style={styles.errorBox} testID="login-error">
+                  <Ionicons name="alert-circle" size={16} color={colors.error} style={{ marginRight: 6 }} />
                   <Text style={styles.errorText}>{error}</Text>
                 </View>
               ) : null}
@@ -133,7 +134,7 @@ export default function Login() {
                 disabled={loading}
               >
                 {loading ? (
-                  <ActivityIndicator color="#FFF" />
+                  <ActivityIndicator color={colors.onBrandPrimary} />
                 ) : (
                   <Text style={styles.primaryBtnText}>{t('iniciar_sesion').toUpperCase()}</Text>
                 )}
@@ -149,6 +150,8 @@ export default function Login() {
               </View>
             </View>
           </View>
+
+          <Text style={styles.copyright}>© {new Date().getFullYear()} NAF · SRIUC — Todos los derechos reservados.</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -156,83 +159,80 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#E4E4E7' }, // Light gray background like the shadow area
+  safe: { flex: 1, backgroundColor: colors.surface },
   centerWrap: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surfaceSecondary,
     padding: spacing.xl,
     paddingTop: spacing.xxl,
-    borderRadius: 24,
+    borderRadius: radius.xl,
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 440,
     alignSelf: 'center',
-    // Shadow for elevation effect
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20 },
-      android: { elevation: 10 },
-      web: { boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' }
-    })
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.lg,
   },
-  topAvatar: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#71717A',
+  brandBlock: { alignItems: 'center', marginBottom: spacing.xl },
+  shieldBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.lg,
+    backgroundColor: colors.brandPrimary,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: spacing.md,
+    ...shadows.sm,
   },
-  avatarText: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
-  header: { marginBottom: spacing.xl },
-  logoRow: { flexDirection: 'row', alignItems: 'center' },
-  logoText: { color: '#0A2540', fontSize: 32, fontWeight: '900', letterSpacing: 1 },
-  title: { fontSize: 20, fontWeight: '900', color: '#0A2540', lineHeight: 24 },
-  subtitle: { fontSize: 13, color: '#71717A', marginTop: 4, fontWeight: '500' },
+  brandName: { color: colors.brandPrimary, fontSize: 30, fontWeight: '900', letterSpacing: 3 },
+  brandSub: { color: colors.brandSecondary, fontSize: 13, fontWeight: '800', letterSpacing: 5, marginTop: 2 },
+  goldDivider: { width: 40, height: 3, borderRadius: 2, backgroundColor: colors.brandSecondary, marginVertical: spacing.md },
+  title: { fontSize: 18, fontWeight: '800', color: colors.onSurface, textAlign: 'center' },
+  subtitle: { fontSize: 13, color: colors.muted, marginTop: 4, fontWeight: '500', textAlign: 'center' },
   form: { width: '100%' },
   label: {
-    fontSize: 11, fontWeight: '900', color: '#18181B',
-    letterSpacing: 0.5, marginBottom: 8, marginTop: spacing.lg,
+    fontSize: 11, fontWeight: '800', color: colors.onSurfaceTertiary,
+    letterSpacing: 0.6, marginBottom: 8, marginTop: spacing.lg,
   },
   inputWrapper: {
-    backgroundColor: '#EFF6FF', // Very light blue shade
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    borderRadius: 6,
-    marginBottom: spacing.xs,
-  },
-  input: {
-    padding: spacing.md,
-    fontSize: 16,
-    color: '#09090B',
-  },
-  iconInputInner: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
     paddingHorizontal: spacing.md,
-    height: 52,
+    height: 50,
   },
+  input: {
+    flex: 1,
+    fontSize: 15,
+    color: colors.onSurface,
+  },
+  showToggle: { color: colors.brandPrimary, fontSize: 12, fontWeight: '700' },
   rememberRow: {
     flexDirection: 'row', alignItems: 'center', marginTop: spacing.md, gap: 8,
   },
   checkbox: {
-    width: 20, height: 20, borderWidth: 2, borderColor: '#0A2540', borderRadius: 4,
+    width: 18, height: 18, borderWidth: 1.5, borderColor: colors.borderStrong, borderRadius: 4,
     alignItems: 'center', justifyContent: 'center',
   },
-  checkboxActive: { backgroundColor: '#0A2540' },
-  rememberText: { fontSize: 13, color: '#18181B', fontWeight: '700' },
+  checkboxActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  rememberText: { fontSize: 13, color: colors.onSurfaceTertiary, fontWeight: '600' },
   errorBox: {
-    backgroundColor: '#FEE2E2', padding: spacing.md, marginTop: spacing.lg, borderLeftWidth: 4, borderLeftColor: '#EF4444',
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.errorSurface, padding: spacing.md, marginTop: spacing.lg,
+    borderRadius: radius.sm, borderLeftWidth: 3, borderLeftColor: colors.error,
   },
-  errorText: { color: '#991B1B', fontWeight: '700', fontSize: 13 },
+  errorText: { color: colors.error, fontWeight: '700', fontSize: 13, flexShrink: 1 },
   primaryBtn: {
-    backgroundColor: '#0A2540', paddingVertical: 18, marginTop: spacing.xxl,
-    alignItems: 'center', borderRadius: 40, // Rounded button like in image
-    shadowColor: '#0A2540', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
+    backgroundColor: colors.brandPrimary, paddingVertical: 16, marginTop: spacing.xl,
+    alignItems: 'center', borderRadius: radius.pill,
+    ...shadows.md,
   },
-  primaryBtnText: { color: '#FFFFFF', fontWeight: '900', fontSize: 14, letterSpacing: 1.5 },
+  primaryBtnText: { color: colors.onBrandPrimary, fontWeight: '800', fontSize: 13, letterSpacing: 1.5 },
   footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: spacing.xl },
-  footerText: { color: '#71717A', fontSize: 14, fontWeight: '500' },
-  link: { color: '#0A2540', fontWeight: '800', fontSize: 14, textDecorationLine: 'underline' },
+  footerText: { color: colors.muted, fontSize: 14, fontWeight: '500' },
+  link: { color: colors.brandPrimary, fontWeight: '800', fontSize: 14 },
+  copyright: { textAlign: 'center', color: colors.mutedLight, fontSize: 11, marginTop: spacing.lg },
 });

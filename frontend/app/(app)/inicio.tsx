@@ -11,7 +11,7 @@ import { useInspections } from '@/src/context/InspectionContext';
 import { useNotifications } from '@/src/context/NotificationsContext';
 import NotificationsPanel from '@/src/components/NotificationsPanel';
 import * as Haptics from 'expo-haptics';
-import { colors, spacing, radius, typography } from '@/src/constants/theme';
+import { colors, spacing, radius, typography, shadows } from '@/src/constants/theme';
 import { apiCall } from '@/src/api/client';
 import ProcessTracker from '@/src/components/ProcessTracker';
 
@@ -21,7 +21,10 @@ import MainHeader from '@/src/components/MainHeader';
 export default function Inicio() {
   const { user, token } = useAuth();
   const { t } = useTranslation();
-  const { inspections, allInspections, refresh: refreshInspections, loading: inspectionsLoading, pendingCount, syncQueue, offlineRecords } = useInspections();
+  const {
+    inspections, allInspections, refresh: refreshInspections, loading: inspectionsLoading,
+    pendingCount, syncQueue, offlineRecords, isSyncing,
+  } = useInspections();
   const { refresh: refreshNotifications } = useNotifications();
   const [showNotifs, setShowNotifs] = useState(false);
   const router = useRouter();
@@ -102,12 +105,12 @@ export default function Inicio() {
   const renderActivity = ({ item: a }: { item: any }) => {
     const icon = getActivityIcon(a.type);
     return (
-      <Pressable style={styles.activityCard} onPress={() => navigateToActivity(a)}>
-        <View style={[styles.iconCircle, { backgroundColor: a.status === 'malo' || a.type === 'rechazada' ? colors.error : (a.type === 'caseta' ? colors.success : colors.info) }]}>
+      <Pressable style={({ pressed }) => [styles.activityCard, pressed && { opacity: 0.85 }]} onPress={() => navigateToActivity(a)}>
+        <View style={[styles.iconCircle, { backgroundColor: a.status === 'malo' || a.type === 'rechazada' ? colors.errorSurface : (a.type === 'caseta' ? colors.successSurface : colors.infoSurface) }]}>
           {icon.family === 'mci' ? (
-            <MaterialCommunityIcons name={icon.name} size={24} color="#FFF" />
+            <MaterialCommunityIcons name={icon.name} size={20} color={a.status === 'malo' || a.type === 'rechazada' ? colors.error : (a.type === 'caseta' ? colors.success : colors.info)} />
           ) : (
-            <Ionicons name={icon.name} size={20} color="#FFF" />
+            <Ionicons name={icon.name} size={18} color={a.status === 'malo' || a.type === 'rechazada' ? colors.error : (a.type === 'caseta' ? colors.success : colors.info)} />
           )}
         </View>
         <View style={{ flex: 1, marginLeft: spacing.md }}>
@@ -125,14 +128,25 @@ export default function Inicio() {
     <>
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
+          <View style={[styles.statIconWrap, { backgroundColor: colors.infoSurface }]}>
+            <Ionicons name="stats-chart" size={18} color={colors.info} />
+          </View>
           <Text style={styles.statValue}>{todayInspections.length}</Text>
           <Text style={styles.statLabel}>{t('inspecciones_hoy').toUpperCase()}</Text>
         </View>
-        <View style={[styles.statCard, { borderLeftWidth: 1, borderLeftColor: colors.border }]}>
+        <View style={styles.statDivider} />
+        <View style={styles.statCard}>
+          <View style={[styles.statIconWrap, { backgroundColor: colors.successSurface }]}>
+            <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+          </View>
           <Text style={[styles.statValue, { color: colors.success }]}>{totalBuenas}</Text>
           <Text style={styles.statLabel}>{t('aprobada').toUpperCase()}</Text>
         </View>
-        <View style={[styles.statCard, { borderLeftWidth: 1, borderLeftColor: colors.border }]}>
+        <View style={styles.statDivider} />
+        <View style={styles.statCard}>
+          <View style={[styles.statIconWrap, { backgroundColor: colors.errorSurface }]}>
+            <Ionicons name="alert-circle" size={18} color={colors.error} />
+          </View>
           <Text style={[styles.statValue, { color: colors.error }]}>{totalMalas}</Text>
           <Text style={styles.statLabel}>{t('con_fallas').toUpperCase()}</Text>
         </View>
@@ -140,17 +154,19 @@ export default function Inicio() {
 
       <View style={styles.processHeader}>
         <Text style={styles.processTitle}>{t('unidades_en_patio_activo')}</Text>
-        <Ionicons name="refresh-circle" size={24} color={colors.brandPrimary} onPress={() => loadActivities(true)} />
+        <Pressable onPress={() => loadActivities(true)} hitSlop={8} style={styles.refreshBtn}>
+          <Ionicons name="refresh" size={16} color={colors.brandPrimary} />
+        </Pressable>
       </View>
     </>
   );
 
   const ListEmpty = () => (
     <View style={styles.emptyInline}>
-      <Ionicons name="checkmark-circle-outline" size={32} color={colors.muted} style={{ marginBottom: 6 }} />
+      <Ionicons name="checkmark-circle-outline" size={32} color={colors.mutedLight} style={{ marginBottom: 6 }} />
       <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '700' }}>{t('no_hay_unidades_patio')}</Text>
       {pendingCount > 0 && (
-        <Text style={{ color: '#FF8C00', fontSize: 11, marginTop: 4, textAlign: 'center' }}>
+        <Text style={{ color: colors.warning, fontSize: 11, marginTop: 4, textAlign: 'center' }}>
           {pendingCount} registro(s) en cola, esperando conexión...
         </Text>
       )}
@@ -161,22 +177,32 @@ export default function Inicio() {
     const isFull = r.entry?.tipo_unidad === 'full';
     const isDescarga = r.entry?.condicion_carga === 'descarga';
     const showShipping = !isFull && !isDescarga;
+    const isInspected = !!r.inspection_id || r.status === 'inspeccionado';
 
     const steps = {
       entry: true,
-      inspection: !!r.inspection_id || r.status === 'inspeccionado',
+      inspection: isInspected,
       shipping: !!r.has_shipping_ticket,
       exit: r.status === 'salida'
     };
 
     return (
-      <Pressable style={styles.activeUnitCard} onPress={() => router.push(`/caseta/${r.id}`)}>
-        <View style={styles.activeUnitLeft}>
-           <View style={[styles.statusIndicator, { backgroundColor: r.status === 'entrada' ? colors.warning : colors.info }]} />
-           <View style={styles.activeUnitTextBlock}>
+      <Pressable style={({ pressed }) => [styles.activeUnitCard, pressed && { opacity: 0.9 }]} onPress={() => router.push(`/caseta/${r.id}`)}>
+        <View style={styles.activeUnitTop}>
+          <View style={styles.activeUnitLeft}>
+            <View style={[styles.plateIconWrap, { backgroundColor: r.status === 'entrada' ? colors.warningSurface : colors.infoSurface }]}>
+              <MaterialCommunityIcons name="truck" size={20} color={r.status === 'entrada' ? colors.warning : colors.info} />
+            </View>
+            <View style={styles.activeUnitTextBlock}>
               <Text style={styles.trackingTitle} numberOfLines={1}>{r.entry?.placas_unidad} {isFull ? '(FULL)' : ''}</Text>
               <Text style={styles.trackingSub} numberOfLines={1}>{r.entry?.chofer_nombre} · {r.entry?.compania_transporte}</Text>
-           </View>
+            </View>
+          </View>
+          <View style={[styles.statusPill, isInspected ? styles.statusPillInfo : styles.statusPillWarning]}>
+            <Text style={[styles.statusPillText, { color: isInspected ? colors.info : colors.warning }]}>
+              {isInspected ? t('inspeccion').toUpperCase() : t('entrada').toUpperCase()}
+            </Text>
+          </View>
         </View>
         <View style={styles.activeUnitTracker}>
           <ProcessTracker steps={steps} compact showShipping={showShipping} />
@@ -193,7 +219,7 @@ export default function Inicio() {
       {pendingCount > 0 && (
         <Pressable
           style={{
-            backgroundColor: isSyncing ? '#3B82F6' : '#FF8C00',
+            backgroundColor: isSyncing ? colors.info : colors.warning,
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -205,18 +231,18 @@ export default function Inicio() {
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {isSyncing ? (
-              <ActivityIndicator size="small" color="#FFF" />
+              <ActivityIndicator size="small" color={colors.onBrandPrimary} />
             ) : (
-              <Ionicons name="cloud-upload-outline" size={18} color="#FFF" />
+              <Ionicons name="cloud-upload-outline" size={18} color={colors.onBrandPrimary} />
             )}
-            <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 13 }}>
+            <Text style={{ color: colors.onBrandPrimary, fontWeight: '700', fontSize: 13 }}>
               {isSyncing ? 'Sincronizando...' : `${pendingCount} ${pendingCount === 1 ? 'registro pendiente' : 'registros pendientes'} de sincronizar`}
             </Text>
           </View>
           {!isSyncing && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Text style={{ color: '#FFF', fontSize: 12, opacity: 0.9 }}>Reintentar</Text>
-              <Ionicons name="refresh" size={16} color="#FFF" />
+              <Text style={{ color: colors.onBrandPrimary, fontSize: 12, opacity: 0.9 }}>Reintentar</Text>
+              <Ionicons name="refresh" size={16} color={colors.onBrandPrimary} />
             </View>
           )}
         </Pressable>
@@ -232,7 +258,7 @@ export default function Inicio() {
         ListEmptyComponent={<ListEmpty />}
         ListFooterComponent={
           <>
-            <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>{t('actividad_reciente').toUpperCase()} (TIEMPO REAL)</Text>
+            <Text style={[styles.sectionTitle, { marginTop: spacing.lg }]}>{t('actividad_reciente').toUpperCase()}</Text>
             {activities.slice(0, 10).map((a) => (
               <View key={`${a.type}-${a.id}`}>{renderActivity({ item: a })}</View>
             ))}
@@ -246,38 +272,63 @@ export default function Inicio() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F8F9FA' },
+  safe: { flex: 1, backgroundColor: colors.surface },
   container: { padding: spacing.md, paddingBottom: spacing.xxxl },
-  statsRow: { flexDirection: 'row', backgroundColor: '#FFF', borderRadius: 12, padding: spacing.md, marginBottom: spacing.lg, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+  statsRow: {
+    flexDirection: 'row',
+    backgroundColor: colors.surfaceSecondary,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.sm,
+  },
+  statDivider: { width: 1, backgroundColor: colors.divider, marginVertical: spacing.xs },
   statCard: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 24, fontWeight: '900', color: colors.onSurface },
-  statLabel: { fontSize: 9, fontWeight: '700', color: colors.muted, marginTop: 4 },
-  sectionTitle: { fontSize: 11, fontWeight: '900', color: colors.onSurface, letterSpacing: 1, marginBottom: spacing.md, marginLeft: 4 },
-  activityCard: { backgroundColor: '#FFF', borderRadius: 12, padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', elevation: 1 },
-  iconCircle: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  cardTitleText: { fontSize: 14, fontWeight: '900', color: colors.onSurface },
+  statIconWrap: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  statValue: { fontSize: 22, fontWeight: '800', color: colors.onSurface },
+  statLabel: { fontSize: 9, fontWeight: '700', color: colors.muted, marginTop: 4, letterSpacing: 0.3 },
+  sectionTitle: { fontSize: 11, fontWeight: '800', color: colors.onSurfaceTertiary, letterSpacing: 1, marginBottom: spacing.md, marginLeft: 4 },
+  activityCard: {
+    backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm,
+    flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, ...shadows.sm,
+  },
+  iconCircle: { width: 38, height: 38, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  cardTitleText: { fontSize: 14, fontWeight: '800', color: colors.onSurface },
   cardSubText: { fontSize: 12, color: colors.muted, marginTop: 2 },
-  cardMetaText: { fontSize: 10, color: colors.muted, marginTop: 4 },
-  miniStatusBadgeError: { backgroundColor: colors.error, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  miniStatusBadgeSuccess: { backgroundColor: colors.success, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  miniStatusText: { color: '#FFF', fontSize: 8, fontWeight: '900' },
+  cardMetaText: { fontSize: 10, color: colors.mutedLight, marginTop: 4 },
+  miniStatusBadgeError: { backgroundColor: colors.errorSurface, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.sm },
+  miniStatusBadgeSuccess: { backgroundColor: colors.successSurface, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.sm },
+  miniStatusText: { color: colors.onSurface, fontSize: 8, fontWeight: '800' },
   processHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md, paddingHorizontal: 4 },
-  processTitle: { fontSize: 16, fontWeight: '900', color: colors.onSurface },
+  processTitle: { fontSize: 15, fontWeight: '800', color: colors.onSurface },
+  refreshBtn: {
+    width: 30, height: 30, borderRadius: radius.sm, backgroundColor: colors.brandTertiary,
+    alignItems: 'center', justifyContent: 'center',
+  },
   activeUnitCard: {
     backgroundColor: colors.surfaceSecondary,
-    borderWidth: 2,
-    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: spacing.md,
     marginBottom: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between'
+    ...shadows.sm,
   },
+  activeUnitTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   activeUnitLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexShrink: 1, flex: 1, marginRight: spacing.sm },
+  plateIconWrap: { width: 36, height: 36, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   activeUnitTextBlock: { flexShrink: 1 },
-  activeUnitTracker: { flexShrink: 0 },
-  statusIndicator: { width: 4, height: 40, borderRadius: 2 },
-  trackingTitle: { fontWeight: '900', fontSize: 16, color: colors.onSurface, letterSpacing: 0.5 },
-  trackingSub: { fontSize: 11, color: colors.muted, marginTop: 2, fontWeight: '600' },
-  emptyInline: { alignItems: 'center', padding: spacing.xl, borderStyle: 'dashed', borderWidth: 2, borderColor: colors.border, marginTop: spacing.md },
+  activeUnitTracker: { marginTop: spacing.md, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.divider },
+  trackingTitle: { fontWeight: '800', fontSize: 15, color: colors.onSurface, letterSpacing: 0.3 },
+  trackingSub: { fontSize: 11, color: colors.muted, marginTop: 2, fontWeight: '500' },
+  statusPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill },
+  statusPillWarning: { backgroundColor: colors.warningSurface },
+  statusPillInfo: { backgroundColor: colors.infoSurface },
+  statusPillText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+  emptyInline: {
+    alignItems: 'center', padding: spacing.xl, borderStyle: 'dashed', borderWidth: 1.5,
+    borderColor: colors.border, borderRadius: radius.md, marginTop: spacing.md, backgroundColor: colors.surfaceSecondary,
+  },
 });

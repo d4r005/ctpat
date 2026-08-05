@@ -1,31 +1,52 @@
+// ─────────────────────────────────────────────────────────────
+// Design tokens — NAF · SRIUC
+// Enterprise / corporate visual language: deep navy + gold accent,
+// generous whitespace, soft elevation, rounded corporate corners.
+// ─────────────────────────────────────────────────────────────
+
 export const colors = {
-  surface: '#F4F4F5',
-  onSurface: '#09090B',
-  surfaceSecondary: '#FFFFFF',
-  onSurfaceSecondary: '#09090B',
-  surfaceTertiary: '#E4E4E7',
-  onSurfaceTertiary: '#18181B',
-  surfaceInverse: '#09090B',
-  onSurfaceInverse: '#FAFAFA',
+  // Neutral surfaces
+  surface: '#F4F6F9',           // app background (cool, slightly blue-gray)
+  onSurface: '#0F1B2D',
+  surfaceSecondary: '#FFFFFF',  // cards / elevated panels
+  onSurfaceSecondary: '#0F1B2D',
+  surfaceTertiary: '#E9EDF3',
+  onSurfaceTertiary: '#1C2B3A',
+  surfaceInverse: '#0A2540',
+  onSurfaceInverse: '#FFFFFF',
+
+  // Brand — deep navy with gold accent (matches NAF/SRIUC identity)
   brand: '#0A2540',
   brandPrimary: '#0A2540',
+  brandPrimaryDark: '#081B30',
+  brandPrimaryLight: '#123456',
   onBrandPrimary: '#FFFFFF',
-  brandSecondary: '#F59E0B',
-  onBrandSecondary: '#09090B',
-  brandTertiary: '#DBEAFE',
-  onBrandTertiary: '#1E3A8A',
-  success: '#16A34A',
+  brandSecondary: '#C9962C',    // gold accent
+  brandSecondaryLight: '#F0C36B',
+  onBrandSecondary: '#0F1B2D',
+  brandTertiary: '#E8EEF7',
+  onBrandTertiary: '#0A2540',
+
+  // Semantic
+  success: '#178A4C',
+  successSurface: '#E6F5EC',
   onSuccess: '#FFFFFF',
-  warning: '#F59E0B',
-  onWarning: '#09090B',
-  error: '#DC2626',
+  warning: '#C9821A',
+  warningSurface: '#FBF0DD',
+  onWarning: '#FFFFFF',
+  error: '#C22E2E',
+  errorSurface: '#FBE9E9',
   onError: '#FFFFFF',
-  info: '#0284C7',
+  info: '#1D6FB8',
+  infoSurface: '#E7F1FB',
   onInfo: '#FFFFFF',
-  border: '#D4D4D8',
-  borderStrong: '#09090B',
-  divider: '#E4E4E7',
-  muted: '#71717A',
+
+  // Structure
+  border: '#DDE3EC',
+  borderStrong: '#C4CDDA',
+  divider: '#E9EDF3',
+  muted: '#65758B',
+  mutedLight: '#94A3B8',
 };
 
 export const spacing = {
@@ -38,10 +59,12 @@ export const spacing = {
   xxxl: 48,
 };
 
+// Softer, more premium corner radii for a corporate SaaS feel.
 export const radius = {
-  sm: 0,
-  md: 4,
-  lg: 8,
+  sm: 8,
+  md: 12,
+  lg: 18,
+  xl: 24,
   pill: 999,
 };
 
@@ -55,5 +78,33 @@ export const typography = {
     xl: 20,
     xxl: 24,
     xxxl: 32,
+  },
+};
+
+// Reusable soft elevation presets (cross-platform: RN native + web via boxShadow)
+export const shadows = {
+  sm: {
+    shadowColor: '#0A2540',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+    boxShadow: '0 2px 6px rgba(10, 37, 64, 0.06)',
+  },
+  md: {
+    shadowColor: '#0A2540',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
+    boxShadow: '0 6px 16px rgba(10, 37, 64, 0.08)',
+  },
+  lg: {
+    shadowColor: '#0A2540',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.12,
+    shadowRadius: 28,
+    elevation: 8,
+    boxShadow: '0 14px 28px rgba(10, 37, 64, 0.12)',
   },
 };
