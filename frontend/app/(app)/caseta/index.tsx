@@ -113,7 +113,10 @@ export default function CasetaList() {
         </View>
         <View style={[styles.tableCell, { flex: 1.3 }]}>
           <Text style={styles.tableMeta}>
-            {r.entry?.fecha_entrada ? new Date(r.entry.fecha_entrada).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+            {(() => {
+              const d = r.entry?.fecha_entrada || r.created_at;
+              return d ? new Date(d).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+            })()}
           </Text>
         </View>
         <View style={[styles.tableCell, { flex: 0.3, alignItems: 'flex-end' }]}>
@@ -269,34 +272,40 @@ export default function CasetaList() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   toolbar: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: spacing.md, paddingVertical: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: spacing.md, paddingVertical: 12,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1, borderBottomColor: colors.border,
     flexWrap: 'wrap',
+    zIndex: 10,
   },
-  toolbarWeb: { paddingHorizontal: 32, paddingVertical: 16, gap: 12 },
-  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  toolbarWeb: { paddingHorizontal: 32, paddingVertical: 18 },
+  searchWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    flex: 1, minWidth: 200,
+    backgroundColor: colors.surfaceTertiary,
+    borderRadius: 12, paddingHorizontal: 16, height: 44,
+  },
   searchWrapWeb: {
-    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
-    borderRadius: 10, paddingHorizontal: 14, height: 40, maxWidth: 340, flexGrow: 0,
+    maxWidth: 360, flexGrow: 0,
   },
-  searchInput: { flex: 1, color: colors.onSurface, fontSize: 14, fontWeight: '500' },
-  filterRow: { flexDirection: 'row', gap: 6 },
+  searchInput: { flex: 1, color: colors.onSurface, fontSize: 14, fontWeight: '600' },
+  filterRow: { flexDirection: 'row', gap: 8 },
   chip: {
-    paddingHorizontal: 12, paddingVertical: 6,
-    borderWidth: 1, borderColor: colors.borderStrong,
-    backgroundColor: '#FFFFFF', borderRadius: 999,
+    paddingHorizontal: 16, paddingVertical: 8,
+    borderWidth: 1, borderColor: colors.border,
+    backgroundColor: '#FFFFFF', borderRadius: 12,
+    ...shadows.xs,
   },
   chipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
-  chipText: { fontWeight: '700', fontSize: 10, color: colors.mutedDark, letterSpacing: 0.5 },
-  chipTextActive: { color: '#FFFFFF' },
+  chipText: { fontWeight: '700', fontSize: 12, color: colors.mutedDark, letterSpacing: 0.5 },
+  chipTextActive: { color: '#FFFFFF', fontWeight: '800' },
   newBtnWeb: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: colors.brandPrimary, paddingHorizontal: 16, height: 40,
-    borderRadius: 10, marginLeft: 'auto', ...shadows.sm,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: colors.brandPrimary, paddingHorizontal: 20, height: 44,
+    borderRadius: 12, marginLeft: 'auto', ...shadows.sm,
   },
-  newBtnWebText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
+  newBtnWebText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
 
   // ── Desktop table ──
   tableContainer: { flex: 1, paddingHorizontal: 32, paddingTop: 24 },

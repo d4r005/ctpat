@@ -240,7 +240,6 @@ export default function Inicio() {
     >
       <View style={styles.header}>
         <View>
-          <Text style={styles.welcome}>{t('inicio')}</Text>
           <Text style={styles.date}>{new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).toUpperCase()}</Text>
         </View>
         <Pressable onPress={() => loadActivities(true)} hitSlop={8} style={styles.refreshBtn}>

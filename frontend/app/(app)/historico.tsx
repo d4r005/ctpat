@@ -61,15 +61,16 @@ export default function Historico() {
 
   // ── Desktop table row ──
   const renderTableRow = ({ item, index }: { item: any; index: number }) => {
-    const inspPlates = normalize(item.plates);
+    const plates = item.plates || item.placas_unidad || 'S/P';
+    const inspPlates = normalize(plates);
     const relatedRecord = records.find(r =>
       (r.inspection_id === item.id) ||
       (r.inspection_ids && r.inspection_ids.includes(item.id)) ||
-      normalize(r.entry?.placas_unidad) === inspPlates
+      normalize(r.entry?.placas_unidad || r.plates) === inspPlates
     );
     const hasTicket = !!(relatedRecord?.has_shipping_ticket || relatedRecord?.shipping_ticket_id ||
-      tickets.some((t: any) => normalize(t.placas_unidad) === inspPlates));
-    const isFull = relatedRecord?.entry?.tipo_unidad === 'full';
+      tickets.some((t: any) => normalize(t.plates || t.placas_unidad) === inspPlates));
+    const isFull = relatedRecord?.entry?.tipo_unidad === 'full' || item.numero_trailer?.includes('-2');
     const isDescarga = relatedRecord?.entry?.condicion_carga === 'descarga';
     const showShipping = !isFull && !isDescarga;
     const inspCount = Math.max(relatedRecord?.inspection_ids?.length || 0, 1);
@@ -85,7 +86,7 @@ export default function Historico() {
         onPress={() => router.push(`/inspection/${item.id}`)}
       >
         <View style={[styles.tableCell, { flex: 1.2 }]}>
-          <Text style={styles.tablePlate}>{item.plates || t('sin_placas')}{isFull ? ' (FULL)' : ''}</Text>
+          <Text style={styles.tablePlate}>{plates}{isFull ? ' (FULL)' : ''}</Text>
           {item._pending && <View style={styles.pendingChip}><Text style={styles.pendingChipText}>PEND</Text></View>}
         </View>
         <View style={[styles.tableCell, { flex: 1.5 }]}>
@@ -112,14 +113,15 @@ export default function Historico() {
 
   // ── Mobile card ──
   const renderCard = ({ item }: { item: any }) => {
-    const inspPlates = normalize(item.plates);
+    const plates = item.plates || item.placas_unidad || 'S/P';
+    const inspPlates = normalize(plates);
     const relatedRecord = records.find(r =>
       (r.inspection_id === item.id) || (r.inspection_ids && r.inspection_ids.includes(item.id)) ||
-      normalize(r.entry?.placas_unidad) === inspPlates
+      normalize(r.entry?.placas_unidad || r.plates) === inspPlates
     );
     const hasTicket = !!(relatedRecord?.has_shipping_ticket || relatedRecord?.shipping_ticket_id ||
-      tickets.some((t: any) => normalize(t.placas_unidad) === inspPlates));
-    const isFull = relatedRecord?.entry?.tipo_unidad === 'full';
+      tickets.some((t: any) => normalize(t.plates || t.placas_unidad) === inspPlates));
+    const isFull = relatedRecord?.entry?.tipo_unidad === 'full' || item.numero_trailer?.includes('-2');
     const isDescarga = relatedRecord?.entry?.condicion_carga === 'descarga';
     const showShipping = !isFull && !isDescarga;
     const inspCount = Math.max(relatedRecord?.inspection_ids?.length || 0, 1);
@@ -130,7 +132,7 @@ export default function Historico() {
     return (
       <Pressable style={styles.card} onPress={() => router.push(`/inspection/${item.id}`)}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.cardTitle}>{item.plates || t('sin_placas')} {isFull ? '(FULL)' : ''}</Text>
+          <Text style={styles.cardTitle}>{plates} {isFull ? '(FULL)' : ''}</Text>
           <Text style={styles.cardSub}>{item.compania_transportista}</Text>
           <View style={{ marginVertical: 8 }}>
             <ProcessTracker steps={steps} compact showShipping={showShipping} />
@@ -242,22 +244,33 @@ export default function Historico() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   toolbar: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: spacing.md, paddingVertical: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: spacing.md, paddingVertical: 12,
     backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: colors.border,
+    zIndex: 10,
+    flexWrap: 'wrap',
   },
-  toolbarWeb: { paddingHorizontal: 32, paddingVertical: 16, gap: 12 },
-  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  toolbarWeb: { paddingHorizontal: 32, paddingVertical: 18 },
+  searchWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    flex: 1, minWidth: 200,
+    backgroundColor: colors.surfaceTertiary,
+    borderRadius: 12, paddingHorizontal: 16, height: 44,
+  },
   searchWrapWeb: {
-    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
-    borderRadius: 10, paddingHorizontal: 14, height: 40, maxWidth: 340, flexGrow: 0,
+    maxWidth: 360, flexGrow: 0,
   },
-  searchInput: { flex: 1, color: colors.onSurface, fontSize: 14, fontWeight: '500' },
-  filterRow: { flexDirection: 'row', gap: 6 },
-  chip: { paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: '#FFFFFF', borderRadius: 999 },
+  searchInput: { flex: 1, color: colors.onSurface, fontSize: 14, fontWeight: '600' },
+  filterRow: { flexDirection: 'row', gap: 8 },
+  chip: {
+    paddingHorizontal: 16, paddingVertical: 8,
+    borderWidth: 1, borderColor: colors.border,
+    backgroundColor: '#FFFFFF', borderRadius: 12,
+    ...shadows.xs,
+  },
   chipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
-  chipText: { fontWeight: '700', fontSize: 10, color: colors.mutedDark, letterSpacing: 0.5 },
-  chipTextActive: { color: '#FFFFFF' },
+  chipText: { fontWeight: '700', fontSize: 12, color: colors.mutedDark, letterSpacing: 0.5 },
+  chipTextActive: { color: '#FFFFFF', fontWeight: '800' },
 
   // ── Desktop table ──
   tableContainer: { flex: 1, paddingHorizontal: 32, paddingTop: 24 },

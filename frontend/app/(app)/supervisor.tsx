@@ -676,8 +676,14 @@ const s = StyleSheet.create({
   adminCardText: { fontSize: 11, fontWeight: '800', color: colors.onSurface, letterSpacing: 0.3, flexShrink: 1 },
 
   // Sticky header (tabs + date + search)
-  stickyHeader: { backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: colors.border, ...shadows.sm },
-  tabRow: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 16 },
+  stickyHeader: {
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    ...shadows.sm,
+    zIndex: 100,
+  },
+  tabRow: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 16, backgroundColor: '#FFFFFF' },
   tab: {
     flex: 1, paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row',
     alignItems: 'center', justifyContent: 'center', gap: 8,
@@ -699,7 +705,7 @@ const s = StyleSheet.create({
   dateLabel: { fontSize: 13, fontWeight: '800', color: colors.onSurface, letterSpacing: 1, flex: 1, textAlign: 'center' },
   dateReset: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
 
-  searchCont: { padding: 16 },
+  searchCont: { padding: 16, backgroundColor: '#FFFFFF' },
   searchWrap: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: colors.surfaceTertiary, borderWidth: 1, borderColor: colors.border,
