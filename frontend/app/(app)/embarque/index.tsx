@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/api/supabase';
-import { colors, spacing } from '@/src/constants/theme';
+import { colors, spacing, radius, shadows } from '@/src/constants/theme';
 import MainHeader from '@/src/components/MainHeader';
 import { useTranslation } from 'react-i18next';
 
@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
   statsBar: {
     flexDirection: 'row',
     backgroundColor: colors.surfaceSecondary,
-    borderBottomWidth: 2, borderBottomColor: colors.borderStrong,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
     paddingVertical: 8,
   },
   stat: { flex: 1, alignItems: 'center' },
@@ -281,15 +281,15 @@ const styles = StyleSheet.create({
   list: { padding: spacing.md, paddingBottom: 90 },
   card: {
     backgroundColor: colors.surfaceSecondary,
-    borderWidth: 2, borderColor: colors.borderStrong,
+    borderWidth: 1, borderColor: colors.border, borderRadius: radius.md,
     padding: spacing.md, marginBottom: spacing.sm,
-    flexDirection: 'row', alignItems: 'center', gap: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 8, ...shadows.sm,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { fontSize: 16, fontWeight: '900', color: colors.onSurface, flex: 1 },
   cardSub: { fontSize: 12, color: colors.muted, marginTop: 2 },
   cardMeta: { fontSize: 10, color: colors.muted, marginTop: 4 },
-  badge: { paddingHorizontal: 8, paddingVertical: 3 },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill },
   badgeText: { color: '#FFF', fontWeight: '900', fontSize: 9, letterSpacing: 0.5 },
   detailRow: { flexDirection: 'row', gap: 12, marginTop: 6, flexWrap: 'wrap' },
   detailItem: { flexDirection: 'row', alignItems: 'center', gap: 3 },

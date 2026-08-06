@@ -330,7 +330,7 @@ export default function CasetaDetail() {
             <Text style={{ textAlign: 'center', marginBottom: spacing.xxl, paddingHorizontal: spacing.lg, fontWeight: '700', color: colors.onSurface }}>
               {t('no_hay_registros')}
             </Text>
-            <Pressable onPress={() => router.back()} style={{ borderWidth: 2, borderColor: colors.brandPrimary, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 4 }}>
+            <Pressable onPress={() => router.back()} style={{ borderWidth: 1, borderColor: colors.brandPrimary, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 4 }}>
               <Text style={{ color: colors.brandPrimary, fontWeight: '900', letterSpacing: 1 }}>{t('atras').toUpperCase()}</Text>
             </Pressable>
           </>
@@ -827,7 +827,7 @@ const styles = StyleSheet.create({
   topTitle: { color: '#FFF', fontWeight: '900', fontSize: 16, letterSpacing: 1 },
   scroll: { padding: spacing.md, gap: spacing.md, paddingBottom: 100 },
   scrollTablet: { maxWidth: 860, alignSelf: 'center', width: '100%' },
-  section: { backgroundColor: '#FFF', borderWidth: 2, borderColor: colors.borderStrong, overflow: 'hidden' },
+  section: { backgroundColor: '#FFF', borderWidth: 1, borderColor: colors.borderStrong, overflow: 'hidden' },
   sectionHeader: { backgroundColor: colors.brandPrimary, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 10 },
   sectionTitle: { color: '#FFF', fontWeight: '900', fontSize: 12, letterSpacing: 1, flex: 1 },
   sectionBody: { padding: spacing.md },
@@ -857,13 +857,13 @@ const styles = StyleSheet.create({
   actionBtn: { flex: 1, padding: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 4 },
   actionBtnText: { color: '#FFF', fontWeight: '900', fontSize: 12 },
   fieldLabel: { fontSize: 11, fontWeight: '900', color: colors.onSurface, marginTop: 15, marginBottom: 5 },
-  input: { borderWidth: 2, borderColor: colors.borderStrong, padding: 10, fontSize: 14, backgroundColor: '#F9F9F9' },
+  input: { borderWidth: 1, borderColor: colors.borderStrong, padding: 10, fontSize: 14, backgroundColor: '#F9F9F9' },
   optionsRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
-  optionChip: { paddingHorizontal: 15, paddingVertical: 8, borderWidth: 2, borderColor: colors.borderStrong, backgroundColor: '#FFF' },
+  optionChip: { paddingHorizontal: 15, paddingVertical: 8, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: '#FFF' },
   optionChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   optionText: { fontWeight: '900', fontSize: 11, color: colors.muted },
   optionTextActive: { color: '#FFF' },
-  sigBox: { height: 100, borderWidth: 2, borderColor: colors.borderStrong, marginTop: 5, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF' },
+  sigBox: { height: 100, borderWidth: 1, borderColor: colors.borderStrong, marginTop: 5, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF' },
   sigPlaceholder: { color: colors.muted, fontWeight: '700' },
   sigBoxSmall: { height: 60, borderWidth: 1, borderColor: colors.border, marginTop: 5, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F9F9F9' },
   sigPlaceholderSmall: { color: colors.muted, fontSize: 10, fontWeight: '700' },

@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { colors, spacing } from '@/src/constants/theme';
+import { colors, spacing, radius } from '@/src/constants/theme';
 
 interface ProcessTrackerProps {
   steps: {
@@ -50,10 +50,6 @@ export default function ProcessTracker({ steps, compact = false, showShipping = 
     </View>
   );
 
-  // Cuando el embarque no aplica (unidad FULL o condición "descarga"), el
-  // nodo de embarque se OMITE por completo -- el tracker queda lineal con
-  // solo 3 pasos (entrada, inspección, salida), en vez de mostrar un nodo
-  // "saltado"/gris que no representa una etapa real del proceso de esa unidad.
   return (
     <View style={[styles.container, compact && styles.containerCompact]}>
       <Step icon="car-outline" completed={steps.entry} label={t('entrada')} />
@@ -101,20 +97,21 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   nodeCompleted: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
+    backgroundColor: '#178A4C',
+    borderColor: '#178A4C',
   },
   line: {
     width: 25,
     height: 3,
     backgroundColor: '#E5E7EB',
     marginHorizontal: -1,
+    borderRadius: radius.pill,
   },
   lineCompact: {
     width: 18,
   },
   lineCompleted: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#178A4C',
   },
   label: {
     fontSize: 7,
@@ -128,7 +125,7 @@ const styles = StyleSheet.create({
     maxWidth: 40,
   },
   labelCompleted: {
-    color: '#10B981',
+    color: '#178A4C',
     fontWeight: '600',
   },
 });

@@ -22,6 +22,8 @@ interface MainHeaderProps {
   };
 }
 
+const isWeb = Platform.OS === 'web';
+
 const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack, onBack, rightAction }) => {
   const { user } = useAuth();
   const { isOnline } = useInspections();
@@ -33,7 +35,7 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack, onBa
   const [showProfile, setShowProfile] = React.useState(false);
 
   return (
-    <View style={styles.brandHeader}>
+    <View style={[styles.brandHeader, isWeb && styles.brandHeaderWeb]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
         {showBack && (
           <Pressable onPress={() => (onBack ? onBack() : router.back())} style={styles.backBtn}>
@@ -93,6 +95,11 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: radius.lg,
     borderBottomRightRadius: radius.lg,
     ...shadows.md,
+  },
+  brandHeaderWeb: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xl,
   },
   logoBadge: {
     width: 38,

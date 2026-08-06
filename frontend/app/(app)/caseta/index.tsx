@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/api/supabase';
-import { colors, spacing } from '@/src/constants/theme';
+import { colors, spacing, radius, shadows } from '@/src/constants/theme';
 import ProcessTracker from '@/src/components/ProcessTracker';
 import MainHeader from '@/src/components/MainHeader';
 import { useTranslation } from 'react-i18next';
@@ -211,12 +211,12 @@ const styles = StyleSheet.create({
   filterRow: {
     flexDirection: 'row', gap: 6, paddingHorizontal: spacing.md,
     paddingVertical: 8, backgroundColor: colors.surfaceSecondary,
-    borderBottomWidth: 2, borderBottomColor: colors.borderStrong,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   chip: {
     paddingHorizontal: 10, paddingVertical: 4,
     borderWidth: 1.5, borderColor: colors.borderStrong,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surface, borderRadius: radius.pill,
   },
   chipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   chipText: { fontWeight: '900', fontSize: 9, color: colors.onSurface, letterSpacing: 0.5 },
@@ -224,15 +224,15 @@ const styles = StyleSheet.create({
   list: { padding: spacing.md, paddingBottom: 90 },
   card: {
     backgroundColor: colors.surfaceSecondary,
-    borderWidth: 2, borderColor: colors.borderStrong,
+    borderWidth: 1, borderColor: colors.border, borderRadius: radius.md,
     padding: spacing.md, marginBottom: spacing.sm,
-    flexDirection: 'row', alignItems: 'center', gap: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 8, ...shadows.sm,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { fontSize: 16, fontWeight: '900', color: colors.onSurface, flex: 1 },
   cardSub: { fontSize: 12, color: colors.muted, marginTop: 2 },
   cardMeta: { fontSize: 10, color: colors.muted, marginTop: 2 },
-  badge: { paddingHorizontal: 8, paddingVertical: 3 },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill },
   badgeText: { color: '#FFF', fontWeight: '900', fontSize: 9, letterSpacing: 0.5 },
   empty: { alignItems: 'center', paddingTop: 60 },
   emptyText: { color: colors.muted, fontWeight: '700', marginTop: 12 },

@@ -2,10 +2,12 @@ import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '@/src/context/AuthContext';
-import { colors } from '@/src/constants/theme';
-import { View, ActivityIndicator } from 'react-native';
+import { colors, radius, spacing } from '@/src/constants/theme';
+import { View, ActivityIndicator, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+
+const isWeb = Platform.OS === 'web';
 
 export default function AppLayout() {
   const { token, loading, user } = useAuth();
@@ -36,16 +38,24 @@ export default function AppLayout() {
         tabBarInactiveTintColor: colors.muted,
         tabBarStyle: {
           backgroundColor: colors.surfaceSecondary,
-          borderTopWidth: 2,
-          borderTopColor: colors.borderStrong,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
           height: 64 + (insets.bottom > 0 ? insets.bottom - 8 : 0),
           paddingTop: 6,
           paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
+          ...(isWeb ? {
+            borderTopLeftRadius: radius.lg,
+            borderTopRightRadius: radius.lg,
+            boxShadow: '0 -4px 12px rgba(10, 37, 64, 0.06)',
+            borderWidth: 0,
+          } : {
+            elevation: 0,
+          }),
         },
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
+        tabBarIndicatorStyle: { backgroundColor: colors.brandSecondary, height: 3, borderRadius: radius.pill },
       }}
     >
-      {/* ── TABS VISIBLES ── */}
       <Tabs.Screen
         name="inicio"
         options={{
@@ -89,8 +99,6 @@ export default function AppLayout() {
           href: isAdminOrSup ? undefined : null,
         }}
       />
-
-      {/* ── RUTAS INTERNAS — ocultas del tab bar ── */}
       <Tabs.Screen name="caseta/nuevo" options={{ href: null }} />
       <Tabs.Screen name="caseta/[id]"  options={{ href: null }} />
       <Tabs.Screen name="embarque/nuevo" options={{ href: null }} />

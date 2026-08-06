@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/api/supabase';
-import { colors, spacing, typography } from '@/src/constants/theme';
+import { colors, spacing, typography, radius, shadows } from '@/src/constants/theme';
 import { generateConsolidatedReportHtml } from '@/src/utils/reportGenerator';
 import ProcessTracker from '@/src/components/ProcessTracker';
 import MainHeader from '@/src/components/MainHeader';
@@ -972,7 +972,7 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F3F4F6' },
   // Admin
-  adminBox: { backgroundColor: '#DBEAFE', padding: 15, margin: 10, borderWidth: 2, borderColor: '#1E40AF' },
+  adminBox: { backgroundColor: '#DBEAFE', padding: 15, margin: 10, borderWidth: 1, borderColor: '#1E40AF' },
   adminTitle: { fontWeight: '900', fontSize: 11, color: '#1E40AF', marginBottom: 10, letterSpacing: 1 },
   adminRow: { flexDirection: 'row', gap: 10 },
   adminBtn: { flex: 1, backgroundColor: '#FFF', padding: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#BFDBFE' },
@@ -990,7 +990,7 @@ const styles = StyleSheet.create({
   searchCont: { padding: 10, flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: '#EEE' },
   search: { flex: 1, height: 40, fontSize: 14, fontWeight: '600' },
   // Rows
-  row: { backgroundColor: '#FFF', padding: 15, marginBottom: 12, borderWidth: 2, borderColor: '#000', flexDirection: 'row' },
+  row: { backgroundColor: '#FFF', padding: 15, marginBottom: 12, borderWidth: 1, borderColor: '#000', flexDirection: 'row' },
   rowTitle: { fontWeight: '900', fontSize: 15 },
   rowSub: { color: '#6B7280', fontSize: 12, marginTop: 2, fontWeight: '600' },
   rowActions: { flexDirection: 'row', gap: 10, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' },
@@ -1011,7 +1011,7 @@ const styles = StyleSheet.create({
   empty: { textAlign: 'center', marginTop: 50, color: '#6B7280', fontWeight: '700' },
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalBox: { backgroundColor: '#FFF', width: '100%', maxWidth: 480, borderRadius: 4, overflow: 'hidden', borderWidth: 2, borderColor: '#0A2540' },
+  modalBox: { backgroundColor: '#FFF', width: '100%', maxWidth: 480, borderRadius: 4, overflow: 'hidden', borderWidth: 1, borderColor: '#0A2540' },
   modalHeader: { backgroundColor: '#0A2540', flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 },
   modalTitle: { flex: 1, color: '#FFF', fontWeight: '900', fontSize: 13, letterSpacing: 1 },
   modalBody: { padding: 18 },

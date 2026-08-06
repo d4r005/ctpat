@@ -119,11 +119,11 @@ export default function ProfilePanel({ visible, onClose }: Props) {
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  sheet: { width: '90%', maxWidth: 500, height: '85%', backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong },
-  header: { padding: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 2, borderBottomColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary },
+  sheet: { width: '90%', maxWidth: 500, height: '85%', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderStrong },
+  header: { padding: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary },
   title: { fontSize: typography.sizes.xl, fontWeight: '900', color: colors.onSurface, letterSpacing: 1 },
   card: {
-    backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.borderStrong,
     padding: spacing.xl, alignItems: 'center', marginBottom: spacing.lg,
   },
   avatar: {
@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
   email: { color: colors.muted, marginTop: 4 },
   roleChip: { backgroundColor: colors.brandPrimary, paddingHorizontal: 12, paddingVertical: 4, marginTop: 8 },
   roleChipText: { color: '#FFF', fontWeight: '900', fontSize: 10, letterSpacing: 1 },
-  statsBlock: { backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong, marginBottom: spacing.lg },
+  statsBlock: { backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.borderStrong, marginBottom: spacing.lg },
   statRow: {
     padding: spacing.md, flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border,
@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   syncBtnText: { color: colors.onInfo, fontWeight: '900', letterSpacing: 1 },
   sectionTitle: { fontSize: 12, fontWeight: '900', color: colors.onSurfaceTertiary, letterSpacing: 1.5, marginBottom: spacing.sm, textTransform: 'uppercase' },
   settingsBlock: {
-    backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.borderStrong,
     padding: spacing.md, marginBottom: spacing.xl,
   },
   settingHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },

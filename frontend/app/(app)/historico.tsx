@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/api/supabase';
-import { colors, spacing, typography } from '@/src/constants/theme';
+import { colors, spacing, typography, radius, shadows } from '@/src/constants/theme';
 import ProcessTracker from '@/src/components/ProcessTracker';
 import MainHeader from '@/src/components/MainHeader';
 
@@ -201,14 +201,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.surfaceSecondary,
     paddingHorizontal: 12,
-    borderWidth: 2,
-    borderColor: colors.borderStrong,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.input,
     marginTop: -20,
-    marginHorizontal: spacing.sm,
+    marginHorizontal: spacing.sm, ...shadows.sm,
   },
   searchInput: { flex: 1, height: 48, color: colors.onSurface, fontSize: 14, fontWeight: '700' },
   chipsRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  chip: { borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, paddingVertical: 6, flexShrink: 0, backgroundColor: colors.surfaceSecondary },
+  chip: { borderWidth: 1.5, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, paddingVertical: 6, flexShrink: 0, backgroundColor: colors.surfaceSecondary, borderRadius: radius.pill },
   chipActive: { backgroundColor: colors.brandPrimary },
   chipText: { fontWeight: '900', fontSize: 11, color: colors.onSurface, letterSpacing: 1 },
   chipTextActive: { color: colors.onBrandPrimary },
@@ -224,19 +225,20 @@ const styles = StyleSheet.create({
   },
   activityCard: {
     backgroundColor: colors.surfaceSecondary,
-    borderWidth: 2,
-    borderColor: colors.borderStrong,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.sm,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'center', ...shadows.sm,
   },
   cardTitleText: { fontSize: 16, fontWeight: '900', color: colors.onSurface },
   cardSubText: { fontSize: 13, color: colors.muted, marginTop: 2 },
   cardMetaText: { fontSize: 10, color: colors.muted, marginTop: 4 },
-  statusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 4 },
+  statusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.pill },
   statusBadgeText: { color: '#FFF', fontWeight: '900', fontSize: 10, letterSpacing: 1 },
-  pendingChip: { backgroundColor: colors.info, paddingHorizontal: spacing.sm, paddingVertical: 2, marginBottom: 4 },
+  pendingChip: { backgroundColor: colors.info, paddingHorizontal: spacing.sm, paddingVertical: 2, marginBottom: 4, borderRadius: radius.pill },
   pendingChipText: { color: '#FFF', fontWeight: '900', fontSize: 9, letterSpacing: 1 },
   emptyBox: { alignItems: 'center', padding: spacing.xxxl, marginTop: spacing.xl },
   emptyText: { fontWeight: '700', color: colors.muted, marginTop: spacing.md },

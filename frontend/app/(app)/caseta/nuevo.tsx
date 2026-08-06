@@ -11,7 +11,7 @@ import Signature from '@/src/components/SignaturePad';
 import { apiCall } from '@/src/api/client';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
-import { colors, spacing, typography } from '@/src/constants/theme';
+import { colors, spacing, typography, radius, shadows } from '@/src/constants/theme';
 import { sanitizePlate } from '@/src/utils/text';
 import { compressImage } from '@/src/utils/image';
 
@@ -640,7 +640,7 @@ export default function CasetaNuevo() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{t('firma_operador')}</Text>
-            <View style={{ height: 280, justifyContent: 'center', alignItems: 'center', backgroundColor: '#EEE', borderWidth: 2, borderColor: colors.borderStrong }}>
+            <View style={{ height: 280, justifyContent: 'center', alignItems: 'center', backgroundColor: '#EEE', borderWidth: 1, borderColor: colors.borderStrong }}>
               <Signature
                 ref={sigRef}
                 onOK={(sig) => { setFirmaOperador(sig); setShowSig(false); }}
@@ -750,48 +750,48 @@ const styles = StyleSheet.create({
   stepLabel: { padding: spacing.sm, backgroundColor: colors.brandPrimary, color: colors.onBrandPrimary, fontWeight: '900', fontSize: 11, letterSpacing: 1, textAlign: 'center' },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   fieldLabel: { fontSize: 11, fontWeight: '900', color: colors.onSurfaceTertiary, letterSpacing: 1, marginTop: spacing.md, marginBottom: spacing.sm },
-  input: { borderWidth: 2, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary, padding: spacing.md, fontSize: typography.sizes.base, color: colors.onSurface },
-  naBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong, height: 52, paddingHorizontal: spacing.sm, gap: 4 },
-  naCheck: { width: 20, height: 20, borderWidth: 2, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF' },
+  input: { borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary, padding: spacing.md, fontSize: typography.sizes.base, color: colors.onSurface },
+  naBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.borderStrong, height: 52, paddingHorizontal: spacing.sm, gap: 4 },
+  naCheck: { width: 20, height: 20, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF' },
   naCheckOn: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   naText: { fontSize: 10, fontWeight: '900', color: colors.onSurface },
   stepTitle: { fontSize: typography.sizes.xl, fontWeight: '900', color: colors.onSurface, marginBottom: spacing.md },
-  photoBox: { borderWidth: 2, borderColor: colors.borderStrong, height: 200, backgroundColor: colors.surfaceSecondary, borderStyle: 'dashed', overflow: 'hidden' },
+  photoBox: { borderWidth: 1, borderColor: colors.borderStrong, height: 200, backgroundColor: colors.surfaceSecondary, borderStyle: 'dashed', overflow: 'hidden' },
   photoPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   photoText: { fontWeight: '900', color: colors.brandPrimary, fontSize: 11, marginTop: 8 },
-  photoContainer: { position: 'relative', width: '100%', height: 200, borderWidth: 2, borderColor: colors.borderStrong },
+  photoContainer: { position: 'relative', width: '100%', height: 200, borderWidth: 1, borderColor: colors.borderStrong },
   photoPreview: { flex: 1, resizeMode: 'cover' },
   photoRemove: { position: 'absolute', top: 8, right: 8, backgroundColor: '#FFF', borderRadius: 12 },
   photoActionRow: { flexDirection: 'row', gap: spacing.sm },
   photoActionBtn: { flex: 1, backgroundColor: colors.brandPrimary, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   photoActionText: { color: colors.onBrandPrimary, fontWeight: '900', fontSize: 11, letterSpacing: 1 },
   optionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  optionChip: { borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, paddingVertical: 8, flexShrink: 0 },
+  optionChip: { borderWidth: 1, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, paddingVertical: 8, flexShrink: 0 },
   optionChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   optionText: { fontWeight: '900', fontSize: 11, color: colors.onSurface, letterSpacing: 1 },
   optionTextActive: { color: colors.onBrandPrimary },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.md, padding: spacing.md, backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong, gap: spacing.md },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.md, padding: spacing.md, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.borderStrong, gap: spacing.md },
   toggleLabel: { fontWeight: '900', flex: 1, color: colors.onSurface, fontSize: 12, letterSpacing: 0.5 },
   toggleSwitch: { width: 48, height: 26, backgroundColor: colors.borderStrong, justifyContent: 'center' },
   toggleSwitchOn: { backgroundColor: colors.success },
   toggleKnob: { position: 'absolute', width: 22, height: 22, backgroundColor: '#FFF' },
   toggleValue: { fontWeight: '900', color: colors.muted, fontSize: 11, letterSpacing: 1 },
   declTitle: { fontWeight: '900', fontSize: 12, color: colors.onBrandPrimary, backgroundColor: colors.brandPrimary, padding: spacing.sm, letterSpacing: 1, marginTop: spacing.lg },
-  rulesBox: { borderWidth: 2, borderColor: colors.borderStrong, borderTopWidth: 0, padding: spacing.md, backgroundColor: colors.surfaceSecondary },
+  rulesBox: { borderWidth: 1, borderColor: colors.borderStrong, borderTopWidth: 0, padding: spacing.md, backgroundColor: colors.surfaceSecondary },
   ruleItem: { fontSize: typography.sizes.sm, color: colors.onSurface, marginBottom: 6, lineHeight: 20 },
-  checkRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg, gap: spacing.sm, padding: spacing.md, backgroundColor: colors.brandTertiary, borderWidth: 2, borderColor: colors.brandPrimary },
-  checkbox: { width: 28, height: 28, borderWidth: 2, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF' },
+  checkRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg, gap: spacing.sm, padding: spacing.md, backgroundColor: colors.brandTertiary, borderWidth: 1, borderColor: colors.brandPrimary },
+  checkbox: { width: 28, height: 28, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF' },
   checkboxOn: { backgroundColor: colors.success, borderColor: colors.success },
   checkLabel: { flex: 1, color: colors.onBrandTertiary, fontWeight: '700', fontSize: typography.sizes.sm },
-  signatureBox: { borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.lg, backgroundColor: colors.surfaceSecondary, alignItems: 'center', marginTop: spacing.lg, minHeight: 72, justifyContent: 'center' },
+  signatureBox: { borderWidth: 1, borderColor: colors.borderStrong, padding: spacing.lg, backgroundColor: colors.surfaceSecondary, alignItems: 'center', marginTop: spacing.lg, minHeight: 72, justifyContent: 'center' },
   firmaCta: { color: colors.muted, fontWeight: '700', letterSpacing: 1 },
   firmaDone: { color: colors.success, fontWeight: '900', letterSpacing: 1 },
   footer: { flexDirection: 'row', padding: spacing.md, gap: spacing.sm, borderTopWidth: 2, borderTopColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary },
   priBtn: { flex: 1, backgroundColor: colors.brandPrimary, padding: spacing.md, alignItems: 'center', justifyContent: 'center', minHeight: 52 },
   priBtnText: { color: colors.onBrandPrimary, fontWeight: '900', letterSpacing: 1 },
-  secBtn: { backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  secBtn: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderStrong, padding: spacing.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
   secBtnText: { color: colors.onSurface, fontWeight: '900', letterSpacing: 1 },
   modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(9,9,11,0.85)', justifyContent: 'center', padding: spacing.lg, zIndex: 100 },
-  modalCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong },
+  modalCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.lg, borderWidth: 1, borderColor: colors.borderStrong },
   modalTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface, marginBottom: spacing.md, letterSpacing: 1 },
 });

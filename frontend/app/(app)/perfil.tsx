@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/context/AuthContext';
 import { useInspections } from '@/src/context/InspectionContext';
-import { colors, spacing, typography } from '@/src/constants/theme';
+import { colors, spacing, typography, radius, shadows } from '@/src/constants/theme';
 
 import MainHeader from '@/src/components/MainHeader';
 
@@ -107,19 +107,19 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   title: { fontSize: typography.sizes.xxl, fontWeight: '900', color: colors.onSurface, marginBottom: spacing.lg },
   card: {
-    backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong,
-    padding: spacing.xl, alignItems: 'center', marginBottom: spacing.lg,
+    backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border,
+    borderRadius: radius.lg, padding: spacing.xl, alignItems: 'center', marginBottom: spacing.lg, ...shadows.sm,
   },
   avatar: {
     width: 72, height: 72, backgroundColor: colors.brandPrimary,
-    alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md,
+    borderRadius: 36, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md,
   },
   avatarText: { color: colors.onBrandPrimary, fontWeight: '900', fontSize: 32 },
   name: { fontSize: typography.sizes.xl, fontWeight: '900', color: colors.onSurface },
   email: { color: colors.muted, marginTop: 4 },
-  roleChip: { backgroundColor: colors.brandPrimary, paddingHorizontal: 12, paddingVertical: 4, marginTop: 8, borderRadius: 2 },
+  roleChip: { backgroundColor: colors.brandPrimary, paddingHorizontal: 12, paddingVertical: 4, marginTop: 8, borderRadius: radius.pill },
   roleChipText: { color: '#FFF', fontWeight: '900', fontSize: 10, letterSpacing: 1 },
-  statsBlock: { backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong, marginBottom: spacing.lg },
+  statsBlock: { backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, marginBottom: spacing.lg, ...shadows.sm },
   statRow: {
     padding: spacing.md, flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border,
@@ -130,27 +130,27 @@ const styles = StyleSheet.create({
   statusDotText: { color: '#FFF', fontWeight: '900', fontSize: 10, letterSpacing: 1 },
   syncBtn: {
     backgroundColor: colors.info, padding: spacing.lg, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.lg,
+    alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.lg, borderRadius: radius.md,
   },
   syncBtnText: { color: colors.onInfo, fontWeight: '900', letterSpacing: 1 },
   sectionTitle: { fontSize: 12, fontWeight: '900', color: colors.onSurfaceTertiary, letterSpacing: 1.5, marginBottom: spacing.sm, textTransform: 'uppercase' },
   settingsBlock: {
-    backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong,
-    padding: spacing.md, marginBottom: spacing.xl,
+    backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border,
+    borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.xl, ...shadows.sm,
   },
   settingHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
   settingTitle: { fontSize: typography.sizes.base, fontWeight: '700', color: colors.onSurface },
   languageOptions: { flexDirection: 'row', gap: spacing.sm },
   langBtn: {
     flex: 1, paddingVertical: spacing.sm, alignItems: 'center',
-    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, borderRadius: radius.sm,
   },
   langBtnActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   langBtnText: { fontSize: 12, fontWeight: '700', color: colors.onSurfaceTertiary },
   langBtnTextActive: { color: colors.onBrandPrimary },
   signOutBtn: {
     backgroundColor: colors.error, padding: spacing.lg, flexDirection: 'row',
-    alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+    alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radius.md,
   },
   signOutText: { color: colors.onError, fontWeight: '900', letterSpacing: 1 },
 });

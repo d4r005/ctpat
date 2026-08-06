@@ -12,6 +12,7 @@ import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, radius, typography, shadows } from '@/src/constants/theme';
 
 const REMEMBER_KEY = 'naf_remembered_email';
+const isWeb = Platform.OS === 'web';
 
 export default function Login() {
   const router = useRouter();
@@ -57,6 +58,117 @@ export default function Login() {
     }
   };
 
+  const renderForm = () => (
+    <View style={styles.form}>
+      <Text style={styles.label}>{t('correo_electronico').toUpperCase()}</Text>
+      <View style={styles.inputWrapper}>
+        <Ionicons name="person-outline" size={18} color={colors.muted} style={{ marginRight: 8 }} />
+        <TextInput
+          testID="login-email-input"
+          style={styles.input}
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          placeholder={t('email_placeholder')}
+          placeholderTextColor={colors.mutedLight}
+        />
+      </View>
+
+      <Text style={styles.label}>{t('contrasena').toUpperCase()}</Text>
+      <View style={styles.inputWrapper}>
+        <Ionicons name="lock-closed-outline" size={18} color={colors.muted} style={{ marginRight: 8 }} />
+        <TextInput
+          testID="login-password-input"
+          style={[styles.input, { flex: 1 }]}
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={!showPassword}
+          placeholder="••••••••"
+          placeholderTextColor={colors.mutedLight}
+        />
+        <Pressable onPress={() => setShowPassword((v) => !v)} hitSlop={8}>
+          <Text style={styles.showToggle}>{showPassword ? (t('ocultar') || 'Ocultar') : (t('ver') || 'Ver')}</Text>
+        </Pressable>
+      </View>
+
+      <Pressable
+        onPress={() => setRememberMe(!rememberMe)}
+        style={styles.rememberRow}
+      >
+        <View style={[styles.checkbox, rememberMe && styles.checkboxActive]}>
+          {rememberMe && <Ionicons name="checkmark" size={14} color={colors.onBrandPrimary} />}
+        </View>
+        <Text style={styles.rememberText}>{t('recordar_usuario')}</Text>
+      </Pressable>
+
+      {error ? (
+        <View style={styles.errorBox} testID="login-error">
+          <Ionicons name="alert-circle" size={16} color={colors.error} style={{ marginRight: 6 }} />
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : null}
+
+      <Pressable
+        testID="login-submit-button"
+        style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.9 }]}
+        onPress={handleLogin}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color={colors.onBrandPrimary} />
+        ) : (
+          <Text style={styles.primaryBtnText}>{t('iniciar_sesion').toUpperCase()}</Text>
+        )}
+      </Pressable>
+
+      <View style={styles.footerRow}>
+        <Text style={styles.footerText}>{t('no_tienes_cuenta')} </Text>
+        <Link href="/register" asChild>
+          <Pressable testID="login-go-register">
+            <Text style={styles.link}>{t('registrate')}</Text>
+          </Pressable>
+        </Link>
+      </View>
+    </View>
+  );
+
+  // ── WEB: Split-screen layout ─────────────────────────────────
+  if (isWeb) {
+    return (
+      <View style={styles.webContainer}>
+        {/* Left branding panel */}
+        <View style={styles.webLeftPanel}>
+          <View style={styles.webBrandBlock}>
+            <View style={styles.shieldBadge}>
+              <Ionicons name="shield-checkmark" size={36} color={colors.brandSecondary} />
+            </View>
+            <Text style={styles.webBrandName}>NAF</Text>
+            <Text style={styles.webBrandSub}>SRIUC</Text>
+            <View style={styles.goldDivider} />
+            <Text style={styles.webTagline}>{t('sistema_registro')}</Text>
+            <Text style={styles.webTaglineSub}>{t('sistema_inspeccion_sub')}</Text>
+          </View>
+          <Text style={styles.webCopyright}>© {new Date().getFullYear()} NAF · SRIUC — Todos los derechos reservados.</Text>
+        </View>
+
+        {/* Right form panel */}
+        <View style={styles.webRightPanel}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={undefined}>
+            <ScrollView contentContainerStyle={styles.webFormWrap} keyboardShouldPersistTaps="handled">
+              <View style={styles.webFormCard}>
+                <Text style={styles.webFormTitle}>Iniciar Sesión</Text>
+                <Text style={styles.webFormSubtitle}>Ingresa tus credenciales para continuar</Text>
+                {renderForm()}
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </View>
+      </View>
+    );
+  }
+
+  // ── MOBILE: Centered card layout ──────────────────────────────
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
@@ -65,7 +177,6 @@ export default function Login() {
       >
         <ScrollView contentContainerStyle={styles.centerWrap} keyboardShouldPersistTaps="handled">
           <View style={styles.card}>
-            {/* Brand mark */}
             <View style={styles.brandBlock}>
               <View style={styles.shieldBadge}>
                 <Ionicons name="shield-checkmark" size={30} color={colors.brandSecondary} />
@@ -76,81 +187,8 @@ export default function Login() {
               <Text style={styles.title}>{t('sistema_registro')}</Text>
               <Text style={styles.subtitle}>{t('sistema_inspeccion_sub')}</Text>
             </View>
-
-            <View style={styles.form}>
-              <Text style={styles.label}>{t('correo_electronico').toUpperCase()}</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="person-outline" size={18} color={colors.muted} style={{ marginRight: 8 }} />
-                <TextInput
-                  testID="login-email-input"
-                  style={styles.input}
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  placeholder={t('email_placeholder')}
-                  placeholderTextColor={colors.mutedLight}
-                />
-              </View>
-
-              <Text style={styles.label}>{t('contrasena').toUpperCase()}</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={18} color={colors.muted} style={{ marginRight: 8 }} />
-                <TextInput
-                  testID="login-password-input"
-                  style={[styles.input, { flex: 1 }]}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  placeholder="••••••••"
-                  placeholderTextColor={colors.mutedLight}
-                />
-                <Pressable onPress={() => setShowPassword((v) => !v)} hitSlop={8}>
-                  <Text style={styles.showToggle}>{showPassword ? t('ocultar') || 'Ocultar' : t('ver') || 'Ver'}</Text>
-                </Pressable>
-              </View>
-
-              <Pressable
-                onPress={() => setRememberMe(!rememberMe)}
-                style={styles.rememberRow}
-              >
-                <View style={[styles.checkbox, rememberMe && styles.checkboxActive]}>
-                  {rememberMe && <Ionicons name="checkmark" size={14} color={colors.onBrandPrimary} />}
-                </View>
-                <Text style={styles.rememberText}>{t('recordar_usuario')}</Text>
-              </Pressable>
-
-              {error ? (
-                <View style={styles.errorBox} testID="login-error">
-                  <Ionicons name="alert-circle" size={16} color={colors.error} style={{ marginRight: 6 }} />
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              ) : null}
-
-              <Pressable
-                testID="login-submit-button"
-                style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.9 }]}
-                onPress={handleLogin}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color={colors.onBrandPrimary} />
-                ) : (
-                  <Text style={styles.primaryBtnText}>{t('iniciar_sesion').toUpperCase()}</Text>
-                )}
-              </Pressable>
-
-              <View style={styles.footerRow}>
-                <Text style={styles.footerText}>{t('no_tienes_cuenta')} </Text>
-                <Link href="/register" asChild>
-                  <Pressable testID="login-go-register">
-                    <Text style={styles.link}>{t('registrate')}</Text>
-                  </Pressable>
-                </Link>
-              </View>
-            </View>
+            {renderForm()}
           </View>
-
           <Text style={styles.copyright}>© {new Date().getFullYear()} NAF · SRIUC — Todos los derechos reservados.</Text>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -160,6 +198,8 @@ export default function Login() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
+
+  // ── Mobile ──
   centerWrap: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
   card: {
     backgroundColor: colors.surfaceSecondary,
@@ -189,6 +229,30 @@ const styles = StyleSheet.create({
   goldDivider: { width: 40, height: 3, borderRadius: 2, backgroundColor: colors.brandSecondary, marginVertical: spacing.md },
   title: { fontSize: 18, fontWeight: '800', color: colors.onSurface, textAlign: 'center' },
   subtitle: { fontSize: 13, color: colors.muted, marginTop: 4, fontWeight: '500', textAlign: 'center' },
+  copyright: { textAlign: 'center', color: colors.mutedLight, fontSize: 11, marginTop: spacing.lg },
+
+  // ── Web split-screen ──
+  webContainer: { flex: 1, flexDirection: 'row' as any },
+  webLeftPanel: {
+    flex: 1,
+    backgroundColor: colors.brandPrimary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 48,
+  },
+  webBrandBlock: { alignItems: 'center' },
+  webBrandName: { color: '#FFFFFF', fontSize: 48, fontWeight: '900', letterSpacing: 4, marginTop: 16 },
+  webBrandSub: { color: colors.brandSecondary, fontSize: 20, fontWeight: '800', letterSpacing: 8, marginTop: 4 },
+  webTagline: { color: '#FFFFFF', fontSize: 20, fontWeight: '800', textAlign: 'center', marginTop: 20 },
+  webTaglineSub: { color: 'rgba(255,255,255,0.65)', fontSize: 14, fontWeight: '500', textAlign: 'center', marginTop: 6 },
+  webCopyright: { color: 'rgba(255,255,255,0.4)', fontSize: 11, position: 'absolute', bottom: 24 },
+  webRightPanel: { flex: 1, backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center', padding: 48 },
+  webFormWrap: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', width: '100%' },
+  webFormCard: { width: '100%', maxWidth: 420 },
+  webFormTitle: { fontSize: 26, fontWeight: '900', color: colors.onSurface, marginBottom: 4 },
+  webFormSubtitle: { fontSize: 14, color: colors.muted, fontWeight: '500', marginBottom: spacing.xl },
+
+  // ── Shared form ──
   form: { width: '100%' },
   label: {
     fontSize: 11, fontWeight: '800', color: colors.onSurfaceTertiary,
@@ -200,7 +264,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.sm,
+    borderRadius: radius.input,
     paddingHorizontal: spacing.md,
     height: 50,
   },
@@ -234,5 +298,4 @@ const styles = StyleSheet.create({
   footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: spacing.xl },
   footerText: { color: colors.muted, fontSize: 14, fontWeight: '500' },
   link: { color: colors.brandPrimary, fontWeight: '800', fontSize: 14 },
-  copyright: { textAlign: 'center', color: colors.mutedLight, fontSize: 11, marginTop: spacing.lg },
 });

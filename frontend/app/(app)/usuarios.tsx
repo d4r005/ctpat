@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/src/api/supabase';
 import { useAuth, User } from '@/src/context/AuthContext';
-import { colors, spacing, typography } from '@/src/constants/theme';
+import { colors, spacing, typography, radius, shadows } from '@/src/constants/theme';
 
 export default function Usuarios({ nested = false }: { nested?: boolean }) {
   const { user, token } = useAuth();
@@ -300,11 +300,11 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: colors.surfaceSecondary, borderBottomWidth: 2, borderBottomColor: colors.borderStrong,
+    backgroundColor: colors.surfaceSecondary, borderBottomWidth: 1, borderBottomColor: colors.borderStrong,
   },
   title: { fontSize: typography.sizes.lg, fontWeight: '900', color: colors.onSurface },
   userRow: {
-    backgroundColor: colors.surfaceSecondary, borderWidth: 2, borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.borderStrong,
     padding: spacing.md, marginBottom: spacing.sm, flexDirection: 'row', alignItems: 'center',
   },
   userName: { fontWeight: '900', color: colors.onSurface, fontSize: typography.sizes.base },
@@ -317,16 +317,16 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(9,9,11,0.85)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg, zIndex: 100,
   },
-  modalCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong },
+  modalCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.lg, borderWidth: 1, borderColor: colors.borderStrong },
   modalTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface, marginBottom: spacing.md, letterSpacing: 1 },
   label: { fontSize: 11, fontWeight: '900', color: colors.onSurfaceTertiary, letterSpacing: 1, marginBottom: 6, marginTop: spacing.md },
-  input: { borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, fontSize: typography.sizes.base, color: colors.onSurface, backgroundColor: colors.surface },
-  roleOpt: { flex: 1, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, alignItems: 'center' },
+  input: { borderWidth: 1, borderColor: colors.borderStrong, padding: spacing.md, fontSize: typography.sizes.base, color: colors.onSurface, backgroundColor: colors.surface },
+  roleOpt: { flex: 1, borderWidth: 1, borderColor: colors.borderStrong, padding: spacing.md, alignItems: 'center' },
   roleOptActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   roleOptText: { fontWeight: '900', letterSpacing: 1, color: colors.onSurface },
   btn: { flex: 1, padding: spacing.md, alignItems: 'center', minHeight: 48, justifyContent: 'center' },
   btnPrimary: { backgroundColor: colors.brandPrimary },
   btnPrimaryText: { color: colors.onBrandPrimary, fontWeight: '900', letterSpacing: 1 },
-  btnSecondary: { backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong },
+  btnSecondary: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderStrong },
   btnSecondaryText: { color: colors.onSurface, fontWeight: '900', letterSpacing: 1 },
 });

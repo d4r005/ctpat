@@ -6,9 +6,9 @@
 
 export const colors = {
   // Neutral surfaces
-  surface: '#F4F6F9',           // app background (cool, slightly blue-gray)
+  surface: '#F4F6F9',
   onSurface: '#0F1B2D',
-  surfaceSecondary: '#FFFFFF',  // cards / elevated panels
+  surfaceSecondary: '#FFFFFF',
   onSurfaceSecondary: '#0F1B2D',
   surfaceTertiary: '#E9EDF3',
   onSurfaceTertiary: '#1C2B3A',
@@ -21,7 +21,7 @@ export const colors = {
   brandPrimaryDark: '#081B30',
   brandPrimaryLight: '#123456',
   onBrandPrimary: '#FFFFFF',
-  brandSecondary: '#C9962C',    // gold accent
+  brandSecondary: '#C9962C',
   brandSecondaryLight: '#F0C36B',
   onBrandSecondary: '#0F1B2D',
   brandTertiary: '#E8EEF7',
@@ -61,11 +61,13 @@ export const spacing = {
 
 // Softer, more premium corner radii for a corporate SaaS feel.
 export const radius = {
+  xs: 4,
   sm: 8,
   md: 12,
   lg: 18,
   xl: 24,
   pill: 999,
+  input: 10,
 };
 
 export const typography = {

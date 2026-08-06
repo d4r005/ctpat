@@ -9,7 +9,7 @@ import * as FileSystem from 'expo-file-system';
 import { supabase } from '@/src/api/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useTranslation } from 'react-i18next';
-import { colors, spacing, typography } from '@/src/constants/theme';
+import { colors, spacing, typography, radius, shadows } from '@/src/constants/theme';
 
 interface Analytics {
   total: number;
@@ -364,28 +364,28 @@ function DistBar({ label, value, total, color }: { label: string; value: number;
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surfaceSecondary, borderBottomWidth: 2, borderBottomColor: colors.borderStrong },
+  header: { padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surfaceSecondary, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTitle: { fontSize: typography.sizes.lg, fontWeight: '900', color: colors.onSurface, letterSpacing: 1 },
   dateBox: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-end', marginBottom: spacing.lg, flexWrap: 'wrap' },
   label: { fontSize: 10, fontWeight: '900', color: colors.muted, letterSpacing: 1, marginBottom: 4 },
-  dateInput: { borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.sm, backgroundColor: colors.surfaceSecondary, color: colors.onSurface, height: 40 },
-  applyBtn: { backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.md, height: 40, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dateInput: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.input, padding: spacing.sm, backgroundColor: colors.surfaceSecondary, color: colors.onSurface, height: 40 },
+  applyBtn: { backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.md, height: 40, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.md },
   applyBtnText: { color: colors.onBrandPrimary, fontWeight: '900', fontSize: 11, letterSpacing: 1 },
   presetRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg, flexWrap: 'wrap' },
-  presetChip: { borderWidth: 2, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary, paddingHorizontal: spacing.md, paddingVertical: 8, flexShrink: 0, flexDirection: 'row', alignItems: 'center' },
+  presetChip: { borderWidth: 1.5, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary, paddingHorizontal: spacing.md, paddingVertical: 8, flexShrink: 0, flexDirection: 'row', alignItems: 'center', borderRadius: radius.pill },
   presetText: { fontWeight: '900', color: colors.onSurface, fontSize: 11, letterSpacing: 1 },
   kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
-  kpi: { flexGrow: 1, flexBasis: '47%', borderWidth: 2, padding: spacing.md, backgroundColor: colors.surfaceSecondary, alignItems: 'center' },
+  kpi: { flexGrow: 1, flexBasis: '47%', borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, backgroundColor: colors.surfaceSecondary, alignItems: 'center', ...shadows.sm },
   kpiValue: { fontSize: 28, fontWeight: '900' },
   kpiLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, letterSpacing: 1, marginTop: 2 },
   section: { marginBottom: spacing.lg },
-  sectionTitle: { backgroundColor: colors.brandPrimary, color: colors.onBrandPrimary, padding: spacing.sm, fontWeight: '900', letterSpacing: 1, fontSize: 12 },
-  sectionBody: { borderWidth: 2, borderColor: colors.borderStrong, borderTopWidth: 0, backgroundColor: colors.surfaceSecondary, padding: spacing.md },
+  sectionTitle: { backgroundColor: colors.brandPrimary, color: colors.onBrandPrimary, padding: spacing.sm, fontWeight: '900', letterSpacing: 1, fontSize: 12, borderTopLeftRadius: radius.md, borderTopRightRadius: radius.md },
+  sectionBody: { borderWidth: 1, borderColor: colors.border, borderTopWidth: 0, backgroundColor: colors.surfaceSecondary, padding: spacing.md, borderBottomLeftRadius: radius.md, borderBottomRightRadius: radius.md },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
   rowLabel: { color: colors.onSurface, fontWeight: '700', fontSize: typography.sizes.sm },
   rowMeta: { color: colors.muted, fontSize: 11, marginTop: 2 },
-  barWrap: { flex: 1.2, height: 22, backgroundColor: colors.surfaceTertiary, position: 'relative', justifyContent: 'center' },
-  bar: { position: 'absolute', left: 0, top: 0, bottom: 0 },
+  barWrap: { flex: 1.2, height: 22, backgroundColor: colors.surfaceTertiary, position: 'relative', justifyContent: 'center', borderRadius: radius.xs },
+  bar: { position: 'absolute', left: 0, top: 0, bottom: 0, borderTopLeftRadius: radius.xs, borderBottomLeftRadius: radius.xs },
   barValue: { position: 'absolute', right: 6, color: colors.onSurface, fontWeight: '900', fontSize: 11 },
   distRow: { paddingVertical: spacing.sm, gap: 4 },
   distLabel: { color: colors.onSurface, fontWeight: '700', fontSize: typography.sizes.sm },

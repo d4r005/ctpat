@@ -11,7 +11,7 @@ import { supabase } from '@/src/api/supabase';
 import { apiCall } from '@/src/api/client';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
-import { colors, spacing, typography } from '@/src/constants/theme';
+import { colors, spacing, typography, radius, shadows } from '@/src/constants/theme';
 import { sanitizePlate } from '@/src/utils/text';
 import { compressImage } from '@/src/utils/image';
 
@@ -512,27 +512,27 @@ const styles = StyleSheet.create({
   topTitle: { color: colors.onBrandPrimary, fontWeight: '900', fontSize: typography.sizes.base, letterSpacing: 1, flex: 1, textAlign: 'center' },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   secTitle: { backgroundColor: colors.brandPrimary, color: colors.onBrandPrimary, padding: spacing.sm, fontWeight: '900', letterSpacing: 1, fontSize: 12 },
-  secBody: { borderWidth: 2, borderColor: colors.borderStrong, borderTopWidth: 0, padding: spacing.md, backgroundColor: colors.surfaceSecondary },
+  secBody: { borderWidth: 1, borderColor: colors.borderStrong, borderTopWidth: 0, padding: spacing.md, backgroundColor: colors.surfaceSecondary },
   label: { fontSize: 11, fontWeight: '900', color: colors.muted, letterSpacing: 1, marginTop: spacing.sm, marginBottom: 4 },
-  input: { borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.sm, backgroundColor: colors.surface, color: colors.onSurface, fontSize: typography.sizes.base },
-  signatureBox: { borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, backgroundColor: colors.surface, alignItems: 'center', marginTop: spacing.sm, minHeight: 56, justifyContent: 'center' },
+  input: { borderWidth: 1, borderColor: colors.borderStrong, padding: spacing.sm, backgroundColor: colors.surface, color: colors.onSurface, fontSize: typography.sizes.base },
+  signatureBox: { borderWidth: 1, borderColor: colors.borderStrong, padding: spacing.md, backgroundColor: colors.surface, alignItems: 'center', marginTop: spacing.sm, minHeight: 56, justifyContent: 'center' },
   firmaCta: { color: colors.muted, fontWeight: '700', letterSpacing: 1 },
   firmaDone: { color: colors.success, fontWeight: '900', letterSpacing: 1 },
   bigBtn: { backgroundColor: colors.brandPrimary, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: 64 },
   bigBtnText: { color: colors.onBrandPrimary, fontWeight: '900', letterSpacing: 1, fontSize: typography.sizes.base },
   modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(9,9,11,0.85)', justifyContent: 'center', padding: spacing.lg, zIndex: 100 },
-  modalCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.lg, borderWidth: 2, borderColor: colors.borderStrong },
+  modalCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.lg, borderWidth: 1, borderColor: colors.borderStrong },
   modalTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface, marginBottom: spacing.md, letterSpacing: 1 },
-  secBtn: { backgroundColor: colors.surface, borderWidth: 2, borderColor: colors.borderStrong, padding: spacing.md, alignItems: 'center', justifyContent: 'center' },
+  secBtn: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderStrong, padding: spacing.md, alignItems: 'center', justifyContent: 'center' },
   secBtnText: { color: colors.onSurface, fontWeight: '900', letterSpacing: 1 },
   photoBtn: { backgroundColor: colors.brandPrimary, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4, flex: 1 },
   photoBtnText: { color: colors.onBrandPrimary, fontWeight: '900', fontSize: 11, letterSpacing: 1 },
-  photoWrap: { position: 'relative', marginTop: 4, borderWidth: 2, borderColor: colors.borderStrong },
+  photoWrap: { position: 'relative', marginTop: 4, borderWidth: 1, borderColor: colors.borderStrong },
   photoImg: { width: '100%', height: 200, resizeMode: 'cover' },
   photoRemove: { position: 'absolute', top: 8, right: 8, backgroundColor: '#FFF', borderRadius: 12 },
   photoActionRow: { flexDirection: 'row', gap: spacing.sm },
   optionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  optionChip: { borderWidth: 2, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, paddingVertical: 8, flexShrink: 0, backgroundColor: '#FFF' },
+  optionChip: { borderWidth: 1, borderColor: colors.borderStrong, paddingHorizontal: spacing.md, paddingVertical: 8, flexShrink: 0, backgroundColor: '#FFF' },
   optionChipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   optionText: { fontWeight: '900', fontSize: 11, color: colors.onSurface, letterSpacing: 1 },
   optionTextActive: { color: colors.onBrandPrimary },
