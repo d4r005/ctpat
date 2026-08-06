@@ -9,7 +9,8 @@ import * as FileSystem from 'expo-file-system';
 import { supabase } from '@/src/api/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useTranslation } from 'react-i18next';
-import { colors, spacing, typography, radius, shadows } from '@/src/constants/theme';
+import { colors, spacing, radius, shadows } from '@/src/constants/theme';
+import MainHeader from '@/src/components/MainHeader';
 
 interface Analytics {
   total: number;
@@ -32,20 +33,12 @@ export default function Analitica({ nested = false }: { nested?: boolean }) {
   const load = async () => {
     setLoading(true);
     try {
-      let query = supabase
-        .from('inspections')
-        .select('*');
-
+      let query = supabase.from('inspections').select('*');
       if (dateFrom) query = query.gte('created_at', `${dateFrom}T00:00:00`);
       if (dateTo) query = query.lte('created_at', `${dateTo}T23:59:59`);
-
       const { data: inspections, error } = await query;
       if (error) throw error;
-
-      if (!inspections) {
-        setData(null);
-        return;
-      }
+      if (!inspections) { setData(null); return; }
 
       const total = inspections.length;
       const approval_breakdown = {
@@ -59,13 +52,10 @@ export default function Analitica({ nested = false }: { nested?: boolean }) {
       };
       const approval_rate_pct = total > 0 ? Math.round((approval_breakdown.aprobada / total) * 100) : 0;
 
-      // Group by inspector
       const inspectorMap: Record<string, any> = {};
       inspections.forEach(i => {
         const name = i.data?.inspector_nombre || 'Desconocido';
-        if (!inspectorMap[name]) {
-          inspectorMap[name] = { name, total: 0, fallas: 0, aprobadas: 0, rechazadas: 0 };
-        }
+        if (!inspectorMap[name]) inspectorMap[name] = { name, total: 0, fallas: 0, aprobadas: 0, rechazadas: 0 };
         inspectorMap[name].total++;
         if (i.status_general === 'malo') inspectorMap[name].fallas++;
         if (i.approval_status === 'aprobada') inspectorMap[name].aprobadas++;
@@ -73,14 +63,11 @@ export default function Analitica({ nested = false }: { nested?: boolean }) {
       });
       const by_inspector = Object.values(inspectorMap).sort((a, b) => b.total - a.total);
 
-      // Top failed points
       const failedPointsMap: Record<string, number> = {};
       inspections.forEach(i => {
         const points = i.data?.points || [];
         points.forEach((p: any) => {
-          if (p.estado === 'malo') {
-            failedPointsMap[p.name] = (failedPointsMap[p.name] || 0) + 1;
-          }
+          if (p.estado === 'malo') failedPointsMap[p.name] = (failedPointsMap[p.name] || 0) + 1;
         });
       });
       const top_failed_points = Object.entries(failedPointsMap)
@@ -88,23 +75,12 @@ export default function Analitica({ nested = false }: { nested?: boolean }) {
         .sort((a, b) => b.count - a.count)
         .slice(0, 10);
 
-      setData({
-        total,
-        approval_breakdown,
-        status_breakdown,
-        approval_rate_pct,
-        by_inspector,
-        top_failed_points
-      });
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setLoading(false);
-    }
+      setData({ total, approval_breakdown, status_breakdown, approval_rate_pct, by_inspector, top_failed_points });
+    } catch (e: any) { alert(e.message); }
+    finally { setLoading(false); }
   };
 
   const isSupervisorOrAdmin = user?.role === 'supervisor' || user?.role === 'admin';
-
   useEffect(() => { if (isSupervisorOrAdmin) load(); }, [token]);
 
   const applyPreset = (days: number) => {
@@ -160,57 +136,40 @@ ${data.top_failed_points.length ? data.top_failed_points.map((p) => `<tr><td sty
     try {
       setLoading(true);
       let query = supabase.from('inspections').select('*');
-
       if (dateFrom) query = query.gte('created_at', `${dateFrom}T00:00:00`);
       if (dateTo) query = query.lte('created_at', `${dateTo}T23:59:59`);
-
       const { data: inspections, error } = await query;
       if (error) throw error;
-
-      // Generate CSV content
       const headers = ['ID', 'Fecha', 'Placas', 'Inspector', 'Compañia', 'Trailer', 'Estado General', 'Aprobación'];
       const rows = (inspections || []).map(i => [
-        i.id,
-        new Date(i.created_at).toISOString(),
-        i.plates,
-        i.data?.inspector_nombre || '',
-        i.data?.compania_transportista || '',
-        i.data?.numero_trailer || '',
-        i.status_general,
-        i.approval_status
+        i.id, new Date(i.created_at).toISOString(), i.plates,
+        i.data?.inspector_nombre || '', i.data?.compania_transportista || '',
+        i.data?.numero_trailer || '', i.status_general, i.approval_status
       ]);
-
       const csvContent = [headers, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
-
       if (Platform.OS === 'web') {
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = `Analitica_NAF_${dateFrom || 'report'}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
+        a.href = url; a.download = `Analitica_NAF_${dateFrom || 'report'}.csv`;
+        document.body.appendChild(a); a.click();
+        window.URL.revokeObjectURL(url); document.body.removeChild(a);
       } else {
         const filename = `${FileSystem.documentDirectory}reporte_naf.csv`;
         await FileSystem.writeAsStringAsync(filename, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(filename, { mimeType: 'text/csv', dialogTitle: t('csv_detallado') });
-        }
+        if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(filename, { mimeType: 'text/csv', dialogTitle: t('csv_detallado') });
       }
-    } catch (e: any) {
-      alert('Error al exportar CSV: ' + e.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e: any) { alert('Error al exportar CSV: ' + e.message); }
+    finally { setLoading(false); }
   };
 
   if (!isSupervisorOrAdmin) {
     return (
       <View style={styles.center}>
-        <Ionicons name="lock-closed" size={48} color={colors.muted} />
-        <Text style={{ color: colors.muted, marginTop: spacing.md }}>{t('acceso_restringido')}</Text>
+        <View style={styles.lockIconWrap}>
+          <Ionicons name="lock-closed" size={32} color={colors.mutedLight} />
+        </View>
+        <Text style={styles.lockText}>{t('acceso_restringido')}</Text>
       </View>
     );
   }
@@ -220,105 +179,145 @@ ${data.top_failed_points.length ? data.top_failed_points.map((p) => `<tr><td sty
 
   const Content = (
     <View style={{ flex: 1 }}>
-      {!nested && (
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} testID="analitica-back"><Ionicons name="arrow-back" size={24} color={colors.onSurface} /></Pressable>
-          <Text style={styles.headerTitle}>{t('panel_supervisor')}</Text>
-          <View style={{ width: 24 }} />
-        </View>
-      )}
+      {!nested && <MainHeader title="NAF" subtitle={t('panel_supervisor')} />}
 
       {nested && (
-        <View style={{ padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider }}>
-          <Text style={[styles.headerTitle, { fontSize: 14 }]}>{t('reporte_analitica').toUpperCase()}</Text>
+        <View style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: colors.divider }}>
+          <Text style={{ fontSize: 13, fontWeight: '800', color: colors.onSurface }}>{t('reporte_analitica').toUpperCase()}</Text>
         </View>
       )}
 
       <ScrollView
-        contentContainerStyle={{ padding: nested ? spacing.md : spacing.lg, paddingBottom: spacing.xxxl }}
+        contentContainerStyle={{ padding: nested ? 12 : 24, paddingBottom: 48 }}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brandPrimary} />}
       >
+        {/* ── Date filters ── */}
         <View style={styles.dateBox}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.label}>{t('desde')} (YYYY-MM-DD)</Text>
-            <TextInput testID="analitica-date-from" style={styles.dateInput} value={dateFrom} onChangeText={setDateFrom} placeholder="2026-01-01" placeholderTextColor={colors.muted} />
+            <Text style={styles.label}>{t('desde')}</Text>
+            <View style={styles.dateInputWrap}>
+              <Ionicons name="calendar-outline" size={14} color={colors.mutedLight} />
+              <TextInput testID="analitica-date-from" style={styles.dateInput} value={dateFrom} onChangeText={setDateFrom} placeholder="2026-01-01" placeholderTextColor={colors.mutedLight} />
+            </View>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.label}>{t('hasta')} (YYYY-MM-DD)</Text>
-            <TextInput testID="analitica-date-to" style={styles.dateInput} value={dateTo} onChangeText={setDateTo} placeholder="2026-12-31" placeholderTextColor={colors.muted} />
+            <Text style={styles.label}>{t('hasta')}</Text>
+            <View style={styles.dateInputWrap}>
+              <Ionicons name="calendar-outline" size={14} color={colors.mutedLight} />
+              <TextInput testID="analitica-date-to" style={styles.dateInput} value={dateTo} onChangeText={setDateTo} placeholder="2026-12-31" placeholderTextColor={colors.mutedLight} />
+            </View>
           </View>
           <Pressable testID="analitica-apply" style={styles.applyBtn} onPress={load}>
-            <Ionicons name="filter" size={16} color={colors.onBrandPrimary} />
-            <Text style={styles.applyBtnText}>{t('sincronizar_ahora').toUpperCase()}</Text>
+            <Ionicons name="filter" size={16} color="#FFFFFF" />
+            <Text style={styles.applyBtnText}>{t('aplicar') || 'APLICAR'}</Text>
           </Pressable>
         </View>
 
         <View style={styles.presetRow}>
           <Pressable testID="analitica-preset-7" style={styles.presetChip} onPress={() => applyPreset(7)}>
-            <Text style={styles.presetText}>7 {t('hoy').toUpperCase()}</Text>
+            <Text style={styles.presetText}>7D</Text>
           </Pressable>
           <Pressable testID="analitica-preset-30" style={styles.presetChip} onPress={() => applyPreset(30)}>
-            <Text style={styles.presetText}>30 {t('hoy').toUpperCase()}</Text>
+            <Text style={styles.presetText}>30D</Text>
           </Pressable>
           {data && (
-            <Pressable testID="analitica-pdf-btn" style={[styles.presetChip, { backgroundColor: colors.brandSecondary, flex: 1 }]} onPress={exportPdf}>
-              <Ionicons name="document-text" size={14} color={colors.onBrandSecondary} />
-              <Text style={[styles.presetText, { color: colors.onBrandSecondary, marginLeft: 4 }]}>PDF</Text>
+            <Pressable testID="analitica-pdf-btn" style={[styles.exportBtn, { backgroundColor: colors.brandSecondary }]} onPress={exportPdf}>
+              <Ionicons name="document-text" size={14} color="#FFFFFF" />
+              <Text style={styles.exportBtnText}>PDF</Text>
             </Pressable>
           )}
           {data && (
-            <Pressable testID="analitica-csv-btn" style={[styles.presetChip, { backgroundColor: colors.success, flex: 1 }]} onPress={exportCsv}>
-              <Ionicons name="download" size={14} color="#FFF" />
-              <Text style={[styles.presetText, { color: '#FFF', marginLeft: 4 }]}>CSV</Text>
+            <Pressable testID="analitica-csv-btn" style={[styles.exportBtn, { backgroundColor: colors.success }]} onPress={exportCsv}>
+              <Ionicons name="download" size={14} color="#FFFFFF" />
+              <Text style={styles.exportBtnText}>CSV</Text>
             </Pressable>
           )}
         </View>
 
         {loading && !data ? (
-          <ActivityIndicator color={colors.brandPrimary} style={{ marginTop: spacing.xl }} />
-        ) : !data ? null : (
+          <View style={styles.loadingWrap}><ActivityIndicator size="large" color={colors.brandPrimary} /></View>
+        ) : data ? (
           <>
+            {/* ── KPI cards ── */}
             <View style={styles.kpiGrid}>
-              <Kpi label={t('total').toUpperCase()} value={data.total} color={colors.brandPrimary} />
-              <Kpi label="% APROB." value={`${data.approval_rate_pct}%`} color={colors.success} />
-              <Kpi label={t('pendientes').toUpperCase()} value={data.approval_breakdown.pendiente} color={colors.warning} />
-              <Kpi label={t('con_fallas').toUpperCase()} value={data.status_breakdown.malo} color={colors.error} />
+              {[
+                { label: t('total').toUpperCase(), value: data.total, color: colors.brandPrimary, surface: colors.brandTertiary },
+                { label: '% APROB.', value: `${data.approval_rate_pct}%`, color: colors.success, surface: colors.successSurface },
+                { label: t('pendientes').toUpperCase(), value: data.approval_breakdown.pendiente, color: colors.warning, surface: colors.warningSurface },
+                { label: t('con_fallas').toUpperCase(), value: data.status_breakdown.malo, color: colors.error, surface: colors.errorSurface },
+              ].map((kpi, i) => (
+                <View key={i} style={styles.kpiCard}>
+                  <View style={[styles.kpiIconWrap, { backgroundColor: kpi.surface }]}>
+                    <Text style={[styles.kpiValue, { color: kpi.color }]}>{kpi.value}</Text>
+                  </View>
+                  <Text style={styles.kpiLabel}>{kpi.label}</Text>
+                </View>
+              ))}
             </View>
 
-            <Section title={t('estado').toUpperCase()}>
-              <DistBar label={t('aprobada')} value={data.approval_breakdown.aprobada} total={data.total} color={colors.success} />
-              <DistBar label={t('pendiente')} value={data.approval_breakdown.pendiente} total={data.total} color={colors.warning} />
-              <DistBar label={t('rechazada')} value={data.approval_breakdown.rechazada} total={data.total} color={colors.error} />
-            </Section>
+            {/* ── Status section ── */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>{t('estado').toUpperCase()}</Text>
+              <View style={styles.sectionBody}>
+                {[
+                  { label: t('aprobada'), value: data.approval_breakdown.aprobada, total: data.total, color: colors.success },
+                  { label: t('pendiente'), value: data.approval_breakdown.pendiente, total: data.total, color: colors.warning },
+                  { label: t('rechazada'), value: data.approval_breakdown.rechazada, total: data.total, color: colors.error },
+                ].map((d, i) => {
+                  const pct = d.total > 0 ? Math.round((d.value / d.total) * 100) : 0;
+                  return (
+                    <View key={i} style={styles.distRow}>
+                      <Text style={styles.distLabel}>{d.label}</Text>
+                      <View style={styles.barWrap}>
+                        <View style={[styles.bar, { width: `${pct}%`, backgroundColor: d.color, borderRadius: 4 }]} />
+                        <Text style={styles.barValue}>{d.value} ({pct}%)</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
 
-            <Section title={t('inspecciones_por_inspector').toUpperCase()}>
-              {data.by_inspector.length === 0 ? <Text style={styles.emptyText}>{t('no_hay_actividad')}</Text> : data.by_inspector.map((i) => (
-                <View key={i.name} style={styles.row} testID={`analitica-inspector-${i.name}`}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.rowLabel}>{i.name}</Text>
-                    <Text style={styles.rowMeta}>{i.aprobadas} {t('aprob').toLowerCase()} · {i.rechazadas} {t('rech').toLowerCase()}</Text>
+            {/* ── Inspector section ── */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>{t('inspecciones_por_inspector').toUpperCase()}</Text>
+              <View style={styles.sectionBody}>
+                {data.by_inspector.length === 0 ? (
+                  <Text style={styles.emptyText}>{t('no_hay_actividad')}</Text>
+                ) : data.by_inspector.map((i) => (
+                  <View key={i.name} style={styles.inspectorRow} testID={`analitica-inspector-${i.name}`}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.inspectorName}>{i.name}</Text>
+                      <Text style={styles.inspectorMeta}>{i.aprobadas} {t('aprob').toLowerCase()} · {i.rechazadas} {t('rech').toLowerCase()}</Text>
+                    </View>
+                    <View style={[styles.barWrap, { flex: 1.2 }]}>
+                      <View style={[styles.bar, { width: `${(i.total / maxInsp) * 100}%`, backgroundColor: colors.brandPrimary, borderRadius: 4 }]} />
+                      <Text style={styles.barValue}>{i.total}</Text>
+                    </View>
                   </View>
-                  <View style={styles.barWrap}>
-                    <View style={[styles.bar, { width: `${(i.total / maxInsp) * 100}%`, backgroundColor: colors.brandPrimary }]} />
-                    <Text style={styles.barValue}>{i.total}</Text>
-                  </View>
-                </View>
-              ))}
-            </Section>
+                ))}
+              </View>
+            </View>
 
-            <Section title={t('top_10_fallas').toUpperCase()}>
-              {data.top_failed_points.length === 0 ? <Text style={styles.emptyText}>{t('no_hay_actividad')}</Text> : data.top_failed_points.map((p) => (
-                <View key={p.name} style={styles.row}>
-                  <Text style={[styles.rowLabel, { flex: 1, fontSize: 10 }]} numberOfLines={2}>{p.name}</Text>
-                  <View style={styles.barWrap}>
-                    <View style={[styles.bar, { width: `${(p.count / maxPoint) * 100}%`, backgroundColor: colors.error }]} />
-                    <Text style={styles.barValue}>{p.count}</Text>
+            {/* ── Failed points section ── */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>{t('top_10_fallas').toUpperCase()}</Text>
+              <View style={styles.sectionBody}>
+                {data.top_failed_points.length === 0 ? (
+                  <Text style={styles.emptyText}>{t('no_hay_actividad')}</Text>
+                ) : data.top_failed_points.map((p) => (
+                  <View key={p.name} style={styles.failRow}>
+                    <Text style={styles.failLabel} numberOfLines={2}>{p.name}</Text>
+                    <View style={[styles.barWrap, { flex: 1.2 }]}>
+                      <View style={[styles.bar, { width: `${(p.count / maxPoint) * 100}%`, backgroundColor: colors.error, borderRadius: 4 }]} />
+                      <Text style={styles.barValue}>{p.count}</Text>
+                    </View>
                   </View>
-                </View>
-              ))}
-            </Section>
+                ))}
+              </View>
+            </View>
           </>
-        )}
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -332,62 +331,66 @@ ${data.top_failed_points.length ? data.top_failed_points.map((p) => `<tr><td sty
   );
 }
 
-function Kpi({ label, value, color }: { label: string; value: any; color: string }) {
-  return (
-    <View style={[styles.kpi, { borderColor: color }]}>
-      <Text style={[styles.kpiValue, { color }]}>{value}</Text>
-      <Text style={styles.kpiLabel}>{label}</Text>
-    </View>
-  );
-}
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.sectionBody}>{children}</View>
-    </View>
-  );
-}
-function DistBar({ label, value, total, color }: { label: string; value: number; total: number; color: string }) {
-  const pct = total > 0 ? Math.round((value / total) * 100) : 0;
-  return (
-    <View style={styles.distRow}>
-      <Text style={styles.distLabel}>{label}</Text>
-      <View style={styles.barWrap}>
-        <View style={[styles.bar, { width: `${pct}%`, backgroundColor: color }]} />
-        <Text style={styles.barValue}>{value} ({pct}%)</Text>
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surfaceSecondary, borderBottomWidth: 1, borderBottomColor: colors.border },
-  headerTitle: { fontSize: typography.sizes.lg, fontWeight: '900', color: colors.onSurface, letterSpacing: 1 },
-  dateBox: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-end', marginBottom: spacing.lg, flexWrap: 'wrap' },
-  label: { fontSize: 10, fontWeight: '900', color: colors.muted, letterSpacing: 1, marginBottom: 4 },
-  dateInput: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.input, padding: spacing.sm, backgroundColor: colors.surfaceSecondary, color: colors.onSurface, height: 40 },
-  applyBtn: { backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.md, height: 40, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.md },
-  applyBtnText: { color: colors.onBrandPrimary, fontWeight: '900', fontSize: 11, letterSpacing: 1 },
-  presetRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg, flexWrap: 'wrap' },
-  presetChip: { borderWidth: 1.5, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary, paddingHorizontal: spacing.md, paddingVertical: 8, flexShrink: 0, flexDirection: 'row', alignItems: 'center', borderRadius: radius.pill },
-  presetText: { fontWeight: '900', color: colors.onSurface, fontSize: 11, letterSpacing: 1 },
-  kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
-  kpi: { flexGrow: 1, flexBasis: '47%', borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, backgroundColor: colors.surfaceSecondary, alignItems: 'center', ...shadows.sm },
-  kpiValue: { fontSize: 28, fontWeight: '900' },
-  kpiLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, letterSpacing: 1, marginTop: 2 },
-  section: { marginBottom: spacing.lg },
-  sectionTitle: { backgroundColor: colors.brandPrimary, color: colors.onBrandPrimary, padding: spacing.sm, fontWeight: '900', letterSpacing: 1, fontSize: 12, borderTopLeftRadius: radius.md, borderTopRightRadius: radius.md },
-  sectionBody: { borderWidth: 1, borderColor: colors.border, borderTopWidth: 0, backgroundColor: colors.surfaceSecondary, padding: spacing.md, borderBottomLeftRadius: radius.md, borderBottomRightRadius: radius.md },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.divider },
-  rowLabel: { color: colors.onSurface, fontWeight: '700', fontSize: typography.sizes.sm },
-  rowMeta: { color: colors.muted, fontSize: 11, marginTop: 2 },
-  barWrap: { flex: 1.2, height: 22, backgroundColor: colors.surfaceTertiary, position: 'relative', justifyContent: 'center', borderRadius: radius.xs },
-  bar: { position: 'absolute', left: 0, top: 0, bottom: 0, borderTopLeftRadius: radius.xs, borderBottomLeftRadius: radius.xs },
-  barValue: { position: 'absolute', right: 6, color: colors.onSurface, fontWeight: '900', fontSize: 11 },
-  distRow: { paddingVertical: spacing.sm, gap: 4 },
-  distLabel: { color: colors.onSurface, fontWeight: '700', fontSize: typography.sizes.sm },
-  emptyText: { color: colors.muted, fontStyle: 'italic' },
+  lockIconWrap: { width: 64, height: 64, borderRadius: 16, backgroundColor: colors.surfaceTertiary, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  lockText: { color: colors.muted, fontSize: 14, fontWeight: '600' },
+
+  dateBox: { flexDirection: 'row', gap: 10, alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap' },
+  label: { fontSize: 10, fontWeight: '800', color: colors.mutedDark, letterSpacing: 0.8, marginBottom: 6 },
+  dateInputWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: colors.border,
+    borderRadius: 10, paddingHorizontal: 12, height: 40, backgroundColor: '#FFFFFF',
+  },
+  dateInput: { flex: 1, color: colors.onSurface, fontSize: 13, fontWeight: '500' },
+  applyBtn: {
+    backgroundColor: colors.brandPrimary, paddingHorizontal: 16, height: 40,
+    flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, ...shadows.sm,
+  },
+  applyBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12, letterSpacing: 0.5 },
+
+  presetRow: { flexDirection: 'row', gap: 8, marginBottom: 20, flexWrap: 'wrap' },
+  presetChip: {
+    borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, flexDirection: 'row', alignItems: 'center',
+  },
+  presetText: { fontWeight: '700', color: colors.mutedDark, fontSize: 12 },
+  exportBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: 999, ...shadows.sm,
+  },
+  exportBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
+
+  loadingWrap: { alignItems: 'center', paddingVertical: 48 },
+
+  kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
+  kpiCard: {
+    flexGrow: 1, flexBasis: '47%', backgroundColor: '#FFFFFF',
+    borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 20, alignItems: 'center', ...shadows.sm,
+  },
+  kpiIconWrap: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  kpiValue: { fontSize: 22, fontWeight: '800' },
+  kpiLabel: { fontSize: 10, fontWeight: '700', color: colors.muted, letterSpacing: 0.5, marginTop: 6 },
+
+  section: { marginBottom: 20 },
+  sectionTitle: {
+    fontSize: 11, fontWeight: '800', color: colors.mutedDark, letterSpacing: 1.5,
+    marginBottom: 8, textTransform: 'uppercase',
+  },
+  sectionBody: {
+    backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border,
+    borderRadius: 12, padding: 16, ...shadows.sm,
+  },
+  distRow: { paddingVertical: 10, gap: 6, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  distLabel: { fontSize: 13, fontWeight: '600', color: colors.onSurface },
+  barWrap: { flex: 1, height: 24, backgroundColor: colors.surfaceTertiary, position: 'relative', justifyContent: 'center', borderRadius: 6 },
+  bar: { position: 'absolute', left: 0, top: 0, bottom: 0 },
+  barValue: { position: 'absolute', right: 8, color: colors.onSurface, fontWeight: '700', fontSize: 11 },
+  inspectorRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 12, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  inspectorName: { color: colors.onSurface, fontWeight: '700', fontSize: 13 },
+  inspectorMeta: { color: colors.muted, fontSize: 11, marginTop: 2 },
+  failRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 12, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  failLabel: { color: colors.onSurface, fontWeight: '600', fontSize: 11, flex: 1 },
+  emptyText: { color: colors.muted, fontStyle: 'italic', fontSize: 13, paddingVertical: 8 },
 });
