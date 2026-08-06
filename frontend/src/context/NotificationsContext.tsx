@@ -200,11 +200,18 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       const expoToken = (await Notifications.getExpoPushTokenAsync({
         projectId: 'north-america-flooring/sriuc',
       })).data;
-      await apiCall('/users/push-token', { method: 'POST', body: { token: expoToken }, token });
+
+      // Save token to Supabase (profiles table)
+      if (user?.id) {
+        await supabase
+          .from('profiles')
+          .update({ push_token: expoToken })
+          .eq('id', user.id);
+      }
     } catch (err) {
       console.warn('[Notifications] Push token error:', err);
     }
-  }, [token]);
+  }, [user]);
 
   // ── Register background fetch ────────────────────────────────────────────
   const registerBackgroundFetch = useCallback(async () => {
