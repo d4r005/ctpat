@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Platform, useWindowDimensions } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useInspections } from '../context/InspectionContext';
 import { colors, spacing, radius, shadows } from '../constants/theme';
@@ -31,11 +31,59 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack, onBa
   const hasUnreadChat = notifications.some((n) => n.kind === 'chat' && !n.read);
   const { t } = useTranslation();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isDesktopWeb = isWeb && width >= 1080;
   const [showNotifs, setShowNotifs] = React.useState(false);
   const [showProfile, setShowProfile] = React.useState(false);
 
+  // ── Desktop web: clean, minimal topbar (brand already lives in the sidebar) ──
+  if (isDesktopWeb) {
+    const pageTitle = subtitle ? subtitle.split(':').pop()?.trim() : title;
+    return (
+      <View style={styles.webTopbar}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+          {showBack && (
+            <Pressable onPress={() => (onBack ? onBack() : router.back())} style={styles.webBackBtn}>
+              <Ionicons name="arrow-back" size={20} color={colors.onSurface} />
+            </Pressable>
+          )}
+          <Text style={styles.webPageTitle} numberOfLines={1}>{pageTitle}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          {rightAction && (
+            <Pressable onPress={rightAction.onPress} style={styles.webIconBtn}>
+              <Ionicons name={rightAction.icon} size={20} color={colors.brandPrimary} />
+            </Pressable>
+          )}
+          <Pressable onPress={() => router.push('/(app)/chat')} style={styles.webIconBtn}>
+            <Ionicons name={hasUnreadChat ? "chatbubbles" : "chatbubbles-outline"} size={19} color={colors.onSurfaceTertiary} />
+            {hasUnreadChat && <View style={styles.webDot} />}
+          </Pressable>
+          <Pressable onPress={() => setShowNotifs(true)} style={styles.webIconBtn}>
+            <Ionicons name={unreadCount > 0 ? "notifications" : "notifications-outline"} size={19} color={colors.onSurfaceTertiary} />
+            {unreadCount > 0 && (
+              <View style={styles.webNotifBadge}>
+                <Text style={styles.webNotifBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+              </View>
+            )}
+          </Pressable>
+          <View style={styles.webDivider} />
+          <Pressable onPress={() => setShowProfile(true)} style={styles.webAvatarWrap}>
+            <View style={styles.webAvatarCircle}>
+              <Text style={styles.webAvatarText}>{user?.name?.charAt(0).toUpperCase() || 'D'}</Text>
+            </View>
+            <View style={[styles.webOnlineDot, !isOnline && { backgroundColor: colors.error }]} />
+          </Pressable>
+        </View>
+        <NotificationsPanel visible={showNotifs} onClose={() => setShowNotifs(false)} />
+        <ProfilePanel visible={showProfile} onClose={() => setShowProfile(false)} />
+      </View>
+    );
+  }
+
+  // ── Mobile / tablet: full brand header ──
   return (
-    <View style={[styles.brandHeader, isWeb && styles.brandHeaderWeb]}>
+    <View style={styles.brandHeader}>
       <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
         {showBack && (
           <Pressable onPress={() => (onBack ? onBack() : router.back())} style={styles.backBtn}>
@@ -85,6 +133,42 @@ const MainHeader: React.FC<MainHeaderProps> = ({ title, subtitle, showBack, onBa
 };
 
 const styles = StyleSheet.create({
+  // ── Web desktop topbar ──
+  webTopbar: {
+    backgroundColor: colors.surfaceSecondary,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  webPageTitle: { fontSize: 20, fontWeight: '800', color: colors.onSurface, letterSpacing: 0.2 },
+  webBackBtn: { marginRight: spacing.md, padding: 4 },
+  webIconBtn: { padding: 8, borderRadius: radius.sm, position: 'relative' },
+  webDot: {
+    position: 'absolute', top: 6, right: 6, width: 8, height: 8, borderRadius: 4,
+    backgroundColor: colors.error, borderWidth: 1.5, borderColor: colors.surfaceSecondary,
+  },
+  webNotifBadge: {
+    position: 'absolute', top: 2, right: 2, minWidth: 15, height: 15, borderRadius: 8,
+    backgroundColor: colors.error, borderWidth: 1.5, borderColor: colors.surfaceSecondary,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2,
+  },
+  webNotifBadgeText: { color: '#FFF', fontSize: 8, fontWeight: '900' },
+  webDivider: { width: 1, height: 24, backgroundColor: colors.border, marginHorizontal: spacing.xs },
+  webAvatarWrap: { position: 'relative' },
+  webAvatarCircle: {
+    width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brandPrimary,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  webAvatarText: { color: colors.onBrandPrimary, fontSize: 14, fontWeight: '800' },
+  webOnlineDot: {
+    position: 'absolute', bottom: -1, right: -1, width: 10, height: 10, borderRadius: 5,
+    backgroundColor: colors.success, borderWidth: 2, borderColor: colors.surfaceSecondary,
+  },
+
+  // ── Mobile brand header ──
   brandHeader: {
     backgroundColor: colors.brandPrimary,
     paddingHorizontal: spacing.lg,
@@ -95,11 +179,6 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: radius.lg,
     borderBottomRightRadius: radius.lg,
     ...shadows.md,
-  },
-  brandHeaderWeb: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xl,
   },
   logoBadge: {
     width: 38,

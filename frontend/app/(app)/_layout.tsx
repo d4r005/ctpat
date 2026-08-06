@@ -3,9 +3,10 @@ import { Tabs, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors, radius, spacing } from '@/src/constants/theme';
-import { View, ActivityIndicator, Platform } from 'react-native';
+import { View, ActivityIndicator, Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import SidebarNav from '@/src/components/SidebarNav';
 
 const isWeb = Platform.OS === 'web';
 
@@ -14,6 +15,8 @@ export default function AppLayout() {
   const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isDesktopWeb = isWeb && width >= 1080;
 
   const isAdminOrSup = user?.role === 'admin' || user?.role === 'supervisor' ||
     ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
@@ -30,30 +33,21 @@ export default function AppLayout() {
     );
   }
 
-  return (
+  const tabsElement = (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.brandPrimary,
         tabBarInactiveTintColor: colors.muted,
-        tabBarStyle: {
+        tabBarStyle: isDesktopWeb ? { display: 'none' } : {
           backgroundColor: colors.surfaceSecondary,
           borderTopWidth: 1,
           borderTopColor: colors.border,
           height: 64 + (insets.bottom > 0 ? insets.bottom - 8 : 0),
           paddingTop: 6,
           paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
-          ...(isWeb ? {
-            borderTopLeftRadius: radius.lg,
-            borderTopRightRadius: radius.lg,
-            boxShadow: '0 -4px 12px rgba(10, 37, 64, 0.06)',
-            borderWidth: 0,
-          } : {
-            elevation: 0,
-          }),
         },
         tabBarLabelStyle: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
-        tabBarIndicatorStyle: { backgroundColor: colors.brandSecondary, height: 3, borderRadius: radius.pill },
       }}
     >
       <Tabs.Screen
@@ -110,4 +104,17 @@ export default function AppLayout() {
       <Tabs.Screen name="inspection/[id]" options={{ href: null }} />
     </Tabs>
   );
+
+  if (isDesktopWeb) {
+    return (
+      <View style={{ flex: 1, flexDirection: 'row', backgroundColor: colors.surface }}>
+        <SidebarNav />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          {tabsElement}
+        </View>
+      </View>
+    );
+  }
+
+  return tabsElement;
 }

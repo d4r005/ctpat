@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Pressable,
-  TextInput, RefreshControl, ActivityIndicator
+  TextInput, RefreshControl, ActivityIndicator, Platform, useWindowDimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -14,11 +14,15 @@ import ProcessTracker from '@/src/components/ProcessTracker';
 import MainHeader from '@/src/components/MainHeader';
 import { useTranslation } from 'react-i18next';
 
+const isWeb = Platform.OS === 'web';
+
 export default function CasetaList() {
   const router = useRouter();
   const { t } = useTranslation();
   const { token, user } = useAuth();
   const { refresh } = useInspections();
+  const { width } = useWindowDimensions();
+  const isDesktop = isWeb && width >= 1080;
 
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -70,29 +74,72 @@ export default function CasetaList() {
   const isAdmin = user?.role === 'admin' || user?.role === 'supervisor' ||
     ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
 
-  const renderItem = ({ item: r }: { item: any }) => {
-    const isFull = r.entry?.tipo_unidad === 'full';
-    const isDescarga = r.entry?.condicion_carga === 'descarga';
-    const showShipping = !isFull && !isDescarga;
-
-    const hasInspection = (r.inspection_ids?.length || 0) > 0 || !!r.inspection_id;
-    const hasTicket = !!(r.has_shipping_ticket || r.shipping_ticket_id);
-
-    const steps = {
-      entry: true,
-      inspection: hasInspection,
-      shipping: hasTicket,
-      exit: r.status === 'salida',
-    };
-
+  const getStatus = (r: any) => {
     const statusColor =
       r.status === 'salida' ? colors.success :
       r.status === 'inspeccionado' ? colors.info :
       colors.warning;
-
+    const statusSurface =
+      r.status === 'salida' ? colors.successSurface :
+      r.status === 'inspeccionado' ? colors.infoSurface :
+      colors.warningSurface;
     const statusLabel =
       r.status === 'salida' ? t('salio').toUpperCase() :
       r.status === 'inspeccionado' ? t('inspeccionado').toUpperCase() : t('en_patio').toUpperCase();
+    return { statusColor, statusSurface, statusLabel };
+  };
+
+  // ── Desktop: data table row ──
+  const renderTableRow = ({ item: r }: { item: any }) => {
+    const isFull = r.entry?.tipo_unidad === 'full';
+    const isDescarga = r.entry?.condicion_carga === 'descarga';
+    const showShipping = !isFull && !isDescarga;
+    const hasInspection = (r.inspection_ids?.length || 0) > 0 || !!r.inspection_id;
+    const hasTicket = !!(r.has_shipping_ticket || r.shipping_ticket_id);
+    const steps = { entry: true, inspection: hasInspection, shipping: hasTicket, exit: r.status === 'salida' };
+    const { statusColor, statusSurface, statusLabel } = getStatus(r);
+
+    return (
+      <Pressable style={({ pressed }) => [styles.tableRow, pressed && { backgroundColor: colors.surfaceTertiary }]} onPress={() => router.push(`/caseta/${r.id}`)}>
+        <View style={[styles.tableCell, { flex: 1.2 }]}>
+          <Text style={styles.tablePlate}>{r.entry?.placas_unidad || 'S/P'} {isFull ? '(FULL)' : ''}</Text>
+        </View>
+        <View style={[styles.tableCell, { flex: 1.4 }]}>
+          <Text style={styles.tableText} numberOfLines={1}>{r.entry?.chofer_nombre || '-'}</Text>
+        </View>
+        <View style={[styles.tableCell, { flex: 1.4 }]}>
+          <Text style={styles.tableText} numberOfLines={1}>{r.entry?.compania_transporte || '-'}</Text>
+        </View>
+        <View style={[styles.tableCell, { flex: 1.6 }]}>
+          <ProcessTracker steps={steps} compact showShipping={showShipping} />
+        </View>
+        <View style={[styles.tableCell, { flex: 1.1, alignItems: 'flex-start' }]}>
+          <View style={[styles.tableBadge, { backgroundColor: statusSurface }]}>
+            <View style={[styles.tableBadgeDot, { backgroundColor: statusColor }]} />
+            <Text style={[styles.tableBadgeText, { color: statusColor }]}>{statusLabel}</Text>
+          </View>
+        </View>
+        <View style={[styles.tableCell, { flex: 1.3 }]}>
+          <Text style={styles.tableMeta}>
+            {r.entry?.fecha_entrada ? new Date(r.entry.fecha_entrada).toLocaleString('es-MX') : new Date(r.created_at).toLocaleString('es-MX')}
+          </Text>
+        </View>
+        <View style={[styles.tableCell, { flex: 0.4, alignItems: 'flex-end' }]}>
+          <Ionicons name="chevron-forward" size={16} color={colors.mutedLight} />
+        </View>
+      </Pressable>
+    );
+  };
+
+  // ── Mobile: card ──
+  const renderCard = ({ item: r }: { item: any }) => {
+    const isFull = r.entry?.tipo_unidad === 'full';
+    const isDescarga = r.entry?.condicion_carga === 'descarga';
+    const showShipping = !isFull && !isDescarga;
+    const hasInspection = (r.inspection_ids?.length || 0) > 0 || !!r.inspection_id;
+    const hasTicket = !!(r.has_shipping_ticket || r.shipping_ticket_id);
+    const steps = { entry: true, inspection: hasInspection, shipping: hasTicket, exit: r.status === 'salida' };
+    const { statusColor, statusLabel } = getStatus(r);
 
     return (
       <Pressable
@@ -129,6 +176,18 @@ export default function CasetaList() {
     { key: 'todos', label: t('todos').toUpperCase() },
   ];
 
+  const TableHeader = () => (
+    <View style={styles.tableHeaderRow}>
+      <Text style={[styles.tableHeaderText, { flex: 1.2 }]}>{t('placas') || 'PLACAS'}</Text>
+      <Text style={[styles.tableHeaderText, { flex: 1.4 }]}>{t('chofer') || 'CHOFER'}</Text>
+      <Text style={[styles.tableHeaderText, { flex: 1.4 }]}>{t('compania') || 'COMPAÑÍA'}</Text>
+      <Text style={[styles.tableHeaderText, { flex: 1.6 }]}>{t('progreso') || 'PROGRESO'}</Text>
+      <Text style={[styles.tableHeaderText, { flex: 1.1 }]}>{t('estado') || 'ESTADO'}</Text>
+      <Text style={[styles.tableHeaderText, { flex: 1.3 }]}>{t('fecha') || 'FECHA'}</Text>
+      <View style={{ flex: 0.4 }} />
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <MainHeader
@@ -140,78 +199,126 @@ export default function CasetaList() {
         } : undefined}
       />
 
-      <View style={styles.searchRow}>
-        <Ionicons name="search" size={18} color={colors.muted} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder={t('buscar_placeholder_caseta')}
-          placeholderTextColor={colors.muted}
-          value={query}
-          onChangeText={setQuery}
+      <View style={[styles.toolbar, isDesktop && styles.toolbarWeb]}>
+        <View style={[styles.searchRow, isDesktop && styles.searchRowWeb]}>
+          <Ionicons name="search" size={18} color={colors.muted} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={t('buscar_placeholder_caseta')}
+            placeholderTextColor={colors.muted}
+            value={query}
+            onChangeText={setQuery}
+          />
+          {query ? (
+            <Pressable onPress={() => setQuery('')}>
+              <Ionicons name="close-circle" size={18} color={colors.muted} />
+            </Pressable>
+          ) : null}
+        </View>
+
+        <View style={styles.filterRow}>
+          {FILTERS.map(f => (
+            <Pressable
+              key={f.key}
+              style={[styles.chip, filter === f.key && styles.chipActive]}
+              onPress={() => setFilter(f.key)}
+            >
+              <Text style={[styles.chipText, filter === f.key && styles.chipTextActive]}>
+                {f.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {isDesktop && isAdmin && (
+          <Pressable style={styles.newBtnWeb} onPress={() => router.push('/caseta/nuevo')}>
+            <Ionicons name="add" size={18} color={colors.onBrandPrimary} />
+            <Text style={styles.newBtnWebText}>{t('nuevo_registro') || 'Nuevo Registro'}</Text>
+          </Pressable>
+        )}
+      </View>
+
+      {isDesktop ? (
+        <View style={styles.tableWrap}>
+          <TableHeader />
+          <FlatList
+            data={filtered}
+            renderItem={renderTableRow}
+            keyExtractor={r => r.id}
+            contentContainerStyle={{ paddingBottom: spacing.xl }}
+            refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brandPrimary} />}
+            ListEmptyComponent={
+              !loading ? (
+                <View style={styles.empty}>
+                  <Ionicons name="business-outline" size={40} color={colors.muted} />
+                  <Text style={styles.emptyText}>{t('sin_registros')}</Text>
+                </View>
+              ) : null
+            }
+          />
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          renderItem={renderCard}
+          keyExtractor={r => r.id}
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brandPrimary} />
+          }
+          ListEmptyComponent={
+            !loading ? (
+              <View style={styles.empty}>
+                <Ionicons name="business-outline" size={48} color={colors.muted} />
+                <Text style={styles.emptyText}>{t('sin_registros')}</Text>
+              </View>
+            ) : null
+          }
         />
-        {query ? (
-          <Pressable onPress={() => setQuery('')}>
-            <Ionicons name="close-circle" size={18} color={colors.muted} />
-          </Pressable>
-        ) : null}
-      </View>
+      )}
 
-      <View style={styles.filterRow}>
-        {FILTERS.map(f => (
-          <Pressable
-            key={f.key}
-            style={[styles.chip, filter === f.key && styles.chipActive]}
-            onPress={() => setFilter(f.key)}
-          >
-            <Text style={[styles.chipText, filter === f.key && styles.chipTextActive]}>
-              {f.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
-      <FlatList
-        data={filtered}
-        renderItem={renderItem}
-        keyExtractor={r => r.id}
-        contentContainerStyle={styles.list}
-        refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brandPrimary} />
-        }
-        ListEmptyComponent={
-          !loading ? (
-            <View style={styles.empty}>
-              <Ionicons name="business-outline" size={48} color={colors.muted} />
-              <Text style={styles.emptyText}>{t('sin_registros')}</Text>
-            </View>
-          ) : null
-        }
-      />
-
-      {/* FAB para nuevo registro de caseta */}
-      <Pressable
-        style={styles.fab}
-        onPress={() => router.push('/caseta/nuevo')}
-      >
-        <Ionicons name="add" size={28} color="#FFF" />
-      </Pressable>
+      {!isDesktop && (
+        <Pressable
+          style={styles.fab}
+          onPress={() => router.push('/caseta/nuevo')}
+        >
+          <Ionicons name="add" size={28} color="#FFF" />
+        </Pressable>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
-  searchRow: {
+  toolbar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     paddingHorizontal: spacing.md, paddingVertical: 10,
     backgroundColor: colors.surfaceSecondary,
     borderBottomWidth: 1, borderBottomColor: colors.border,
+    flexWrap: 'wrap',
+  },
+  toolbarWeb: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    flex: 1,
+  },
+  searchRowWeb: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.input,
+    paddingHorizontal: spacing.md,
+    height: 40,
+    maxWidth: 320,
+    flexGrow: 0,
   },
   searchInput: { flex: 1, color: colors.onSurface, fontSize: 14, fontWeight: '600' },
   filterRow: {
-    flexDirection: 'row', gap: 6, paddingHorizontal: spacing.md,
-    paddingVertical: 8, backgroundColor: colors.surfaceSecondary,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
+    flexDirection: 'row', gap: 6,
   },
   chip: {
     paddingHorizontal: 10, paddingVertical: 4,
@@ -221,6 +328,36 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   chipText: { fontWeight: '900', fontSize: 9, color: colors.onSurface, letterSpacing: 0.5 },
   chipTextActive: { color: '#FFF' },
+  newBtnWeb: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: colors.brandPrimary, paddingHorizontal: spacing.md, height: 40,
+    borderRadius: radius.md, marginLeft: 'auto',
+  },
+  newBtnWebText: { color: colors.onBrandPrimary, fontWeight: '800', fontSize: 12 },
+
+  // Table (desktop)
+  tableWrap: { flex: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
+  tableHeaderRow: {
+    flexDirection: 'row', paddingHorizontal: spacing.md, paddingBottom: spacing.sm,
+    borderBottomWidth: 1, borderBottomColor: colors.borderStrong,
+  },
+  tableHeaderText: { fontSize: 10, fontWeight: '800', color: colors.muted, letterSpacing: 0.6 },
+  tableRow: {
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: colors.divider, backgroundColor: colors.surfaceSecondary,
+  },
+  tableCell: { justifyContent: 'center' },
+  tablePlate: { fontSize: 14, fontWeight: '800', color: colors.onSurface },
+  tableText: { fontSize: 13, color: colors.onSurfaceTertiary, fontWeight: '500' },
+  tableMeta: { fontSize: 12, color: colors.muted },
+  tableBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 9, paddingVertical: 4, borderRadius: radius.pill,
+  },
+  tableBadgeDot: { width: 6, height: 6, borderRadius: 3 },
+  tableBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.4 },
+
+  // List (mobile)
   list: { padding: spacing.md, paddingBottom: 90 },
   card: {
     backgroundColor: colors.surfaceSecondary,
