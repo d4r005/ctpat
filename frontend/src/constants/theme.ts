@@ -1,25 +1,26 @@
 // ─────────────────────────────────────────────────────────────
-// Design tokens — NAF · SRIUC
-// Enterprise / corporate visual language: deep navy + gold accent,
-// generous whitespace, soft elevation, rounded corporate corners.
+// Design tokens — NAF · SRIUC v2
+// Enterprise SaaS visual language: deep navy + gold accent,
+// generous whitespace, layered elevation, refined typography.
 // ─────────────────────────────────────────────────────────────
 
 export const colors = {
-  // Neutral surfaces
-  surface: '#F4F6F9',
-  onSurface: '#0F1B2D',
-  surfaceSecondary: '#FFFFFF',
-  onSurfaceSecondary: '#0F1B2D',
-  surfaceTertiary: '#E9EDF3',
-  onSurfaceTertiary: '#1C2B3A',
+  // Neutral surfaces — layered grays for depth
+  surface: '#F0F2F5',          // page background (slightly cooler)
+  onSurface: '#0F172A',
+  surfaceSecondary: '#FFFFFF',  // cards, panels
+  onSurfaceSecondary: '#0F172A',
+  surfaceTertiary: '#F8FAFC',   // subtle hover/alt rows
+  onSurfaceTertiary: '#334155',
   surfaceInverse: '#0A2540',
   onSurfaceInverse: '#FFFFFF',
 
-  // Brand — deep navy with gold accent (matches NAF/SRIUC identity)
+  // Brand — deep navy with gold accent
   brand: '#0A2540',
   brandPrimary: '#0A2540',
-  brandPrimaryDark: '#081B30',
+  brandPrimaryDark: '#061A2E',
   brandPrimaryLight: '#123456',
+  brandPrimaryHover: '#0E2F50',
   onBrandPrimary: '#FFFFFF',
   brandSecondary: '#C9962C',
   brandSecondaryLight: '#F0C36B',
@@ -27,26 +28,37 @@ export const colors = {
   brandTertiary: '#E8EEF7',
   onBrandTertiary: '#0A2540',
 
-  // Semantic
-  success: '#178A4C',
-  successSurface: '#E6F5EC',
+  // Semantic — slightly softer for better contrast on white
+  success: '#15803D',
+  successSurface: '#DCFCE7',
   onSuccess: '#FFFFFF',
-  warning: '#C9821A',
-  warningSurface: '#FBF0DD',
+  warning: '#B45309',
+  warningSurface: '#FEF3C7',
   onWarning: '#FFFFFF',
-  error: '#C22E2E',
-  errorSurface: '#FBE9E9',
+  error: '#DC2626',
+  errorSurface: '#FEE2E2',
   onError: '#FFFFFF',
-  info: '#1D6FB8',
-  infoSurface: '#E7F1FB',
+  info: '#2563EB',
+  infoSurface: '#DBEAFE',
   onInfo: '#FFFFFF',
 
   // Structure
-  border: '#DDE3EC',
-  borderStrong: '#C4CDDA',
-  divider: '#E9EDF3',
-  muted: '#65758B',
+  border: '#E2E8F0',
+  borderStrong: '#CBD5E1',
+  divider: '#F1F5F9',
+  muted: '#64748B',
   mutedLight: '#94A3B8',
+  mutedDark: '#475569',
+
+  // Sidebar-specific tones
+  sidebarBg: '#0A2540',
+  sidebarHover: 'rgba(255,255,255,0.06)',
+  sidebarActive: 'rgba(255,255,255,0.10)',
+  sidebarActiveBar: '#C9962C',
+  sidebarText: 'rgba(255,255,255,0.55)',
+  sidebarTextActive: '#FFFFFF',
+  sidebarBorder: 'rgba(255,255,255,0.08)',
+  sidebarSectionLabel: 'rgba(255,255,255,0.35)',
 };
 
 export const spacing = {
@@ -59,13 +71,13 @@ export const spacing = {
   xxxl: 48,
 };
 
-// Softer, more premium corner radii for a corporate SaaS feel.
+// Premium corner radii
 export const radius = {
   xs: 4,
   sm: 8,
   md: 12,
-  lg: 18,
-  xl: 24,
+  lg: 16,
+  xl: 20,
   pill: 999,
   input: 10,
 };
@@ -74,6 +86,7 @@ export const typography = {
   display: 'Space Grotesk',
   text: 'IBM Plex Sans',
   sizes: {
+    xs: 10,
     sm: 12,
     base: 14,
     lg: 16,
@@ -83,30 +96,46 @@ export const typography = {
   },
 };
 
-// Reusable soft elevation presets (cross-platform: RN native + web via boxShadow)
+// Layered elevation — premium soft shadows
 export const shadows = {
+  xs: {
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+    boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+  },
   sm: {
-    shadowColor: '#0A2540',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 2,
-    boxShadow: '0 2px 6px rgba(10, 37, 64, 0.06)',
+    boxShadow: '0 1px 6px rgba(15, 23, 42, 0.05)',
   },
   md: {
-    shadowColor: '#0A2540',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
     elevation: 4,
-    boxShadow: '0 6px 16px rgba(10, 37, 64, 0.08)',
+    boxShadow: '0 4px 12px rgba(15, 23, 42, 0.07)',
   },
   lg: {
-    shadowColor: '#0A2540',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.12,
-    shadowRadius: 28,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.10,
+    shadowRadius: 24,
     elevation: 8,
-    boxShadow: '0 14px 28px rgba(10, 37, 64, 0.12)',
+    boxShadow: '0 8px 24px rgba(15, 23, 42, 0.10)',
+  },
+  xl: {
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.14,
+    shadowRadius: 32,
+    elevation: 12,
+    boxShadow: '0 12px 32px rgba(15, 23, 42, 0.14)',
   },
 };

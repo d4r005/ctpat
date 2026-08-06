@@ -28,41 +28,29 @@ export default function Login() {
   useEffect(() => {
     const loadSavedEmail = async () => {
       const saved = await AsyncStorage.getItem(REMEMBER_KEY);
-      if (saved) {
-        setEmail(saved);
-        setRememberMe(true);
-      }
+      if (saved) { setEmail(saved); setRememberMe(true); }
     };
     loadSavedEmail();
   }, []);
 
   const handleLogin = async () => {
     setError(null);
-    if (!email.trim() || !password) {
-      setError(t('ingresa_credenciales'));
-      return;
-    }
+    if (!email.trim() || !password) { setError(t('ingresa_credenciales')); return; }
     setLoading(true);
     try {
       await signIn(email.trim(), password);
-      if (rememberMe) {
-        await AsyncStorage.setItem(REMEMBER_KEY, email.trim());
-      } else {
-        await AsyncStorage.removeItem(REMEMBER_KEY);
-      }
+      if (rememberMe) await AsyncStorage.setItem(REMEMBER_KEY, email.trim());
+      else await AsyncStorage.removeItem(REMEMBER_KEY);
       router.replace('/(app)/inicio');
-    } catch (e: any) {
-      setError(e.message || t('error_sesion'));
-    } finally {
-      setLoading(false);
-    }
+    } catch (e: any) { setError(e.message || t('error_sesion')); }
+    finally { setLoading(false); }
   };
 
   const renderForm = () => (
     <View style={styles.form}>
       <Text style={styles.label}>{t('correo_electronico').toUpperCase()}</Text>
       <View style={styles.inputWrapper}>
-        <Ionicons name="person-outline" size={18} color={colors.muted} style={{ marginRight: 8 }} />
+        <Ionicons name="mail-outline" size={18} color={colors.mutedLight} />
         <TextInput
           testID="login-email-input"
           style={styles.input}
@@ -75,9 +63,9 @@ export default function Login() {
         />
       </View>
 
-      <Text style={styles.label}>{t('contrasena').toUpperCase()}</Text>
+      <Text style={[styles.label, { marginTop: 18 }]}>{t('contrasena').toUpperCase()}</Text>
       <View style={styles.inputWrapper}>
-        <Ionicons name="lock-closed-outline" size={18} color={colors.muted} style={{ marginRight: 8 }} />
+        <Ionicons name="lock-closed-outline" size={18} color={colors.mutedLight} />
         <TextInput
           testID="login-password-input"
           style={[styles.input, { flex: 1 }]}
@@ -92,12 +80,9 @@ export default function Login() {
         </Pressable>
       </View>
 
-      <Pressable
-        onPress={() => setRememberMe(!rememberMe)}
-        style={styles.rememberRow}
-      >
+      <Pressable onPress={() => setRememberMe(!rememberMe)} style={styles.rememberRow}>
         <View style={[styles.checkbox, rememberMe && styles.checkboxActive]}>
-          {rememberMe && <Ionicons name="checkmark" size={14} color={colors.onBrandPrimary} />}
+          {rememberMe && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
         </View>
         <Text style={styles.rememberText}>{t('recordar_usuario')}</Text>
       </Pressable>
@@ -111,12 +96,12 @@ export default function Login() {
 
       <Pressable
         testID="login-submit-button"
-        style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.9 }]}
+        style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.92 }]}
         onPress={handleLogin}
         disabled={loading}
       >
         {loading ? (
-          <ActivityIndicator color={colors.onBrandPrimary} />
+          <ActivityIndicator color="#FFFFFF" />
         ) : (
           <Text style={styles.primaryBtnText}>{t('iniciar_sesion').toUpperCase()}</Text>
         )}
@@ -133,15 +118,14 @@ export default function Login() {
     </View>
   );
 
-  // ── WEB: Split-screen layout ─────────────────────────────────
+  // ── WEB: Split-screen ──
   if (isWeb) {
     return (
       <View style={styles.webContainer}>
-        {/* Left branding panel */}
         <View style={styles.webLeftPanel}>
           <View style={styles.webBrandBlock}>
             <View style={styles.shieldBadge}>
-              <Ionicons name="shield-checkmark" size={36} color={colors.brandSecondary} />
+              <Ionicons name="shield-checkmark" size={40} color={colors.brandSecondary} />
             </View>
             <Text style={styles.webBrandName}>NAF</Text>
             <Text style={styles.webBrandSub}>SRIUC</Text>
@@ -152,7 +136,6 @@ export default function Login() {
           <Text style={styles.webCopyright}>© {new Date().getFullYear()} NAF · SRIUC — Todos los derechos reservados.</Text>
         </View>
 
-        {/* Right form panel */}
         <View style={styles.webRightPanel}>
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={undefined}>
             <ScrollView contentContainerStyle={styles.webFormWrap} keyboardShouldPersistTaps="handled">
@@ -168,13 +151,10 @@ export default function Login() {
     );
   }
 
-  // ── MOBILE: Centered card layout ──────────────────────────────
+  // ── MOBILE ──
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.centerWrap} keyboardShouldPersistTaps="handled">
           <View style={styles.card}>
             <View style={styles.brandBlock}>
@@ -202,31 +182,18 @@ const styles = StyleSheet.create({
   // ── Mobile ──
   centerWrap: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
   card: {
-    backgroundColor: colors.surfaceSecondary,
-    padding: spacing.xl,
-    paddingTop: spacing.xxl,
-    borderRadius: radius.xl,
-    width: '100%',
-    maxWidth: 440,
-    alignSelf: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.lg,
+    backgroundColor: '#FFFFFF', padding: spacing.xl, paddingTop: 40,
+    borderRadius: 20, width: '100%', maxWidth: 440, alignSelf: 'center',
+    borderWidth: 1, borderColor: colors.border, ...shadows.lg,
   },
   brandBlock: { alignItems: 'center', marginBottom: spacing.xl },
   shieldBadge: {
-    width: 64,
-    height: 64,
-    borderRadius: radius.lg,
-    backgroundColor: colors.brandPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.md,
-    ...shadows.sm,
+    width: 72, height: 72, borderRadius: 18, backgroundColor: colors.brandPrimary,
+    alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md, ...shadows.sm,
   },
-  brandName: { color: colors.brandPrimary, fontSize: 30, fontWeight: '900', letterSpacing: 3 },
-  brandSub: { color: colors.brandSecondary, fontSize: 13, fontWeight: '800', letterSpacing: 5, marginTop: 2 },
-  goldDivider: { width: 40, height: 3, borderRadius: 2, backgroundColor: colors.brandSecondary, marginVertical: spacing.md },
+  brandName: { color: colors.brandPrimary, fontSize: 32, fontWeight: '900', letterSpacing: 3 },
+  brandSub: { color: colors.brandSecondary, fontSize: 14, fontWeight: '800', letterSpacing: 5, marginTop: 2 },
+  goldDivider: { width: 48, height: 3, borderRadius: 2, backgroundColor: colors.brandSecondary, marginVertical: spacing.md },
   title: { fontSize: 18, fontWeight: '800', color: colors.onSurface, textAlign: 'center' },
   subtitle: { fontSize: 13, color: colors.muted, marginTop: 4, fontWeight: '500', textAlign: 'center' },
   copyright: { textAlign: 'center', color: colors.mutedLight, fontSize: 11, marginTop: spacing.lg },
@@ -234,68 +201,49 @@ const styles = StyleSheet.create({
   // ── Web split-screen ──
   webContainer: { flex: 1, flexDirection: 'row' as any },
   webLeftPanel: {
-    flex: 1,
-    backgroundColor: colors.brandPrimary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 48,
+    flex: 1, backgroundColor: colors.brandPrimary,
+    justifyContent: 'center', alignItems: 'center', padding: 64,
   },
   webBrandBlock: { alignItems: 'center' },
-  webBrandName: { color: '#FFFFFF', fontSize: 48, fontWeight: '900', letterSpacing: 4, marginTop: 16 },
-  webBrandSub: { color: colors.brandSecondary, fontSize: 20, fontWeight: '800', letterSpacing: 8, marginTop: 4 },
-  webTagline: { color: '#FFFFFF', fontSize: 20, fontWeight: '800', textAlign: 'center', marginTop: 20 },
-  webTaglineSub: { color: 'rgba(255,255,255,0.65)', fontSize: 14, fontWeight: '500', textAlign: 'center', marginTop: 6 },
-  webCopyright: { color: 'rgba(255,255,255,0.4)', fontSize: 11, position: 'absolute', bottom: 24 },
-  webRightPanel: { flex: 1, backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center', padding: 48 },
+  webBrandName: { color: '#FFFFFF', fontSize: 56, fontWeight: '900', letterSpacing: 4, marginTop: 20 },
+  webBrandSub: { color: colors.brandSecondary, fontSize: 22, fontWeight: '800', letterSpacing: 10, marginTop: 4 },
+  webTagline: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', textAlign: 'center', marginTop: 24 },
+  webTaglineSub: { color: 'rgba(255,255,255,0.55)', fontSize: 14, fontWeight: '400', textAlign: 'center', marginTop: 8 },
+  webCopyright: { color: 'rgba(255,255,255,0.3)', fontSize: 11, position: 'absolute', bottom: 28 },
+  webRightPanel: { flex: 1, backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center', padding: 64 },
   webFormWrap: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', width: '100%' },
   webFormCard: { width: '100%', maxWidth: 420 },
-  webFormTitle: { fontSize: 26, fontWeight: '900', color: colors.onSurface, marginBottom: 4 },
-  webFormSubtitle: { fontSize: 14, color: colors.muted, fontWeight: '500', marginBottom: spacing.xl },
+  webFormTitle: { fontSize: 28, fontWeight: '800', color: colors.onSurface, letterSpacing: -0.5 },
+  webFormSubtitle: { fontSize: 14, color: colors.muted, marginTop: 6, fontWeight: '500', marginBottom: 32 },
 
-  // ── Shared form ──
+  // ── Form ──
   form: { width: '100%' },
-  label: {
-    fontSize: 11, fontWeight: '800', color: colors.onSurfaceTertiary,
-    letterSpacing: 0.6, marginBottom: 8, marginTop: spacing.lg,
-  },
+  label: { fontSize: 11, fontWeight: '800', color: colors.mutedDark, letterSpacing: 0.8, marginBottom: 8 },
   inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.input,
-    paddingHorizontal: spacing.md,
-    height: 50,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+    borderRadius: 10, paddingHorizontal: 14, height: 48, marginBottom: 4,
   },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    color: colors.onSurface,
-  },
-  showToggle: { color: colors.brandPrimary, fontSize: 12, fontWeight: '700' },
-  rememberRow: {
-    flexDirection: 'row', alignItems: 'center', marginTop: spacing.md, gap: 8,
-  },
+  input: { flex: 1, color: colors.onSurface, fontSize: 15, fontWeight: '500' },
+  showToggle: { color: colors.brandPrimary, fontSize: 13, fontWeight: '700' },
+  rememberRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16, marginBottom: 20 },
   checkbox: {
-    width: 18, height: 18, borderWidth: 1.5, borderColor: colors.borderStrong, borderRadius: 4,
-    alignItems: 'center', justifyContent: 'center',
+    width: 20, height: 20, borderRadius: 5, borderWidth: 2, borderColor: colors.borderStrong,
+    backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center',
   },
   checkboxActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
-  rememberText: { fontSize: 13, color: colors.onSurfaceTertiary, fontWeight: '600' },
+  rememberText: { color: colors.mutedDark, fontSize: 13, fontWeight: '500' },
   errorBox: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.errorSurface, padding: spacing.md, marginTop: spacing.lg,
-    borderRadius: radius.sm, borderLeftWidth: 3, borderLeftColor: colors.error,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: colors.errorSurface,
+    borderWidth: 1, borderColor: '#FCA5A5', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 16,
   },
-  errorText: { color: colors.error, fontWeight: '700', fontSize: 13, flexShrink: 1 },
+  errorText: { color: colors.error, fontSize: 13, fontWeight: '600' },
   primaryBtn: {
-    backgroundColor: colors.brandPrimary, paddingVertical: 16, marginTop: spacing.xl,
-    alignItems: 'center', borderRadius: radius.pill,
-    ...shadows.md,
+    backgroundColor: colors.brandPrimary, borderRadius: 10, height: 48,
+    alignItems: 'center', justifyContent: 'center', ...shadows.sm,
   },
-  primaryBtnText: { color: colors.onBrandPrimary, fontWeight: '800', fontSize: 13, letterSpacing: 1.5 },
-  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: spacing.xl },
-  footerText: { color: colors.muted, fontSize: 14, fontWeight: '500' },
-  link: { color: colors.brandPrimary, fontWeight: '800', fontSize: 14 },
+  primaryBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800', letterSpacing: 1 },
+  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
+  footerText: { color: colors.muted, fontSize: 13, fontWeight: '500' },
+  link: { color: colors.brandPrimary, fontSize: 13, fontWeight: '700' },
 });
