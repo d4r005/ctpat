@@ -138,6 +138,7 @@ export default function InspeccionDashboard() {
       const r = (recordsRes.data || []).map(rec => ({
         ...rec.entry_data,
         id: rec.id,
+        plates: rec.plates,
         created_at: rec.created_at,
         status: rec.status,
         entry: rec.entry_data,
@@ -150,6 +151,7 @@ export default function InspeccionDashboard() {
       const tick = (ticketsRes.data || []).map(t => ({
         ...t.data,
         id: t.id,
+        plates: t.plates,
         created_at: t.created_at
       }));
 
@@ -198,7 +200,7 @@ export default function InspeccionDashboard() {
     const combined = [...pendingMapped, ...inspections];
 
     return combined.filter(i => {
-      const plates = i._is_pending_insp ? i.entry.placas_unidad : i.placas_unidad;
+      const plates = i.plates || (i._is_pending_insp ? i.entry.placas_unidad : i.placas_unidad);
       const name = i._is_pending_insp ? i.entry.chofer_nombre : i.inspector_nombre;
       return (plates?.toLowerCase() || "").includes(q) || (name?.toLowerCase() || "").includes(q);
     }).sort((a, b) => {

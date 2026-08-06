@@ -94,6 +94,7 @@ export default function CasetaDetail() {
       if (data) {
         const mappedRec = {
           ...data,
+          plates: data.plates,
           entry: data.entry_data,
           exit: data.exit_data,
           status: data.exit_data ? 'salida' : (data.inspection_id ? 'inspeccionado' : 'entrada')
@@ -104,11 +105,11 @@ export default function CasetaDetail() {
         // --- Lógica de Autollenado de Salida ---
         let ticketData: any = null;
         try {
-          // Find ticket where data contains record_id = id
+          // Find ticket where record_id = id
           const { data: tickets, error: ticketErr } = await supabase
             .from('shipping_tickets')
             .select('*')
-            .filter('data->>record_id', 'eq', id);
+            .eq('record_id', id);
 
           if (!ticketErr && tickets && tickets.length > 0) {
             ticketData = tickets[0].data;
@@ -128,7 +129,7 @@ export default function CasetaDetail() {
           setExitData((prev: any) => ({
             ...prev,
             sello_vvtt_estado: isDescarga ? 'SELLO ROTO' : '',
-            placas_unidad_salida: mappedRec.entry?.placas_unidad || '',
+            placas_unidad_salida: mappedRec.plates || mappedRec.entry?.placas_unidad || '',
             placas_caja_salida: mappedRec.entry?.placas_caja || '',
             numero_tractor_salida: mappedRec.entry?.numero_tractor || '',
             numero_caja_salida: mappedRec.entry?.numero_caja || '',

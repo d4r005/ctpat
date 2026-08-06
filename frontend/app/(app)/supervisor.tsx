@@ -239,7 +239,7 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
   const [deleting, setDeleting] = useState(false);
   const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
   const getDate = (s: string) => s?.substring(0, 10) || '';
-  const plates = item.placas_unidad || item.entry?.placas_unidad || 'S/P';
+  const plates = item.plates || item.placas_unidad || item.entry?.placas_unidad || 'S/P';
   const normPlates = normalize(plates);
   const itemDate = getDate(item.created_at || item.entry?.fecha_entrada);
   const subtitle = item.entry?.chofer_nombre || item.chofer_nombre || item.inspector_nombre || item.cliente || '-';

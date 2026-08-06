@@ -49,7 +49,7 @@ export default function Historico() {
       if (!query.trim()) return true;
       const q = query.toLowerCase();
       return (
-        i.placas_unidad?.toLowerCase().includes(q) ||
+        i.plates?.toLowerCase().includes(q) ||
         i.compania_transportista?.toLowerCase().includes(q) ||
         i.numero_trailer?.toLowerCase().includes(q) ||
         i.numero_precinto?.toLowerCase().includes(q)
@@ -61,7 +61,7 @@ export default function Historico() {
 
   // ── Desktop table row ──
   const renderTableRow = ({ item, index }: { item: any; index: number }) => {
-    const inspPlates = normalize(item.placas_unidad);
+    const inspPlates = normalize(item.plates);
     const relatedRecord = records.find(r =>
       (r.inspection_id === item.id) ||
       (r.inspection_ids && r.inspection_ids.includes(item.id)) ||
@@ -85,7 +85,7 @@ export default function Historico() {
         onPress={() => router.push(`/inspection/${item.id}`)}
       >
         <View style={[styles.tableCell, { flex: 1.2 }]}>
-          <Text style={styles.tablePlate}>{item.placas_unidad || t('sin_placas')}{isFull ? ' (FULL)' : ''}</Text>
+          <Text style={styles.tablePlate}>{item.plates || t('sin_placas')}{isFull ? ' (FULL)' : ''}</Text>
           {item._pending && <View style={styles.pendingChip}><Text style={styles.pendingChipText}>PEND</Text></View>}
         </View>
         <View style={[styles.tableCell, { flex: 1.5 }]}>
@@ -112,7 +112,7 @@ export default function Historico() {
 
   // ── Mobile card ──
   const renderCard = ({ item }: { item: any }) => {
-    const inspPlates = normalize(item.placas_unidad);
+    const inspPlates = normalize(item.plates);
     const relatedRecord = records.find(r =>
       (r.inspection_id === item.id) || (r.inspection_ids && r.inspection_ids.includes(item.id)) ||
       normalize(r.entry?.placas_unidad) === inspPlates
@@ -130,7 +130,7 @@ export default function Historico() {
     return (
       <Pressable style={styles.card} onPress={() => router.push(`/inspection/${item.id}`)}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.cardTitle}>{item.placas_unidad || t('sin_placas')} {isFull ? '(FULL)' : ''}</Text>
+          <Text style={styles.cardTitle}>{item.plates || t('sin_placas')} {isFull ? '(FULL)' : ''}</Text>
           <Text style={styles.cardSub}>{item.compania_transportista}</Text>
           <View style={{ marginVertical: 8 }}>
             <ProcessTracker steps={steps} compact showShipping={showShipping} />

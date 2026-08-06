@@ -183,6 +183,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
         ...item.data,
         id: item.id,
         user_id: item.user_id,
+        plates: item.plates,
         created_at: item.created_at,
         status_general: item.status_general,
         approval_status: item.approval_status

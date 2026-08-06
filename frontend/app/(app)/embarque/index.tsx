@@ -35,11 +35,11 @@ export default function EmbarqueList() {
       ]);
 
       const tickets = (ticketsRes.data || []).map(t => ({
-        ...t.data, id: t.id, created_at: t.created_at
+        ...t.data, id: t.id, plates: t.plates, created_at: t.created_at
       }));
 
       const allUnits = (recordsRes.data || []).map(r => ({
-        ...r.entry_data, id: r.id, created_at: r.created_at,
+        ...r.entry_data, id: r.id, plates: r.plates, created_at: r.created_at,
         status: r.status, entry: r.entry_data, exit: r.exit_data,
         inspection_id: r.inspection_id, inspection_ids: r.inspection_ids
       }));
@@ -59,7 +59,8 @@ export default function EmbarqueList() {
         })
         .map(u => ({
           id: `new-${u.id}`, record_id: u.id,
-          placas_unidad: u.entry?.placas_unidad,
+          plates: u.plates,
+          placas_unidad: u.plates || u.entry?.placas_unidad,
           cliente: u.entry?.descripcion_carga || 'PENDIENTE',
           linea_transporte: u.entry?.compania_transporte,
           numero_caja: u.entry?.numero_caja,
@@ -77,7 +78,7 @@ export default function EmbarqueList() {
     if (!query.trim()) return true;
     const q = query.toLowerCase();
     return (
-      tk.placas_unidad?.toLowerCase().includes(q) ||
+      tk.plates?.toLowerCase().includes(q) || tk.placas_unidad?.toLowerCase().includes(q) ||
       tk.cliente?.toLowerCase().includes(q) ||
       tk.operador?.toLowerCase().includes(q) ||
       tk.almacenista?.toLowerCase().includes(q) ||
@@ -106,7 +107,7 @@ export default function EmbarqueList() {
         onPress={() => goToItem(tk)}
       >
         <View style={[styles.tableCell, { flex: 1 }]}>
-          <Text style={styles.tablePlate}>{tk.placas_unidad || 'S/P'}</Text>
+          <Text style={styles.tablePlate}>{tk.plates || tk.placas_unidad || 'S/P'}</Text>
         </View>
         <View style={[styles.tableCell, { flex: 1.4 }]}>
           <Text style={styles.tableText} numberOfLines={1}>{tk.cliente || '—'}</Text>
@@ -162,7 +163,7 @@ export default function EmbarqueList() {
       >
         <View style={{ flex: 1 }}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>{tk.placas_unidad || 'S/P'}</Text>
+            <Text style={styles.cardTitle}>{tk.plates || tk.placas_unidad || 'S/P'}</Text>
             <View style={[styles.badge, { backgroundColor: isVirtual ? colors.info : (isComplete ? colors.success : colors.warning) }]}>
               <Text style={styles.badgeText}>{isVirtual ? 'POR CREAR' : (isComplete ? t('completo').toUpperCase() : t('en_proceso').toUpperCase())}</Text>
             </View>

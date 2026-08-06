@@ -260,9 +260,9 @@ export default function InspectionDetail() {
   </div>
 
   <h2 style="background:#0A2540;color:#fff;padding:6px;margin-top:20px;">${t('datos_generales')}</h2>
-  <table style="width:100%;border-collapse:collapse;">
+    <table style="width:100%;border-collapse:collapse;">
     <tr><td style="padding:6px;border:1px solid #999;width:35%;"><b>${t('compania_transportista_caps')}</b></td><td style="padding:6px;border:1px solid #999;">${i.compania_transportista}</td></tr>
-    <tr><td style="padding:6px;border:1px solid #999;"><b>${t('placas_unidad_caps')}</b></td><td style="padding:6px;border:1px solid #999;">${i.placas_unidad}</td></tr>
+    <tr><td style="padding:6px;border:1px solid #999;width:35%;"><b>${t('placas_unidad_caps')}</b></td><td style="padding:6px;border:1px solid #999;">${i.plates || i.placas_unidad}</td></tr>
     <tr><td style="padding:6px;border:1px solid #999;"><b>${t('numero_trailer_caps')}</b></td><td style="padding:6px;border:1px solid #999;">${i.numero_trailer}</td></tr>
     <tr><td style="padding:6px;border:1px solid #999;"><b>${t('numero_precinto_caps')}</b></td><td style="padding:6px;border:1px solid #999;">${i.numero_precinto}</td></tr>
     <tr><td style="padding:6px;border:1px solid #999;"><b>${t('sello_alta_seguridad_caps')}</b></td><td style="padding:6px;border:1px solid #999;">${i.sello_alta_seguridad}</td></tr>

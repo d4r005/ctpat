@@ -40,6 +40,7 @@ export default function CasetaList() {
       if (error) throw error;
       const mapped = (data || []).map(r => ({
         ...r,
+        plates: r.plates,
         entry: r.entry_data,
         exit: r.exit_data,
         status: r.exit_data ? 'salida' : (r.inspection_id ? 'inspeccionado' : 'entrada')
@@ -59,7 +60,7 @@ export default function CasetaList() {
     if (!query.trim()) return true;
     const q = query.toLowerCase();
     return (
-      r.entry?.placas_unidad?.toLowerCase().includes(q) ||
+      r.plates?.toLowerCase().includes(q) || r.entry?.placas_unidad?.toLowerCase().includes(q) ||
       r.entry?.chofer_nombre?.toLowerCase().includes(q) ||
       r.entry?.compania_transporte?.toLowerCase().includes(q)
     );
@@ -93,7 +94,7 @@ export default function CasetaList() {
         onPress={() => router.push(`/caseta/${r.id}`)}
       >
         <View style={[styles.tableCell, { flex: 1.2 }]}>
-          <Text style={styles.tablePlate}>{r.entry?.placas_unidad || 'S/P'}{isFull ? ' (FULL)' : ''}</Text>
+          <Text style={styles.tablePlate}>{r.plates || r.entry?.placas_unidad || 'S/P'}{isFull ? ' (FULL)' : ''}</Text>
         </View>
         <View style={[styles.tableCell, { flex: 1.4 }]}>
           <Text style={styles.tableText} numberOfLines={1}>{r.entry?.chofer_nombre || '—'}</Text>
@@ -136,7 +137,7 @@ export default function CasetaList() {
       <Pressable style={styles.card} onPress={() => router.push(`/caseta/${r.id}`)}>
         <View style={{ flex: 1 }}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>{r.entry?.placas_unidad || 'S/P'}{isFull ? ' (FULL)' : ''}</Text>
+            <Text style={styles.cardTitle}>{r.plates || r.entry?.placas_unidad || 'S/P'}{isFull ? ' (FULL)' : ''}</Text>
             <View style={[styles.badge, { backgroundColor: color }]}>
               <Text style={styles.badgeText}>{label}</Text>
             </View>

@@ -154,7 +154,7 @@ export default function EmbarqueDetail() {
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={28} color="#FFF" />
         </Pressable>
-        <Text style={styles.topTitle}>{t('embarque').toUpperCase()}: {ticket.placas_unidad}</Text>
+        <Text style={styles.topTitle}>{t('embarque').toUpperCase()}: {ticket.plates || ticket.placas_unidad}</Text>
         {isAdmin && (
           <Pressable onPress={() => editMode ? handleUpdate() : setEditMode(true)} style={styles.editBtn}>
             {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.editBtnText}>{editMode ? t('guardar').toUpperCase() : t('editar').toUpperCase()}</Text>}
