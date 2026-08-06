@@ -565,8 +565,9 @@ export default function Supervisor() {
     { icon: 'git-merge', label: 'DUPLICADOS POR OCR (FUSIONAR)', color: colors.warning, surface: colors.warningSurface, onPress: () => setDuplicatesModalVisible(true), disabled: false, loading: false },
     { icon: 'build', label: 'REPARACIÓN PROFUNDA (VÍNCULOS + FECHAS)', color: colors.error, surface: colors.errorSurface, onPress: handleDeepRepair, disabled: syncing, loading: syncing },
     { icon: 'cloud-upload', label: 'FORZAR SYNC OTROS DISPOSITIVOS', color: colors.success, surface: colors.successSurface, onPress: handleForceSync, disabled: forceSyncing, loading: forceSyncing },
-    { icon: 'bar-chart', label: `${t('kpis')} / ${t('reporte_analitica').toUpperCase()}`, color: '#4338CA', surface: '#E0E7FF', onPress: () => router.push('/(app)/analitica'), disabled: false, loading: false },
   ];
+
+  const [showAdminTools, setShowAdminTools] = useState(false);
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -578,17 +579,26 @@ export default function Supervisor() {
       <ScrollView stickyHeaderIndices={[1]} refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchEverything} tintColor={colors.brandPrimary} />}>
         {/* Admin tools */}
         <View style={s.adminGrid}>
-          <Text style={s.adminLabel}>{t('admin_tools').toUpperCase()}</Text>
-          <View style={s.adminCardRow}>
-            {adminTools.map((tool, i) => (
-              <Pressable key={i} style={({ pressed }) => [s.adminCard, pressed && { opacity: 0.88 }]} onPress={tool.onPress} disabled={tool.disabled}>
-                <View style={[s.adminCardIcon, { backgroundColor: tool.surface }]}>
-                  {tool.loading ? <ActivityIndicator size={14} color={tool.color} /> : <Ionicons name={tool.icon as any} size={16} color={tool.color} />}
-                </View>
-                <Text style={[s.adminCardText, { color: tool.color }]}>{tool.label}</Text>
-              </Pressable>
-            ))}
-          </View>
+          <Pressable
+            style={({ pressed }) => [s.adminHeaderToggle, pressed && { opacity: 0.7 }]}
+            onPress={() => setShowAdminTools(!showAdminTools)}
+          >
+            <Text style={s.adminLabel}>{t('admin_tools').toUpperCase()}</Text>
+            <Ionicons name={showAdminTools ? "chevron-up" : "chevron-down"} size={16} color={colors.mutedDark} />
+          </Pressable>
+
+          {showAdminTools && (
+            <View style={s.adminCardRow}>
+              {adminTools.map((tool, i) => (
+                <Pressable key={i} style={({ pressed }) => [s.adminCard, pressed && { opacity: 0.88 }]} onPress={tool.onPress} disabled={tool.disabled}>
+                  <View style={[s.adminCardIcon, { backgroundColor: tool.surface }]}>
+                    {tool.loading ? <ActivityIndicator size={14} color={tool.color} /> : <Ionicons name={tool.icon as any} size={16} color={tool.color} />}
+                  </View>
+                  <Text style={[s.adminCardText, { color: tool.color }]}>{tool.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Tabs + search */}
@@ -664,8 +674,9 @@ const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
 
   // Admin tools
-  adminGrid: { padding: 24 },
-  adminLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, letterSpacing: 2, marginBottom: 12, textTransform: 'uppercase' },
+  adminGrid: { padding: 24, paddingBottom: 8 },
+  adminHeaderToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  adminLabel: { fontSize: 10, fontWeight: '900', color: colors.muted, letterSpacing: 2, textTransform: 'uppercase' },
   adminCardRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   adminCard: {
     backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border, borderRadius: 12,
