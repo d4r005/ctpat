@@ -13,6 +13,7 @@ import NotificationsPanel from '@/src/components/NotificationsPanel';
 import * as Haptics from 'expo-haptics';
 import { colors, spacing, radius, typography, shadows } from '@/src/constants/theme';
 import { apiCall } from '@/src/api/client';
+import { supabase } from '@/src/api/supabase';
 import ProcessTracker from '@/src/components/ProcessTracker';
 
 import MainHeader from '@/src/components/MainHeader';
@@ -41,26 +42,85 @@ export default function Inicio() {
     if (!token) return;
     if (isInitial) setLoadingActivities(true);
     try {
-      const [actData, recordsEntrada, recordsInsp] = await Promise.all([
-        apiCall<any[]>('/activities', { token }),
-        // Solo traer unidades que están en patio para mayor velocidad
-        apiCall<any[]>('/vehicle-records?status=entrada', { token }),
-        apiCall<any[]>('/vehicle-records?status=inspeccionado', { token })
+      // Direct Supabase queries for faster response and real-time feel
+      const [recData, inspData, ticketData] = await Promise.all([
+        supabase.from('vehicle_records').select('*').order('created_at', { ascending: false }).limit(20),
+        supabase.from('inspections').select('*').order('created_at', { ascending: false }).limit(10),
+        supabase.from('shipping_tickets').select('*').order('created_at', { ascending: false }).limit(10)
       ]);
 
-      setActivities(Array.isArray(actData) ? actData : []);
+      // Process activities
+      const acts: any[] = [];
+      if (recData.data) {
+        recData.data.forEach(r => {
+          acts.push({
+            id: r.id,
+            type: 'caseta',
+            title: r.plates || 'S/P',
+            subtitle: `${r.entry_data?.chofer_nombre || ''} - ${r.entry_data?.compania_transporte || ''}`,
+            created_at: r.created_at,
+            user_name: r.entry_data?.guardia_caseta_nombre || 'Guardia',
+            status: r.exit_data ? 'salida' : 'entrada'
+          });
+        });
+      }
+      if (inspData.data) {
+        inspData.data.forEach(i => {
+          const payload = i.data || {};
+          acts.push({
+            id: i.id,
+            type: 'inspection',
+            title: i.plates || 'S/P',
+            subtitle: payload.compania_transportista || '',
+            created_at: i.created_at,
+            user_name: payload.inspector_nombre || 'Inspector',
+            status: i.status_general
+          });
+        });
+      }
+      if (ticketData.data) {
+        ticketData.data.forEach(t => {
+          const payload = t.data || {};
+          acts.push({
+            id: t.id,
+            type: 'embarque',
+            title: t.plates || 'S/P',
+            subtitle: payload.almacenista_nombre || '',
+            created_at: t.created_at,
+            user_name: payload.almacenista_nombre || 'Almacenista',
+            status: 'bueno'
+          });
+        });
+      }
 
-      // Incluir registros offline generados en este dispositivo
-      const combined = [...offlineRecords, ...(Array.isArray(recordsEntrada) ? recordsEntrada : []), ...(Array.isArray(recordsInsp) ? recordsInsp : [])];
+      const sortedActs = acts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setActivities(sortedActs);
+
+      // In-process units: vehicle records without exit_data
+      let inProcess = [];
+      if (recData.data) {
+        inProcess = recData.data
+          .filter(r => !r.exit_data)
+          .map(r => ({
+            ...r,
+            entry: r.entry_data,
+            exit: r.exit_data,
+            // Determine if inspected based on data or assume based on plates for now
+            status: r.entry_data?.status || (r.inspection_id ? 'inspeccionado' : 'entrada')
+          }));
+      }
+
+      const combined = [...offlineRecords, ...inProcess];
       setInProcessUnits(combined.sort((a,b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()));
 
-      if (!isInitial && actData.length > 0 && actData[0].id !== lastActivityId) {
-        setLastActivityId(actData[0].id);
+      if (!isInitial && sortedActs.length > 0 && sortedActs[0].id !== lastActivityId) {
+        setLastActivityId(sortedActs[0].id);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else if (isInitial && actData.length > 0) {
-        setLastActivityId(actData[0].id);
+      } else if (isInitial && sortedActs.length > 0) {
+        setLastActivityId(sortedActs[0].id);
       }
     } catch (e) {
+      console.error("Error loading activities:", e);
       setActivities([]);
     } finally {
       if (isInitial) setLoadingActivities(false);

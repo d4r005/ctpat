@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
-import { apiCall, API_BASE } from '@/src/api/client';
+import { supabase } from '@/src/api/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -32,14 +32,75 @@ export default function Analitica({ nested = false }: { nested?: boolean }) {
   const load = async () => {
     setLoading(true);
     try {
-      const qs = new URLSearchParams();
-      if (dateFrom) qs.append('date_from', dateFrom);
-      if (dateTo) qs.append('date_to', dateTo);
-      const url = `/analytics${qs.toString() ? '?' + qs.toString() : ''}`;
-      const d = await apiCall<Analytics>(url, { token });
-      setData(d);
-    } catch (e: any) { alert(e.message); }
-    finally { setLoading(false); }
+      let query = supabase
+        .from('inspections')
+        .select('*');
+
+      if (dateFrom) query = query.gte('created_at', `${dateFrom}T00:00:00`);
+      if (dateTo) query = query.lte('created_at', `${dateTo}T23:59:59`);
+
+      const { data: inspections, error } = await query;
+      if (error) throw error;
+
+      if (!inspections) {
+        setData(null);
+        return;
+      }
+
+      const total = inspections.length;
+      const approval_breakdown = {
+        pendiente: inspections.filter(i => i.approval_status === 'pendiente').length,
+        aprobada: inspections.filter(i => i.approval_status === 'aprobada').length,
+        rechazada: inspections.filter(i => i.approval_status === 'rechazada').length,
+      };
+      const status_breakdown = {
+        bueno: inspections.filter(i => i.status_general === 'bueno').length,
+        malo: inspections.filter(i => i.status_general === 'malo').length,
+      };
+      const approval_rate_pct = total > 0 ? Math.round((approval_breakdown.aprobada / total) * 100) : 0;
+
+      // Group by inspector
+      const inspectorMap: Record<string, any> = {};
+      inspections.forEach(i => {
+        const name = i.data?.inspector_nombre || 'Desconocido';
+        if (!inspectorMap[name]) {
+          inspectorMap[name] = { name, total: 0, fallas: 0, aprobadas: 0, rechazadas: 0 };
+        }
+        inspectorMap[name].total++;
+        if (i.status_general === 'malo') inspectorMap[name].fallas++;
+        if (i.approval_status === 'aprobada') inspectorMap[name].aprobadas++;
+        if (i.approval_status === 'rechazada') inspectorMap[name].rechazadas++;
+      });
+      const by_inspector = Object.values(inspectorMap).sort((a, b) => b.total - a.total);
+
+      // Top failed points
+      const failedPointsMap: Record<string, number> = {};
+      inspections.forEach(i => {
+        const points = i.data?.points || [];
+        points.forEach((p: any) => {
+          if (p.estado === 'malo') {
+            failedPointsMap[p.name] = (failedPointsMap[p.name] || 0) + 1;
+          }
+        });
+      });
+      const top_failed_points = Object.entries(failedPointsMap)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+
+      setData({
+        total,
+        approval_breakdown,
+        status_breakdown,
+        approval_rate_pct,
+        by_inspector,
+        top_failed_points
+      });
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const isSupervisorOrAdmin = user?.role === 'supervisor' || user?.role === 'admin';
@@ -95,37 +156,47 @@ ${data.top_failed_points.length ? data.top_failed_points.map((p) => `<tr><td sty
   };
 
   const exportCsv = async () => {
-    if (!token) return;
+    if (!data) return;
     try {
       setLoading(true);
-      const qs = new URLSearchParams();
-      qs.append('mode', 'summary');
-      qs.append('scope', 'all');
-      if (dateFrom) qs.append('date_from', dateFrom);
-      if (dateTo) qs.append('date_to', dateTo);
+      let query = supabase.from('inspections').select('*');
 
-      const url = `${API_BASE}/inspections/export?${qs.toString()}`;
+      if (dateFrom) query = query.gte('created_at', `${dateFrom}T00:00:00`);
+      if (dateTo) query = query.lte('created_at', `${dateTo}T23:59:59`);
+
+      const { data: inspections, error } = await query;
+      if (error) throw error;
+
+      // Generate CSV content
+      const headers = ['ID', 'Fecha', 'Placas', 'Inspector', 'Compañia', 'Trailer', 'Estado General', 'Aprobación'];
+      const rows = (inspections || []).map(i => [
+        i.id,
+        new Date(i.created_at).toISOString(),
+        i.plates,
+        i.data?.inspector_nombre || '',
+        i.data?.compania_transportista || '',
+        i.data?.numero_trailer || '',
+        i.status_general,
+        i.approval_status
+      ]);
+
+      const csvContent = [headers, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
 
       if (Platform.OS === 'web') {
-        const response = await fetch(url, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const blob = await response.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = downloadUrl;
+        a.href = url;
         a.download = `Analitica_NAF_${dateFrom || 'report'}.csv`;
         document.body.appendChild(a);
         a.click();
-        window.URL.revokeObjectURL(downloadUrl);
+        window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
       } else {
-        const filename = `${(FileSystem as any).documentDirectory}reporte_naf.csv`;
-        const res = await FileSystem.downloadAsync(url, filename, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const filename = `${FileSystem.documentDirectory}reporte_naf.csv`;
+        await FileSystem.writeAsStringAsync(filename, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
         if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(res.uri, { mimeType: 'text/csv', dialogTitle: t('csv_detallado') });
+          await Sharing.shareAsync(filename, { mimeType: 'text/csv', dialogTitle: t('csv_detallado') });
         }
       }
     } catch (e: any) {

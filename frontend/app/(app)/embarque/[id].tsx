@@ -6,8 +6,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { compressImage } from '@/src/utils/image';
 import Signature from '@/src/components/SignaturePad';
-import { apiCall } from '@/src/api/client';
+import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
+import { supabase } from '@/src/api/supabase';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import { sanitizePlate } from '@/src/utils/text';
 import { useTranslation } from 'react-i18next';
@@ -17,6 +18,7 @@ export default function EmbarqueDetail() {
   const router = useRouter();
   const { t } = useTranslation();
   const { token, user } = useAuth();
+  const { updateShippingTicket } = useInspections();
   const [ticket, setTicket] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
@@ -38,15 +40,28 @@ export default function EmbarqueDetail() {
       if (!id) return;
       setLoading(true);
       console.log(`[EmbarqueDetail] Loading ticket ID: ${id}`);
-      const data = await apiCall<any>(`/shipping-tickets/${id}`, { token });
+      const { data, error } = await supabase
+        .from('shipping_tickets')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) throw error;
       if (!data) {
         throw new Error("Ticket no encontrado");
       }
-      setTicket(data);
+
+      const ticketData = {
+        ...data.data,
+        id: data.id,
+        created_at: data.created_at
+      };
+
+      setTicket(ticketData);
       // Auto-prellenar sección del guardia con datos del almacenista
       // Si el guardia aún no firmó/guardó su sección, pre-llenamos con lo
       // que capturó el almacenista para evitar doble captura.
-      const prefilled = JSON.parse(JSON.stringify(data));
+      const prefilled = JSON.parse(JSON.stringify(ticketData));
       if (!prefilled.nombre_guardia) {
         // El sello que puso el almacenista se copia al campo del guardia
         if (!prefilled.sello_salida && prefilled.numero_sello) {
@@ -81,7 +96,8 @@ export default function EmbarqueDetail() {
           onPress: async () => {
             setDeleting(true);
             try {
-              await apiCall(`/shipping-tickets/${id}`, { method: 'DELETE', token });
+              const { error } = await supabase.from('shipping_tickets').delete().eq('id', id);
+              if (error) throw error;
               router.back();
             } catch (e: any) {
               Alert.alert(t('error') || 'Error', e.message);
@@ -96,7 +112,7 @@ export default function EmbarqueDetail() {
   const handleUpdate = async () => {
     setSaving(true);
     try {
-      await apiCall(`/shipping-tickets/${id}`, { method: 'PUT', body: form, token });
+      await updateShippingTicket(id as string, form);
       setEditMode(false);
       await load();
       Alert.alert(t('exito'), t('ticket_actualizado'));

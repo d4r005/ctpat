@@ -2,11 +2,42 @@ import React, { createContext, useContext, useEffect, useState, ReactNode, useCa
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import { Platform } from 'react-native';
-import { apiCall, API_BASE, wakeUpServer } from '../api/client';
+import { supabase } from '../api/supabase';
 import { useAuth } from './AuthContext';
 
 const QUEUE_KEY = 'naf_universal_sync_queue';
 const CACHE_KEY = 'naf_inspections_cache';
+
+/**
+ * Sube una imagen en Base64 a Supabase Storage y devuelve la URL pública.
+ */
+async function uploadImage(bucket: string, b64: string): Promise<string> {
+  if (!b64 || typeof b64 !== 'string' || !b64.startsWith('data:image')) return b64;
+  try {
+    const response = await fetch(b64);
+    const blob = await response.blob();
+    const fileName = `${Date.now()}-${uuid()}.jpg`;
+
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .upload(fileName, blob, {
+        contentType: 'image/jpeg',
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (error) throw error;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(data.path);
+
+    return publicUrl;
+  } catch (e) {
+    console.error(`Error uploading to ${bucket}:`, e);
+    throw e;
+  }
+}
 
 export interface InspectionPoint {
   number: number;
@@ -18,7 +49,6 @@ export interface InspectionPoint {
 
 export interface InspectionPayload {
   inspection_type: string;
-  // Campos opcionales: registros históricos reconstruidos pueden no traerlos completos.
   compania_transportista?: string;
   placas_unidad: string;
   numero_trailer: string;
@@ -32,7 +62,6 @@ export interface InspectionPayload {
   fecha_hora?: string;
   client_uuid: string;
   record_id?: string;
-  // Nuevos campos de dimensiones
   box_type?: string;
   measures?: {
     alto?: string;
@@ -125,7 +154,6 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
       await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(q));
       setPendingCount(q.length);
     } catch (e: any) {
-      // Error de cuota en Web (LocalStorage lleno)
       if (e.message?.includes('quota') || e.name === 'QuotaExceededError' || e.message?.includes('exceeded the quota')) {
         if (Platform.OS === 'web') {
           const clear = window.confirm("⚠️ MEMORIA LLENA: No se pueden guardar más registros offline porque la memoria del navegador está llena.\n\n¿Deseas limpiar la cola de sincronización para poder seguir usando la app? (Se perderán los registros que no se han subido)");
@@ -136,7 +164,6 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
           }
         }
       }
-      // Re-lanzar para que el llamador sepa que falló el guardado persistente
       throw e;
     }
   }, []);
@@ -145,35 +172,33 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     if (!token) return;
     setLoading(true);
     try {
-      // Simplificar lógica de permisos: Si es admin o supervisor, scope all.
-      const isAdmin = user?.role === 'admin' || user?.role === 'supervisor' ||
-                      ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
-      const scope = isAdmin ? 'all' : 'mine';
+      const { data, error } = await supabase
+        .from('inspections')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      const data = await apiCall<Inspection[]>(`/inspections?summary=true&scope=${scope}`, { token });
-      setInspections((prev) => {
-        const pending = prev.filter((p) => p._pending);
-        const merged = [...pending, ...data];
-        AsyncStorage.setItem(CACHE_KEY, JSON.stringify(merged));
-        return merged;
-      });
+      if (error) throw error;
+
+      const mapped = data.map(item => ({
+        ...item.data,
+        id: item.id,
+        user_id: item.user_id,
+        created_at: item.created_at,
+        status_general: item.status_general,
+        approval_status: item.approval_status
+      }));
+
+      setInspections(mapped);
+      setAllInspections(mapped);
+      AsyncStorage.setItem(CACHE_KEY, JSON.stringify(mapped));
     } catch (e) {
       console.error("Refresh error:", e);
     } finally { setLoading(false); }
-  }, [token, user]);
+  }, [token]);
 
   const refreshAll = useCallback(async () => {
-    if (!token) return;
-    try {
-      // Quitamos la validación local de rol para dejar que sea el servidor quien responda
-      const data = await apiCall<Inspection[]>('/inspections?scope=all&summary=true', { token });
-      if (Array.isArray(data)) {
-        setAllInspections(data);
-      }
-    } catch (e) {
-      console.error("Error en refreshAll (Supervisor):", e);
-    }
-  }, [token]);
+    await refresh();
+  }, [refresh]);
 
   const syncQueue = useCallback(async () => {
     if (!token) return;
@@ -182,47 +207,27 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
 
     setIsSyncing(true);
 
-    // Despertar el servidor de HuggingFace si está dormido (cold start)
-    const serverAwake = await wakeUpServer();
-    if (!serverAwake) {
-      // No se pudo despertar el servidor — mantener items en cola
-      const { Alert } = require('react-native');
-      Alert.alert(
-        '⚠️ Sin conexión al servidor',
-        'El servidor no responde. Los registros seguirán en cola y se enviarán automáticamente cuando el servidor esté disponible.',
-        [{ text: 'Entendido' }]
-      );
-      setIsSyncing(false);
-      return;
-    }
     let successCount = 0;
-    let networkFailCount = 0;
-    let serverFailCount = 0;
-    const serverErrors: string[] = [];
-
     const remaining: SyncItem[] = [];
+
     for (const item of queue) {
       try {
-        await apiCall(item.endpoint, { method: item.method, body: item.payload, token });
-        successCount++;
-      } catch (err: any) {
-        if (err?.isNetworkError) {
-          // Error de RED → reintentar después
-          networkFailCount++;
-          remaining.push(item);
-        } else {
-          // Error de SERVIDOR (4xx, validación, etc.)
-          serverFailCount++;
-          serverErrors.push(`${item.type}: ${err?.message || 'error desconocido'}`);
-          // Si el servidor ya tiene el registro (client_uuid dedup), lo descartamos.
-          // Si es un error real de validación, lo guardamos en cola de errores
-          // pero NO lo descartamos silenciosamente.
-          // Para inspecciones con client_uuid, el servidor las deduplica → 200 OK.
-          // Si llega aquí es un error real: lo dejamos en cola para que el admin lo revise.
-          remaining.push(item);
+        if (item.type === 'inspection') {
+          await saveInspection(item.payload);
+        } else if (item.type === 'vehicle_record') {
+          await saveVehicleRecord(item.payload);
+        } else if (item.type === 'shipping_ticket') {
+          await saveShippingTicket(item.payload);
+        } else if (item.type === 'vehicle_exit') {
+          await patchVehicleExit(item.id, item.payload);
         }
+        successCount++;
+      } catch (err) {
+        console.error(`Sync error for ${item.type}:`, err);
+        remaining.push(item);
       }
     }
+
     await setQueue(remaining);
     setPendingCount(remaining.length);
     if (remaining.length === 0) {
@@ -230,27 +235,6 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     }
     await refresh();
     setIsSyncing(false);
-
-    // Feedback para el usuario
-    if (successCount > 0 && networkFailCount === 0 && serverFailCount === 0) {
-      // Todo se subió OK
-      const { Alert } = require('react-native');
-      Alert.alert('✅ Sincronización completa', `${successCount} registro(s) subido(s) correctamente.`);
-    } else if (networkFailCount > 0) {
-      const { Alert } = require('react-native');
-      Alert.alert(
-        '⚠️ Sin conexión al servidor',
-        `No se pudo conectar con el servidor. ${networkFailCount} registro(s) seguirán en cola y se enviarán automáticamente cuando haya conexión.`,
-        [{ text: 'Entendido' }]
-      );
-    } else if (serverFailCount > 0) {
-      const { Alert } = require('react-native');
-      Alert.alert(
-        '⚠️ Algunos registros no se pudieron subir',
-        `${successCount} subido(s) OK. ${serverFailCount} con error del servidor:\n${serverErrors.slice(0, 3).join('\n')}`,
-        [{ text: 'Entendido' }]
-      );
-    }
   }, [token, refresh, getQueue, setQueue]);
 
   useEffect(() => {
@@ -271,7 +255,6 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
       if (cached) { try { setInspections(JSON.parse(cached)); } catch {} }
       const queue = await getQueue();
       setPendingCount(queue.length);
-      // Recuperar registros de caseta offline de la cola
       const offlineRecs = queue
         .filter((item: SyncItem) => item.type === 'vehicle_record')
         .map((item: SyncItem) => ({
@@ -292,9 +275,6 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     if (isOnline && token && pendingCount > 0) syncQueue();
   }, [isOnline, token, pendingCount, syncQueue]);
 
-  // Reintento periódico cada 30 s mientras haya elementos en la cola.
-  // Esto resuelve el caso en que el servidor (HF Space) estaba dormido
-  // cuando se intentó el primer sync y el usuario no cerró/abrió la app.
   useEffect(() => {
     if (!isOnline || !token || pendingCount === 0) return;
     const interval = setInterval(() => {
@@ -312,20 +292,57 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   const saveInspection = useCallback(async (payload: InspectionPayload): Promise<any> => {
     const client_uuid = payload.client_uuid || uuid();
     const full = { ...payload, client_uuid, fecha_hora: payload.fecha_hora || new Date().toISOString() };
+
     if (isOnline) {
       try {
-        const res = await apiCall('/inspections', { method: 'POST', body: full, token });
+        // 1. Upload Point Photos
+        const processedPoints = await Promise.all(
+          full.points.map(async (p) => ({
+            ...p,
+            photo: p.photo ? await uploadImage('inspections', p.photo) : p.photo
+          }))
+        );
+
+        // 2. Upload Signatures
+        const inspector_firma = full.inspector_firma
+          ? await uploadImage('signatures', full.inspector_firma)
+          : full.inspector_firma;
+
+        const guard_signature = full.guard_signature
+          ? await uploadImage('signatures', full.guard_signature)
+          : full.guard_signature;
+
+        const dataPayload = {
+          ...full,
+          points: processedPoints,
+          inspector_firma,
+          guard_signature
+        };
+
+        const status_general = processedPoints.some((p) => p.estado === 'malo') ? 'malo' : 'bueno';
+
+        const { data, error } = await supabase
+          .from('inspections')
+          .insert({
+            id: client_uuid,
+            plates: full.placas_unidad,
+            status_general,
+            approval_status: 'pendiente',
+            data: dataPayload,
+            user_id: user?.id
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
         await refresh();
-        return res;
+        return data;
       } catch (err: any) {
-        // Sólo se encola para reintentar offline si fue un fallo de RED (sin
-        // conexión real, timeout, etc). Si el servidor respondió rechazando la
-        // petición (permiso, validación...), antes se tragaba el error en
-        // silencio y se simulaba éxito guardando "pendiente" -- el usuario
-        // creía que se había guardado y en realidad nunca llegó al servidor.
-        if (!err?.isNetworkError) throw err;
+        const isNetworkError = err.message?.includes('network') || err.name === 'TypeError';
+        if (!isNetworkError) throw err;
       }
     }
+
     await addToQueue({ id: client_uuid, type: 'inspection', method: 'POST', endpoint: '/inspections', payload: full });
     const pending: Inspection = {
       ...full, id: client_uuid, user_id: user?.id || 'offline',
@@ -342,12 +359,33 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     const tempId = uuid();
     if (isOnline) {
       try {
-        const res = await apiCall('/vehicle-records', { method: 'POST', body: payload, token });
+        // Upload any base64 images found in payload (evidence)
+        const processedPayload = { ...payload };
+        for (const key in processedPayload) {
+          if (typeof processedPayload[key] === 'string' && processedPayload[key].startsWith('data:image')) {
+            processedPayload[key] = await uploadImage('evidence', processedPayload[key]);
+          }
+        }
+
+        const { data, error } = await supabase
+          .from('vehicle_records')
+          .insert({
+            id: tempId,
+            plates: payload.placas || payload.plates || payload.placas_unidad || '',
+            entry_data: processedPayload,
+            user_id: user?.id
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
         await refresh();
-        return res;
-      } catch (err: any) { if (!err?.isNetworkError) throw err; }
+        return data;
+      } catch (err: any) {
+        const isNetworkError = err.message?.includes('network') || err.name === 'TypeError';
+        if (!isNetworkError) throw err;
+      }
     }
-    // OFFLINE: guardar en cola Y hacerlo visible en el dispositivo
     await addToQueue({ id: tempId, type: 'vehicle_record', method: 'POST', endpoint: '/vehicle-records', payload });
     const offlineRec = {
       id: tempId, _offline: true, _pending: true,
@@ -359,28 +397,67 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     };
     setOfflineRecords(prev => [offlineRec, ...prev]);
     return offlineRec;
-  }, [token, isOnline, addToQueue, refresh]);
+  }, [token, isOnline, addToQueue, refresh, user]);
 
   const saveShippingTicket = useCallback(async (payload: any): Promise<any> => {
     const tempId = uuid();
     if (isOnline) {
-      try { return await apiCall('/shipping-tickets', { method: 'POST', body: payload, token }); }
-      catch (err: any) { if (!err?.isNetworkError) throw err; }
+      try {
+        const processedPayload = { ...payload };
+        for (const key in processedPayload) {
+          if (typeof processedPayload[key] === 'string' && processedPayload[key].startsWith('data:image')) {
+            processedPayload[key] = await uploadImage('evidence', processedPayload[key]);
+          }
+        }
+
+        const { data, error } = await supabase
+          .from('shipping_tickets')
+          .insert({
+            id: tempId,
+            plates: payload.placas || payload.plates || '',
+            data: processedPayload,
+            user_id: user?.id
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        return data;
+      } catch (err: any) {
+        const isNetworkError = err.message?.includes('network') || err.name === 'TypeError';
+        if (!isNetworkError) throw err;
+      }
     }
     await addToQueue({ id: tempId, type: 'shipping_ticket', method: 'POST', endpoint: '/shipping-tickets', payload });
     return { id: tempId, _offline: true, ...payload };
-  }, [token, isOnline, addToQueue]);
+  }, [token, isOnline, addToQueue, user]);
 
   const patchVehicleExit = useCallback(async (id: string, payload: any): Promise<any> => {
-    // IMPORTANTE: si hay conexión pero la petición falla (permiso, validación,
-    // 500, etc.) NO debe tratarse como si estuviera offline -- antes el error
-    // se descartaba en silencio y se simulaba un "éxito" encolando el cambio,
-    // por lo que el usuario veía "Salida registrada" aunque el guardado real
-    // hubiera fallado. Ahora sólo se encola cuando realmente no hay conexión;
-    // si hay conexión y falla, se propaga el error para que se muestre al usuario.
     if (isOnline) {
-      try { return await apiCall(`/vehicle-records/${id}/exit`, { method: 'PATCH', body: payload, token }); }
-      catch (err: any) { if (!err?.isNetworkError) throw err; }
+      try {
+        const processedPayload = { ...payload };
+        for (const key in processedPayload) {
+          if (typeof processedPayload[key] === 'string' && processedPayload[key].startsWith('data:image')) {
+            const bucket = key.includes('signature') ? 'signatures' : 'evidence';
+            processedPayload[key] = await uploadImage(bucket, processedPayload[key]);
+          }
+        }
+
+        const { data, error } = await supabase
+          .from('vehicle_records')
+          .update({
+            exit_data: processedPayload
+          })
+          .eq('id', id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        return data;
+      } catch (err: any) {
+        const isNetworkError = err.message?.includes('network') || err.name === 'TypeError';
+        if (!isNetworkError) throw err;
+      }
     }
     await addToQueue({ id, type: 'vehicle_exit', method: 'PATCH', endpoint: `/vehicle-records/${id}/exit`, payload });
     return { id, _offline: true, exit: payload };
@@ -392,39 +469,141 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
 
   const approveInspection = useCallback(async (id: string, note: string, name: string, signature: string) => {
     if (!token) return;
-    await apiCall(`/inspections/${id}/approve`, { method: 'POST', body: { note, name, signature }, token });
+    const signatureUrl = await uploadImage('signatures', signature);
+    const { error } = await supabase
+      .from('inspections')
+      .update({
+        approval_status: 'aprobada',
+        approval_note: note,
+        approved_by: user?.id,
+        approved_by_name: name,
+        approved_by_signature: signatureUrl,
+        approved_at: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (error) throw error;
     await Promise.all([refresh(), refreshAll()]);
-  }, [token, refresh, refreshAll]);
+  }, [token, refresh, refreshAll, user]);
 
   const rejectInspection = useCallback(async (id: string, note: string, name: string, signature: string) => {
     if (!token) return;
-    await apiCall(`/inspections/${id}/reject`, { method: 'POST', body: { note, name, signature }, token });
+    const signatureUrl = await uploadImage('signatures', signature);
+    const { error } = await supabase
+      .from('inspections')
+      .update({
+        approval_status: 'rechazada',
+        approval_note: note,
+        approved_by: user?.id,
+        approved_by_name: name,
+        approved_by_signature: signatureUrl,
+        approved_at: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (error) throw error;
     await Promise.all([refresh(), refreshAll()]);
-  }, [token, refresh, refreshAll]);
+  }, [token, refresh, refreshAll, user]);
 
   const updateInspection = useCallback(async (id: string, payload: Partial<Inspection>) => {
     if (!token) return;
-    await apiCall(`/inspections/${id}`, { method: 'PUT', body: payload, token });
-    await Promise.all([refresh(), refreshAll()]);
+    try {
+      const processed = { ...payload };
+
+      // Process points if they exist
+      if (processed.points) {
+        processed.points = await Promise.all(
+          processed.points.map(async (p) => ({
+            ...p,
+            photo: p.photo ? await uploadImage('inspections', p.photo) : p.photo
+          }))
+        );
+      }
+
+      // Process signatures
+      if (processed.inspector_firma) {
+        processed.inspector_firma = await uploadImage('signatures', processed.inspector_firma);
+      }
+      if (processed.guard_signature) {
+        processed.guard_signature = await uploadImage('signatures', processed.guard_signature);
+      }
+      if (processed.approved_by_signature) {
+        processed.approved_by_signature = await uploadImage('signatures', processed.approved_by_signature);
+      }
+
+      const { error } = await supabase
+        .from('inspections')
+        .update({
+          data: processed,
+          plates: processed.placas_unidad || undefined,
+          status_general: processed.points ? (processed.points.some(p => p.estado === 'malo') ? 'malo' : 'bueno') : undefined,
+          approval_status: processed.approval_status
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+      await Promise.all([refresh(), refreshAll()]);
+    } catch (err) {
+      console.error("Error updating inspection:", err);
+      throw err;
+    }
   }, [token, refresh, refreshAll]);
 
   const updateVehicleRecord = useCallback(async (id: string, payload: any) => {
     if (!token) return;
-    await apiCall(`/vehicle-records/${id}`, { method: 'PUT', body: payload, token });
+    try {
+      const processedPayload = { ...payload };
+      for (const key in processedPayload) {
+        if (typeof processedPayload[key] === 'string' && processedPayload[key].startsWith('data:image')) {
+          processedPayload[key] = await uploadImage('evidence', processedPayload[key]);
+        }
+      }
+      const { error } = await supabase
+        .from('vehicle_records')
+        .update({
+          entry_data: processedPayload,
+          plates: processedPayload.placas || processedPayload.plates || processedPayload.placas_unidad || undefined
+        })
+        .eq('id', id);
+      if (error) throw error;
+    } catch (err) {
+      console.error("Error updating vehicle record:", err);
+      throw err;
+    }
   }, [token]);
 
   const updateShippingTicket = useCallback(async (id: string, payload: any) => {
     if (!token) return;
-    await apiCall(`/shipping-tickets/${id}`, { method: 'PUT', body: payload, token });
+    try {
+      const processedPayload = { ...payload };
+      for (const key in processedPayload) {
+        if (typeof processedPayload[key] === 'string' && processedPayload[key].startsWith('data:image')) {
+          processedPayload[key] = await uploadImage('evidence', processedPayload[key]);
+        }
+      }
+
+      const { error } = await supabase
+        .from('shipping_tickets')
+        .update({
+          data: processedPayload,
+          plates: processedPayload.placas || processedPayload.plates || processedPayload.placas_unidad || ''
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+    } catch (err) {
+      console.error("Error updating shipping ticket:", err);
+      throw err;
+    }
   }, [token]);
 
   const sendManualReport = useCallback(async (id: string) => {
-    if (!token) return;
-    await apiCall(`/inspections/${id}/send-report`, { method: 'POST', token });
-  }, [token]);
+    // This functionality might need an Edge Function in Supabase
+    console.warn("sendManualReport is not implemented for Supabase yet.");
+  }, []);
 
   const exportCsvUrl = useCallback((mode: 'summary' | 'detailed', scope: 'mine' | 'all') => {
-    return `${API_BASE}/inspections/export?mode=${mode}&scope=${scope}`;
+    return ""; // Needs implementation via Supabase Edge Functions or similar
   }, []);
 
   return (

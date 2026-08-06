@@ -5,7 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/context/AuthContext';
-import { apiCall } from '@/src/api/client';
+import { supabase } from '@/src/api/supabase';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import MainHeader from '@/src/components/MainHeader';
 import { useNotifications } from '@/src/context/NotificationsContext';
@@ -22,6 +22,7 @@ interface Message {
   user_name: string;
   text: string;
   created_at: string;
+  room_id: string;
 }
 
 export default function ChatScreen() {
@@ -45,17 +46,28 @@ export default function ChatScreen() {
   // Cargar directorio de usuarios (inspector/supervisor/administrador) para @mencionar
   useEffect(() => {
     if (!token) return;
-    apiCall<DirectoryUser[]>('/users/directory', { token }).then(setDirectory).catch(() => {});
+    supabase
+      .from('profiles')
+      .select('id, full_name, role')
+      .then(({ data, error }) => {
+        if (data) {
+          setDirectory(data.map(d => ({ id: d.id, name: d.full_name, role: d.role })));
+        }
+      });
   }, [token]);
 
   // Al entrar al chat, se apaga el punto rojo del logotipo marcando como leidas
   // solo las notificaciones de tipo 'chat' (las de inspeccion/caseta no se tocan).
   useEffect(() => {
-    if (!token) return;
-    apiCall('/notifications/read-by-kind', { method: 'POST', token, body: { kind: 'chat' } })
+    if (!token || !user) return;
+    supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('user_id', user.id)
+      .eq('kind', 'chat')
       .then(() => refreshNotifications())
       .catch(() => {});
-  }, [token, room, refreshNotifications]);
+  }, [token, room, refreshNotifications, user]);
 
   const handleChangeText = (v: string) => {
     setText(v);
@@ -79,8 +91,14 @@ export default function ChatScreen() {
     if (!token) return;
     if (showLoading) setLoading(true);
     try {
-      const data = await apiCall<Message[]>(`/chat/${room}`, { token });
-      setMessages(data);
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('room_id', room)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setMessages(data || []);
     } catch (e) {
       console.error('Error fetching messages:', e);
     } finally {
@@ -88,23 +106,48 @@ export default function ChatScreen() {
     }
   };
 
-  // Polling para mensajes en tiempo real (cada 3 segundos)
+  // Realtime para mensajes
   useEffect(() => {
     fetchMessages(true);
-    const interval = setInterval(() => fetchMessages(), 3000);
-    return () => clearInterval(interval);
+
+    const channel = supabase
+      .channel(`room:${room}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `room_id=eq.${room}`
+      }, (payload) => {
+        setMessages((prev) => [...prev, payload.new as Message]);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [room, token]);
 
   const handleSend = async () => {
-    if (!text.trim() || !token || sending) return;
+    if (!text.trim() || !token || !user || sending) return;
     setSending(true);
     try {
-      const newMessage = await apiCall<Message>('/chat/send', {
-        method: 'POST',
-        body: { room, text: text.trim() },
-        token
-      });
-      setMessages(prev => [...prev, newMessage]);
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .insert({
+          room_id: room,
+          text: text.trim(),
+          user_id: user.id,
+          user_name: user.name
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // No necesitamos añadirlo manualmente si la suscripción funciona bien,
+      // pero para feedback inmediato lo hacemos (o confiamos en el insert).
+      // setMessages(prev => [...prev, data]);
+
       setText('');
       setMentionSuggestions([]);
       // Scroll to end
@@ -112,7 +155,6 @@ export default function ChatScreen() {
     } catch (e: any) {
       alert(e.message || 'Error al enviar');
     } finally {
-      setSending(true); // Evitar spam, reactivamos rápido
       setTimeout(() => setSending(false), 200);
     }
   };

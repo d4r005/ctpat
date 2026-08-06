@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useInspections, InspectionPayload } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
+import { supabase } from '@/src/api/supabase';
 import { apiCall } from '@/src/api/client';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import ProcessTracker from '@/src/components/ProcessTracker';
@@ -128,11 +129,30 @@ export default function InspeccionDashboard() {
     if (!token) return;
     setLoadingExtra(true);
     try {
-      const [r, tick] = await Promise.all([
-        apiCall<any[]>('/vehicle-records', { token }),
-        apiCall<any[]>('/shipping-tickets', { token }),
+      const [recordsRes, ticketsRes] = await Promise.all([
+        supabase.from('vehicle_records').select('*').order('created_at', { ascending: false }),
+        supabase.from('shipping_tickets').select('*').order('created_at', { ascending: false }),
         refreshInsps()
       ]);
+
+      const r = (recordsRes.data || []).map(rec => ({
+        ...rec.entry_data,
+        id: rec.id,
+        created_at: rec.created_at,
+        status: rec.status,
+        entry: rec.entry_data,
+        exit: rec.exit_data,
+        inspection_id: rec.inspection_id,
+        inspection_ids: rec.inspection_ids,
+        has_shipping_ticket: rec.has_shipping_ticket
+      }));
+
+      const tick = (ticketsRes.data || []).map(t => ({
+        ...t.data,
+        id: t.id,
+        created_at: t.created_at
+      }));
+
       setRecords(r);
       setTickets(tick);
     } catch (e) {

@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/src/context/AuthContext';
-import { apiCall } from '@/src/api/client';
+import { supabase } from '@/src/api/supabase';
 import { colors, spacing } from '@/src/constants/theme';
 import MainHeader from '@/src/components/MainHeader';
 import { useTranslation } from 'react-i18next';
@@ -29,10 +29,27 @@ export default function EmbarqueList() {
       // unidades en patio que requieren un ticket.
       // Quitamos el filtro status=inspeccionado del backend para capturar
       // unidades que tengan inspeccion pero el status no haya cambiado.
-      const [tickets, allUnits] = await Promise.all([
-        apiCall<any[]>('/shipping-tickets', { token }),
-        apiCall<any[]>('/vehicle-records', { token })
+      const [ticketsRes, recordsRes] = await Promise.all([
+        supabase.from('shipping_tickets').select('*').order('created_at', { ascending: false }),
+        supabase.from('vehicle_records').select('*').order('created_at', { ascending: false })
       ]);
+
+      const tickets = (ticketsRes.data || []).map(t => ({
+        ...t.data,
+        id: t.id,
+        created_at: t.created_at
+      }));
+
+      const allUnits = (recordsRes.data || []).map(r => ({
+        ...r.entry_data,
+        id: r.id,
+        created_at: r.created_at,
+        status: r.status,
+        entry: r.entry_data,
+        exit: r.exit_data,
+        inspection_id: r.inspection_id,
+        inspection_ids: r.inspection_ids
+      }));
 
       const existingRecordsIds = new Set(tickets.map(t => t.record_id));
 

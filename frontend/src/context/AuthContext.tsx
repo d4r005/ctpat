@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import { apiCall } from '../api/client';
+import { supabase } from '../api/supabase';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -50,53 +50,83 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const fetchProfile = async (uid: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', uid)
+        .single();
+
+      if (error) throw error;
+      if (data) {
+        setUser({
+          id: data.id,
+          email: data.email || '',
+          name: data.full_name || '',
+          role: data.role,
+          active: data.active
+        });
+      }
+    } catch (e) {
+      console.error('Error fetching profile:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    (async () => {
-      try {
-        const storedToken = await storeGet(TOKEN_KEY);
-        const storedUser = await storeGet(USER_KEY);
-        if (storedToken && storedUser) {
-          setToken(storedToken);
-          setUser(JSON.parse(storedUser));
-        }
-      } catch (e) {
-        console.warn('Auth restore error', e);
-      } finally {
+    // 1. Verificar sesión inicial
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setToken(session.access_token);
+        fetchProfile(session.user.id);
+      } else {
         setLoading(false);
       }
-    })();
+    });
+
+    // 2. Escuchar cambios de estado
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session) {
+        setToken(session.access_token);
+        await fetchProfile(session.user.id);
+      } else {
+        setToken(null);
+        setUser(null);
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const data = await apiCall<{ access_token: string; user: User }>('/auth/login', {
-      method: 'POST',
-      body: { email, password },
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
     });
-    await storeSet(TOKEN_KEY, data.access_token);
-    await storeSet(USER_KEY, JSON.stringify(data.user));
-    if (Platform.OS !== 'web') await AsyncStorage.setItem(BACK_TOKEN, data.access_token);
-    setToken(data.access_token);
-    setUser(data.user);
+    if (error) throw error;
   };
 
   const signUp = async (email: string, password: string, name: string) => {
-    const data = await apiCall<{ access_token: string; user: User }>('/auth/register', {
-      method: 'POST',
-      body: { email, password, name },
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: {
+        data: {
+          full_name: name.trim(),
+        }
+      }
     });
-    await storeSet(TOKEN_KEY, data.access_token);
-    await storeSet(USER_KEY, JSON.stringify(data.user));
-    if (Platform.OS !== 'web') await AsyncStorage.setItem(BACK_TOKEN, data.access_token);
-    setToken(data.access_token);
-    setUser(data.user);
+    if (error) throw error;
+
+    // El trigger en la base de datos creará el perfil automáticamente
   };
 
   const signOut = async () => {
-    await storeSet(TOKEN_KEY, null);
-    await storeSet(USER_KEY, null);
-    if (Platform.OS !== 'web') await AsyncStorage.removeItem(BACK_TOKEN);
-    setToken(null);
-    setUser(null);
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   };
 
   return (

@@ -12,7 +12,7 @@ import * as Print from 'expo-print';
 import { useTranslation } from 'react-i18next';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
-import { apiCall } from '@/src/api/client';
+import { supabase } from '@/src/api/supabase';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import { generateConsolidatedReportHtml } from '@/src/utils/reportGenerator';
 import ProcessTracker from '@/src/components/ProcessTracker';
@@ -59,24 +59,14 @@ function EmailModal({
     setSending(true);
     setResult(null);
     try {
-      // Timeout extendido para envío de correo (90s)
-      const controller = new AbortController();
-      const tid = setTimeout(() => controller.abort(), 90000);
-      const res = await apiCall<any>('/report/send-email', {
-        method: 'POST',
-        token,
-        body: { record_id: recordId, extra_emails: extraList },
+      // NOTA: El envío de correo requiere una Edge Function en Supabase llamada 'send-report-email'
+      const { data, error } = await supabase.functions.invoke('send-report-email', {
+        body: { record_id: recordId, extra_emails: extraList }
       });
-      clearTimeout(tid);
-      setResult({ ok: true, msg: res.message || t('reporte_en_camino') });
+      if (error) throw error;
+      setResult({ ok: true, msg: data?.message || t('reporte_en_camino') });
     } catch (e: any) {
-      const msg = e.message || '';
-      if (msg.includes('timeout') || msg.includes('AbortError')) {
-        // Backend respondió pero la conexión fue lenta — puede que sí se envió
-        setResult({ ok: true, msg: t('reporte_enviado_lento') });
-      } else {
-        setResult({ ok: false, msg: msg || t('error_enviar_correo') });
-      }
+      setResult({ ok: false, msg: e.message || t('error_enviar_correo') });
     } finally {
       setSending(false);
     }
@@ -239,13 +229,13 @@ export default function Supervisor() {
     if (!token) return;
     setLoading(true);
     try {
-      const [records, tickets] = await Promise.all([
-        apiCall<any[]>('/vehicle-records', { token }).catch(() => []),
-        apiCall<any[]>('/shipping-tickets', { token }).catch(() => [])
+      const [recsRes, ticksRes] = await Promise.all([
+        supabase.from('vehicle_records').select('*').order('created_at', { ascending: false }),
+        supabase.from('shipping_tickets').select('*').order('created_at', { ascending: false })
       ]);
       await refreshInspections();
-      setAllRecords(Array.isArray(records) ? records : []);
-      setAllTickets(Array.isArray(tickets) ? tickets : []);
+      setAllRecords(recsRes.data?.map(r => ({ ...r, entry: r.entry_data, exit: r.exit_data })) || []);
+      setAllTickets(ticksRes.data?.map(t => ({ ...t, ...t.data })) || []);
     } catch (e) {
       console.error("Error loading master data", e);
     } finally {
@@ -258,8 +248,33 @@ export default function Supervisor() {
   const handleRepair = async () => {
     setSyncing(true);
     try {
-      const res = await apiCall<any>('/admin/repair-links', { method: 'POST', token });
-      Alert.alert(t('auditoria_finalizada_title'), t('auditoria_finalizada_msg', { reconstructed: res.reconstructed, total: res.total_records }));
+      // Logic to link orphan inspections to records
+      const { data: orphans, error: errOrp } = await supabase
+        .from('inspections')
+        .select('*')
+        .is('record_id', null);
+
+      if (errOrp) throw errOrp;
+
+      let reconstructed = 0;
+      const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
+      const getDate = (s: string) => s?.substring(0, 10) || '';
+
+      for (const insp of (orphans || [])) {
+        const normP = normalize(insp.plates);
+        const date = getDate(insp.created_at);
+
+        const match = allRecords.find(r =>
+          normalize(r.entry?.placas_unidad) === normP && getDate(r.created_at) === date
+        );
+
+        if (match) {
+          await supabase.from('inspections').update({ record_id: match.id }).eq('id', insp.id);
+          reconstructed++;
+        }
+      }
+
+      Alert.alert(t('auditoria_finalizada_title'), t('auditoria_finalizada_msg', { reconstructed, total_records: allRecords.length }));
       await fetchEverything();
     } catch (e: any) {
       Alert.alert(t('error'), e.message);
@@ -271,16 +286,15 @@ export default function Supervisor() {
   const handleDeepRepair = async () => {
     Alert.alert(
       '🔧 Reparación Profunda',
-      'Esto analizará y corregirá vínculos rotos, inspecciones de otros días, duplicados y tickets sin ligar. ¿Continuar?',
+      'Esto analizará y corregirá vínculos rotos e inspecciones huérfanas en el cliente. ¿Continuar?',
       [
         { text: 'Cancelar', style: 'cancel' },
         { text: 'Reparar', style: 'destructive', onPress: async () => {
           setSyncing(true);
           try {
-            const res = await apiCall<any>('/admin/deep-repair-links', { method: 'POST', token });
-            const msg = `Correcciones realizadas: ${res.total_fixed}\n• Inspecciones huérfanas: ${res.fixed_insp_orphans}\n• Tickets huérfanos: ${res.fixed_ticket_orphans}\n• Vínculos cruzados: ${res.removed_cross_links}`;
-            Alert.alert('✅ Reparación Completada', msg);
-            await fetchEverything();
+            // Similar logic to handleRepair but more aggressive or checking other fields
+            await handleRepair();
+            Alert.alert('✅ Reparación Completada', 'Se intentaron vincular todas las inspecciones huérfanas detectadas.');
           } catch (e: any) {
             Alert.alert('Error', e.message);
           } finally {
@@ -294,16 +308,14 @@ export default function Supervisor() {
   const handleForceSync = async () => {
     Alert.alert(
       '🔄 Forzar Sincronización',
-      'Esto buscará inspecciones y tickets que se generaron en otros dispositivos sin conexión y los vinculará a sus registros correspondientes. ¿Continuar?',
+      'Esto refrescará los datos locales desde Supabase. ¿Continuar?',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Forzar Sync', onPress: async () => {
+        { text: 'Sincronizar', onPress: async () => {
           setForceSyncing(true);
           try {
-            const res = await apiCall<any>('/admin/force-sync-orphans', { method: 'POST', token });
-            const msg = `Resultados:\n• Inspecciones vinculadas: ${res.fixed_inspections}\n• Tickets vinculados: ${res.fixed_tickets}\n• Registros creados: ${res.created_records}`;
-            Alert.alert('✅ Sincronización Completada', msg);
             await fetchEverything();
+            Alert.alert('✅ Sincronización Completada', 'Los datos han sido actualizados.');
           } catch (e: any) {
             Alert.alert('Error', e.message);
           } finally {
@@ -384,29 +396,22 @@ export default function Supervisor() {
   const handlePdf = async (item: any) => {
     setReportLoading(item.id);
     try {
-      let recordId = item.id;
+      const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
       const getDate = (s: string) => s?.substring(0, 10) || '';
-      if (item._is_virtual || !recordId || recordId.startsWith('p-')) {
-        // Registro virtual (solo de inspección/embarque, sin caseta real) —
-        // caemos al generador local como respaldo.
-        const norm = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
-        const plates = item.placas_unidad || item.entry?.placas_unidad;
-        const normPlates = norm(plates);
-        const itemDate = getDate(item.created_at || item.entry?.fecha_entrada);
-        const matchTicket = allTickets.find(tk => norm(tk.placas_unidad) === normPlates && getDate(tk.created_at) === itemDate);
-        const matchInsps = allInspections.filter(i => i.record_id === item.id || (norm(i.placas_unidad) === normPlates && getDate(i.created_at) === itemDate));
-        const html = generateConsolidatedReportHtml({
-          inspection: matchInsps[0] || { points: [] } as any,
-          inspections: matchInsps,
-          caseta: item.entry ? item : null,
-          embarque: matchTicket
-        });
-        await outputPdf(html);
-        return;
-      }
+      const plates = item.placas_unidad || item.entry?.placas_unidad;
+      const normPlates = normalize(plates);
+      const itemDate = getDate(item.created_at || item.entry?.fecha_entrada);
 
-      const res = await apiCall<{ html: string }>(`/report/html/${recordId}`, { token });
-      await outputPdf(res.html);
+      const matchTicket = allTickets.find(tk => normalize(tk.placas_unidad) === normPlates && getDate(tk.created_at) === itemDate);
+      const matchInsps = allInspections.filter(i => i.record_id === item.id || (normalize(i.placas_unidad) === normPlates && getDate(i.created_at) === itemDate));
+
+      const html = generateConsolidatedReportHtml({
+        inspection: matchInsps[0] || { points: [] } as any,
+        inspections: matchInsps,
+        caseta: item.entry ? item : null,
+        embarque: matchTicket
+      });
+      await outputPdf(html);
     } catch (e: any) {
       Alert.alert(t('error'), e.message);
     } finally {
@@ -601,8 +606,33 @@ function DuplicatesModal({ visible, token, onClose, onMerged }: {
     if (!token) return;
     setLoading(true);
     try {
-      const res = await apiCall<any>('/admin/duplicate-plates', { token });
-      setGroups(res.groups || []);
+      // Reemplazamos apiCall con lógica de cliente o RPC si existiera
+      // Por simplicidad, implementamos una búsqueda básica de duplicados por placa
+      const { data, error } = await supabase.from('vehicle_records').select('*');
+      if (error) throw error;
+
+      const recordMap: Record<string, any[]> = {};
+      (data || []).forEach(r => {
+        const p = (r.plates || '').toUpperCase();
+        if (!recordMap[p]) recordMap[p] = [];
+        recordMap[p].push(r);
+      });
+
+      const dupGroups = Object.entries(recordMap)
+        .filter(([_, recs]) => recs.length > 1)
+        .map(([plates, recs]) => ({
+          canon: plates,
+          records: recs.map(r => ({
+            id: r.id,
+            placas: r.plates,
+            chofer: r.entry_data?.chofer_nombre,
+            status: r.status,
+            created_at: r.created_at,
+            has_shipping_ticket: !!r.shipping_ticket_id
+          }))
+        }));
+
+      setGroups(dupGroups);
     } catch (e: any) {
       Alert.alert('Error', e.message);
     } finally {
@@ -615,16 +645,18 @@ function DuplicatesModal({ visible, token, onClose, onMerged }: {
   const handleMerge = (keepId: string, removeId: string, keepPlates: string, removePlates: string) => {
     Alert.alert(
       'Fusionar registros',
-      `Se conservará "${keepPlates}" y se le pasarán todas las inspecciones y el ticket de "${removePlates}". El duplicado "${removePlates}" se eliminará. ¿Continuar?`,
+      `Se conservará "${keepPlates}" y se le pasarán todas las inspecciones de "${removePlates}". El duplicado se eliminará. ¿Continuar?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Fusionar', style: 'destructive', onPress: async () => {
             setMerging(removeId);
             try {
-              await apiCall('/admin/merge-vehicle-records', {
-                method: 'POST', token, body: { keep_id: keepId, remove_id: removeId }
-              });
+              // 1. Mover inspecciones
+              await supabase.from('inspections').update({ record_id: keepId }).eq('record_id', removeId);
+              // 2. Eliminar duplicado
+              await supabase.from('vehicle_records').delete().eq('id', removeId);
+
               await load();
               onMerged();
             } catch (e: any) {
@@ -781,7 +813,7 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
     Alert.alert(
       t('eliminar_proceso_title') || 'Eliminar proceso',
       (t('eliminar_proceso_msg', { plates }) as string) ||
-        `¿Seguro que quieres eliminar el proceso de la unidad ${plates}? Esto lo borra de la base de datos, de Google Sheets y de la evidencia en Drive. No se puede deshacer.`,
+        `¿Seguro que quieres eliminar el proceso de la unidad ${plates}? No se puede deshacer.`,
       [
         { text: t('cancelar') || 'Cancelar', style: 'cancel' },
         {
@@ -790,7 +822,9 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
           onPress: async () => {
             setDeleting(true);
             try {
-              await apiCall(deleteEndpoint, { method: 'DELETE', token });
+              const table = type === 'inspeccion' ? 'inspections' : type === 'embarque' ? 'shipping_tickets' : 'vehicle_records';
+              const { error } = await supabase.from(table).delete().eq('id', item.id);
+              if (error) throw error;
               onDeleted?.();
             } catch (e: any) {
               Alert.alert(t('error') || 'Error', e.message);

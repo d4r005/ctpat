@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Signature from '@/src/components/SignaturePad';
 import { useTranslation } from 'react-i18next';
+import { supabase } from '@/src/api/supabase';
 import { apiCall } from '@/src/api/client';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
@@ -52,19 +53,26 @@ export default function EmbarqueNuevo() {
     const fetchRecord = async () => {
       if (params.record_id && !form.placas_unidad) {
         try {
-          const rec = await apiCall<any>(`/vehicle-records/${params.record_id}`, { token });
-          if (rec && rec.entry) {
+          const { data: rec, error } = await supabase
+            .from('vehicle_records')
+            .select('*')
+            .eq('id', params.record_id)
+            .single();
+
+          if (error) throw error;
+          if (rec && rec.entry_data) {
+            const entry = rec.entry_data;
             setForm(prev => ({
               ...prev,
-              operador: rec.entry.chofer_nombre || prev.operador,
-              linea_transporte: rec.entry.compania_transporte || prev.linea_transporte,
-              placas_unidad: rec.entry.placas_unidad || prev.placas_unidad,
-              numero_caja: rec.entry.numero_caja || prev.numero_caja,
-              placas_caja: rec.entry.placas_caja || prev.placas_caja || '',
-              numero_economico: rec.entry.numero_tractor || prev.numero_economico || '',
-              hora_llegada: rec.entry.hora_llegada || (rec.entry.fecha_entrada ? new Date(rec.entry.fecha_entrada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : prev.hora_llegada),
-              numero_orden_compra: rec.entry.numero_orden_compra || prev.numero_orden_compra,
-              observaciones: rec.entry.destino ? `${t('destino_caps')}: ${rec.entry.destino}` : prev.observaciones,
+              operador: entry.chofer_nombre || prev.operador,
+              linea_transporte: entry.compania_transporte || prev.linea_transporte,
+              placas_unidad: entry.placas_unidad || prev.placas_unidad,
+              numero_caja: entry.numero_caja || prev.numero_caja,
+              placas_caja: entry.placas_caja || prev.placas_caja || '',
+              numero_economico: entry.numero_tractor || prev.numero_economico || '',
+              hora_llegada: entry.hora_llegada || (rec.created_at ? new Date(rec.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : prev.hora_llegada),
+              numero_orden_compra: entry.numero_orden_compra || prev.numero_orden_compra,
+              observaciones: entry.destino ? `${t('destino_caps')}: ${entry.destino}` : prev.observaciones,
             }));
           }
         } catch (e) {

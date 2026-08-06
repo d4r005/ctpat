@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
-import { apiCall } from '@/src/api/client';
+import { supabase } from '@/src/api/supabase';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import ProcessTracker from '@/src/components/ProcessTracker';
 import MainHeader from '@/src/components/MainHeader';
@@ -28,13 +28,27 @@ export default function Historico() {
   const fetchExtra = useCallback(async () => {
     if (!token) return;
     try {
-      const [r, tick] = await Promise.all([
-        apiCall<any[]>('/vehicle-records', { token }),
-        apiCall<any[]>('/shipping-tickets', { token })
+      const [recsRes, ticksRes] = await Promise.all([
+        supabase.from('vehicle_records').select('*'),
+        supabase.from('shipping_tickets').select('*')
       ]);
-      setRecords(r);
-      setTickets(tick);
-    } catch {}
+
+      if (recsRes.data) {
+        setRecords(recsRes.data.map(r => ({
+          ...r,
+          entry: r.entry_data,
+          exit: r.exit_data
+        })));
+      }
+      if (ticksRes.data) {
+        setTickets(ticksRes.data.map(tk => ({
+          ...tk,
+          ...tk.data
+        })));
+      }
+    } catch (e) {
+      console.error("Error fetching extra data:", e);
+    }
   }, [token]);
 
   React.useEffect(() => {

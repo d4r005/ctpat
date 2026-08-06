@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Signature from '@/src/components/SignaturePad';
 import { apiCall } from '@/src/api/client';
+import { supabase } from '@/src/api/supabase';
 import { useAuth } from '@/src/context/AuthContext';
 import { useInspections } from '@/src/context/InspectionContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
@@ -23,7 +24,7 @@ export default function CasetaDetail() {
   const isTablet = useIsTablet();
   const { t } = useTranslation();
   const { token, user } = useAuth();
-  const { patchVehicleExit } = useInspections();
+  const { patchVehicleExit, updateVehicleRecord } = useInspections();
 
   const [rec, setRec] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -81,44 +82,58 @@ export default function CasetaDetail() {
     setLoading(true);
     setLoadError(null);
     try {
-      const data = await apiCall<any>(`/vehicle-records/${id}`, { token });
+      // 1. Fetch main vehicle record
+      const { data, error } = await supabase
+        .from('vehicle_records')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) throw error;
+
       if (data) {
-        setRec(data);
-        setEntryForm(JSON.parse(JSON.stringify(data.entry)));
+        const mappedRec = {
+          ...data,
+          entry: data.entry_data,
+          exit: data.exit_data,
+          status: data.exit_data ? 'salida' : (data.inspection_id ? 'inspeccionado' : 'entrada')
+        };
+        setRec(mappedRec);
+        setEntryForm(JSON.parse(JSON.stringify(data.entry_data)));
 
         // --- Lógica de Autollenado de Salida ---
-        // Buscamos si existe un ticket de embarque para esta unidad para jalar sus datos.
         let ticketData: any = null;
         try {
-          const tickets = await apiCall<any[]>(`/shipping-tickets?record_id=${id}`, { token });
-          if (tickets && tickets.length > 0) {
-            ticketData = tickets[0];
+          // Find ticket where data contains record_id = id
+          const { data: tickets, error: ticketErr } = await supabase
+            .from('shipping_tickets')
+            .select('*')
+            .filter('data->>record_id', 'eq', id);
+
+          if (!ticketErr && tickets && tickets.length > 0) {
+            ticketData = tickets[0].data;
           }
         } catch (e) {
           console.log("No se encontró ticket de embarque para autollenado");
         }
 
-        if (data.exit) {
-          const autoSello = data.entry?.condicion_carga === 'descarga' && !data.exit?.sello_vvtt_estado
+        if (mappedRec.exit) {
+          const autoSello = mappedRec.entry?.condicion_carga === 'descarga' && !mappedRec.exit?.sello_vvtt_estado
             ? { sello_vvtt_estado: 'SELLO ROTO' }
             : {};
-          setExitData((prev: any) => ({ ...prev, ...data.exit, ...autoSello }));
+          setExitData((prev: any) => ({ ...prev, ...mappedRec.exit, ...autoSello }));
           setShowExit(true);
         } else {
-          // Si es un registro nuevo de salida, intentamos pre-llenar con lo que
-          // se capturó en la entrada o en el ticket de embarque.
-          const isDescarga = data.entry?.condicion_carga === 'descarga';
+          const isDescarga = mappedRec.entry?.condicion_carga === 'descarga';
           setExitData((prev: any) => ({
             ...prev,
             sello_vvtt_estado: isDescarga ? 'SELLO ROTO' : '',
-            // Las placas suelen ser las mismas que al entrar
-            placas_unidad_salida: data.entry?.placas_unidad || '',
-            placas_caja_salida: data.entry?.placas_caja || '',
-            numero_tractor_salida: data.entry?.numero_tractor || '',
-            numero_caja_salida: data.entry?.numero_caja || '',
-            numero_caja_salida_2: data.entry?.numero_caja_2 || '',
-            destino: data.entry?.destino || '',
-            // Si hay ticket de embarque, priorizamos los sellos y cantidades que puso el almacenista
+            placas_unidad_salida: mappedRec.entry?.placas_unidad || '',
+            placas_caja_salida: mappedRec.entry?.placas_caja || '',
+            numero_tractor_salida: mappedRec.entry?.numero_tractor || '',
+            numero_caja_salida: mappedRec.entry?.numero_caja || '',
+            numero_caja_salida_2: mappedRec.entry?.numero_caja_2 || '',
+            destino: mappedRec.entry?.destino || '',
             sello_salida: ticketData?.numero_sello || '',
             pallets: ticketData?.numero_pallets || '',
             cajas: ticketData?.cajas || '',
@@ -127,13 +142,9 @@ export default function CasetaDetail() {
         }
       }
     } catch (e: any) {
-      // Distinguimos "el registro realmente no existe" (404 con mensaje claro
-      // del backend) de cualquier otro fallo (red, timeout, Space reiniciando).
-      // Antes ambos casos mostraban la misma pantalla de "no hay registro",
-      // lo cual era engañoso cuando en realidad el registro sí existe pero la
-      // petición falló temporalmente.
+      console.error("Error loading record:", e);
       const msg = e?.message || '';
-      const notFound = msg.includes('Registro no encontrado') || msg.includes('404');
+      const notFound = msg.includes('PGRST116') || msg.includes('404'); // PGRST116 is single() not found
       setLoadError({ notFound, message: msg || t('error_cargar_datos') });
       if (notFound) {
         Alert.alert(t('error'), t('error_cargar_datos'));
@@ -148,7 +159,7 @@ export default function CasetaDetail() {
   const handleUpdateEntry = async () => {
     setSaving(true);
     try {
-      await apiCall(`/vehicle-records/${id}`, { method: 'PUT', body: { entry: entryForm }, token });
+      await updateVehicleRecord(id as string, entryForm);
       setEditEntry(false);
       load();
       Alert.alert(t('exito'), t('registro_actualizado'));
@@ -193,7 +204,13 @@ export default function CasetaDetail() {
           onPress: async () => {
             setDeletingExit(true);
             try {
-              await apiCall(`/vehicle-records/${id}/exit`, { method: 'DELETE', token });
+              const { error } = await supabase
+                .from('vehicle_records')
+                .update({ exit_data: null })
+                .eq('id', id);
+
+              if (error) throw error;
+
               setExitData({
                 cortina_salida: '', sello_salida: '', sello_salida_2: '', condicion_salida: '',
                 numero_tractor_salida: '', numero_caja_salida: '', numero_caja_salida_2: '',

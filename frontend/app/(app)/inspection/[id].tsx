@@ -10,7 +10,7 @@ import { compressImage } from '@/src/utils/image';
 import Signature from '@/src/components/SignaturePad';
 import { useInspections, Inspection, InspectionPoint } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
-import { apiCall } from '@/src/api/client';
+import { supabase } from '@/src/api/supabase';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import { sanitizePlate } from '@/src/utils/text';
 import { getInspectionPoints } from '@/src/constants/inspectionPoints';
@@ -186,7 +186,8 @@ export default function InspectionDetail() {
           onPress: async () => {
             setDeleting(true);
             try {
-              await apiCall(`/inspections/${id}`, { method: 'DELETE', token });
+              const { error } = await supabase.from('inspections').delete().eq('id', id);
+              if (error) throw error;
               router.canGoBack() ? router.back() : router.replace('/(app)/supervisor');
             } catch (e: any) {
               Alert.alert(t('error') || 'Error', e.message);

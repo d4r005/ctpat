@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
-import { apiCall } from '@/src/api/client';
+import { supabase } from '@/src/api/supabase';
 import { colors, spacing } from '@/src/constants/theme';
 import ProcessTracker from '@/src/components/ProcessTracker';
 import MainHeader from '@/src/components/MainHeader';
@@ -29,9 +29,24 @@ export default function CasetaList() {
     if (!token) return;
     setLoading(true);
     try {
-      const data = await apiCall<any[]>('/vehicle-records', { token });
-      setRecords(Array.isArray(data) ? data : []);
-    } catch { setRecords([]); }
+      const { data, error } = await supabase
+        .from('vehicle_records')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const mapped = (data || []).map(r => ({
+        ...r,
+        entry: r.entry_data,
+        exit: r.exit_data,
+        status: r.exit_data ? 'salida' : (r.inspection_id ? 'inspeccionado' : 'entrada')
+      }));
+      setRecords(mapped);
+    } catch (e) {
+      console.error("Error loading vehicle records:", e);
+      setRecords([]);
+    }
     finally { setLoading(false); }
   }, [token]);
 

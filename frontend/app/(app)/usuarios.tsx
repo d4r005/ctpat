@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { apiCall } from '@/src/api/client';
+import { supabase } from '@/src/api/supabase';
 import { useAuth, User } from '@/src/context/AuthContext';
 import { colors, spacing, typography } from '@/src/constants/theme';
 
@@ -30,8 +30,19 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
   const load = async () => {
     setLoading(true);
     try {
-      const data = await apiCall<User[]>('/users', { token });
-      setUsers(data);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('full_name');
+
+      if (error) throw error;
+      setUsers(data.map(d => ({
+        id: d.id,
+        email: d.email || '',
+        name: d.full_name || '',
+        role: d.role,
+        active: d.active
+      })));
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
   };
@@ -43,7 +54,11 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
   const handleToggle = async (u: User) => {
     if (u.id === user?.id) return;
     try {
-      await apiCall(`/users/${u.id}/toggle-active`, { method: 'POST', token });
+      const { error } = await supabase
+        .from('profiles')
+        .update({ active: !u.active })
+        .eq('id', u.id);
+      if (error) throw error;
       await load();
     } catch (e: any) { alert(e.message); }
   };
@@ -52,7 +67,10 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
     if (u.id === user?.id) return;
     if (!confirm(`${t('confirmar_eliminar_usuario')} ${u.name}?`)) return;
     try {
-      await apiCall(`/users/${u.id}`, { method: 'DELETE', token });
+      const { error } = await supabase.functions.invoke('delete-user', {
+        body: { user_id: u.id }
+      });
+      if (error) throw error;
       await load();
     } catch (e: any) { alert(e.message); }
   };
@@ -95,31 +113,39 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
     setCreating(true);
     try {
       if (editingUser) {
-        await apiCall(`/users/${editingUser.id}`, {
-          method: 'PATCH', token,
-          body: {
-            name: newName.trim().toUpperCase(), // Mayúsculas para nombres
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            full_name: newName.trim().toUpperCase(),
             email: newEmail.trim().toLowerCase(),
             role: newRole,
-            ...(newPassword.length >= 6 ? { password: newPassword } : {})
-          },
-        });
+          })
+          .eq('id', editingUser.id);
+
+        if (error) throw error;
+
+        if (newPassword.length >= 6) {
+           await supabase.functions.invoke('update-user-password', {
+             body: { user_id: editingUser.id, password: newPassword }
+           });
+        }
       } else {
-        await apiCall('/users/create-inspector', {
-          method: 'POST', token,
+        const { error } = await supabase.functions.invoke('create-user', {
           body: {
-            name: newName.trim().toUpperCase(), // Mayúsculas para nombres
+            name: newName.trim().toUpperCase(),
             email: newEmail.trim().toLowerCase(),
             password: newPassword,
             role: newRole
           },
         });
+        if (error) throw error;
       }
       handleCloseModal();
       await load();
     } catch (e: any) { setError(e.message); }
     finally { setCreating(false); }
   };
+
 
   if (!isSupervisorOrAdmin) {
     return (
