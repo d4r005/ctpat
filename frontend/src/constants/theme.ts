@@ -5,60 +5,60 @@
 // ─────────────────────────────────────────────────────────────
 
 export const colors = {
-  // Neutral surfaces — layered grays for depth
-  surface: '#F0F2F5',          // page background (slightly cooler)
-  onSurface: '#0F172A',
-  surfaceSecondary: '#FFFFFF',  // cards, panels
-  onSurfaceSecondary: '#0F172A',
-  surfaceTertiary: '#F8FAFC',   // subtle hover/alt rows
-  onSurfaceTertiary: '#334155',
-  surfaceInverse: '#0A2540',
+  // Neutral surfaces — Modern Slate scale
+  surface: '#F8FAFC',          // bg-slate-50
+  onSurface: '#0F172A',        // text-slate-900
+  surfaceSecondary: '#FFFFFF',  // Pure White for cards
+  onSurfaceSecondary: '#1E293B',// text-slate-800
+  surfaceTertiary: '#F1F5F9',   // bg-slate-100 (subtle hover)
+  onSurfaceTertiary: '#475569', // text-slate-600
+  surfaceInverse: '#0F172A',
   onSurfaceInverse: '#FFFFFF',
 
-  // Brand — deep navy with gold accent
-  brand: '#0A2540',
-  brandPrimary: '#0A2540',
-  brandPrimaryDark: '#061A2E',
-  brandPrimaryLight: '#123456',
-  brandPrimaryHover: '#0E2F50',
+  // Brand — Professional Midnight Navy + Gold
+  brand: '#0F172A',
+  brandPrimary: '#0F172A',
+  brandPrimaryDark: '#020617',
+  brandPrimaryLight: '#1E293B',
+  brandPrimaryHover: '#1E293B',
   onBrandPrimary: '#FFFFFF',
-  brandSecondary: '#C9962C',
-  brandSecondaryLight: '#F0C36B',
-  onBrandSecondary: '#0F1B2D',
-  brandTertiary: '#E8EEF7',
-  onBrandTertiary: '#0A2540',
+  brandSecondary: '#F59E0B',    // Amber 500 (Gold)
+  brandSecondaryLight: '#FBBF24',
+  onBrandSecondary: '#0F172A',
+  brandTertiary: '#E2E8F0',
+  onBrandTertiary: '#0F172A',
 
-  // Semantic — slightly softer for better contrast on white
-  success: '#15803D',
-  successSurface: '#DCFCE7',
-  onSuccess: '#FFFFFF',
-  warning: '#B45309',
+  // Semantic — Refined high-contrast tones
+  success: '#10B981',           // Emerald 500
+  successSurface: '#D1FAE5',
+  onSuccess: '#065F46',
+  warning: '#F59E0B',           // Amber 500
   warningSurface: '#FEF3C7',
-  onWarning: '#FFFFFF',
-  error: '#DC2626',
+  onWarning: '#92400E',
+  error: '#EF4444',              // Red 500
   errorSurface: '#FEE2E2',
-  onError: '#FFFFFF',
-  info: '#2563EB',
+  onError: '#991B1B',
+  info: '#3B82F6',               // Blue 500
   infoSurface: '#DBEAFE',
-  onInfo: '#FFFFFF',
+  onInfo: '#1E40AF',
 
   // Structure
-  border: '#E2E8F0',
-  borderStrong: '#CBD5E1',
-  divider: '#F1F5F9',
-  muted: '#64748B',
-  mutedLight: '#94A3B8',
-  mutedDark: '#475569',
+  border: '#E2E8F0',            // Slate 200
+  borderStrong: '#CBD5E1',      // Slate 300
+  divider: '#F1F5F9',           // Slate 100
+  muted: '#64748B',             // Slate 500
+  mutedLight: '#94A3B8',        // Slate 400
+  mutedDark: '#334155',         // Slate 700
 
-  // Sidebar-specific tones
-  sidebarBg: '#0A2540',
-  sidebarHover: 'rgba(255,255,255,0.06)',
-  sidebarActive: 'rgba(255,255,255,0.10)',
-  sidebarActiveBar: '#C9962C',
-  sidebarText: 'rgba(255,255,255,0.55)',
+  // Sidebar-specific tones (Midnight theme)
+  sidebarBg: '#0F172A',
+  sidebarHover: 'rgba(255,255,255,0.04)',
+  sidebarActive: 'rgba(255,255,255,0.08)',
+  sidebarActiveBar: '#F59E0B',
+  sidebarText: '#94A3B8',
   sidebarTextActive: '#FFFFFF',
-  sidebarBorder: 'rgba(255,255,255,0.08)',
-  sidebarSectionLabel: 'rgba(255,255,255,0.35)',
+  sidebarBorder: 'rgba(255,255,255,0.06)',
+  sidebarSectionLabel: '#475569',
 };
 
 export const spacing = {
@@ -96,46 +96,38 @@ export const typography = {
   },
 };
 
-// Layered elevation — premium soft shadows
+// Layered elevation — high-end diffuse shadows
 export const shadows = {
   xs: {
-    shadowColor: '#0F172A',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
     elevation: 1,
-    boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
   },
   sm: {
     shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
-    shadowRadius: 6,
+    shadowRadius: 8,
     elevation: 2,
-    boxShadow: '0 1px 6px rgba(15, 23, 42, 0.05)',
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1)',
   },
   md: {
     shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.07,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 15,
     elevation: 4,
-    boxShadow: '0 4px 12px rgba(15, 23, 42, 0.07)',
+    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1)',
   },
   lg: {
     shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.10,
-    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.08,
+    shadowRadius: 25,
     elevation: 8,
-    boxShadow: '0 8px 24px rgba(15, 23, 42, 0.10)',
-  },
-  xl: {
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.14,
-    shadowRadius: 32,
-    elevation: 12,
-    boxShadow: '0 12px 32px rgba(15, 23, 42, 0.14)',
+    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
   },
 };
