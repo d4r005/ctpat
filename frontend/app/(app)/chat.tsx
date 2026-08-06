@@ -66,7 +66,7 @@ export default function ChatScreen() {
       .eq('user_id', user.id)
       .eq('kind', 'chat')
       .then(() => refreshNotifications())
-      .catch(() => {});
+      .then(undefined, () => {});
   }, [token, room, refreshNotifications, user]);
 
   const handleChangeText = (v: string) => {

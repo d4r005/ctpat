@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Pressable, TextInput, RefreshControl, Platform,
-  ActivityIndicator, Alert, ScrollView, Modal, KeyboardAvoidingView, TouchableOpacity
+  ActivityIndicator, Alert, ScrollView, Modal, KeyboardAvoidingView, FlatList,
+  useWindowDimensions
 } from 'react-native';
-import { useIsTablet } from '@/src/hooks/useIsTablet';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -13,30 +13,20 @@ import { useTranslation } from 'react-i18next';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
 import { supabase } from '@/src/api/supabase';
-import { colors, spacing, typography, radius, shadows } from '@/src/constants/theme';
+import { colors, spacing, radius, shadows } from '@/src/constants/theme';
 import { generateConsolidatedReportHtml } from '@/src/utils/reportGenerator';
 import ProcessTracker from '@/src/components/ProcessTracker';
 import MainHeader from '@/src/components/MainHeader';
 
+const isWeb = Platform.OS === 'web';
 type TabType = 'caseta' | 'inspeccion' | 'embarque';
 
 // ─── Modal de Envío de Correo ───────────────────────────────────────────────
-function EmailModal({
-  visible,
-  recordId,
-  plates,
-  token,
-  onClose,
-}: {
-  visible: boolean;
-  recordId: string;
-  plates: string;
-  token: string;
-  onClose: () => void;
+function EmailModal({ visible, recordId, plates, token, onClose }: {
+  visible: boolean; recordId: string; plates: string; token: string; onClose: () => void;
 }) {
   const { t } = useTranslation();
   const DEFAULT_EMAIL = 'd.trujillo@brancoindustries.com';
-  const isTablet = useIsTablet();
   const [extraInput, setExtraInput] = useState('');
   const [extraList, setExtraList] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
@@ -49,135 +39,359 @@ function EmailModal({
     if (!isValidEmail(e)) { Alert.alert(t('email_invalido_title'), t('email_invalido_msg')); return; }
     if (e === DEFAULT_EMAIL.toLowerCase()) { Alert.alert(t('ya_incluido_title'), t('ya_incluido_msg')); return; }
     if (extraList.includes(e)) { Alert.alert(t('duplicado_title'), t('duplicado_msg')); return; }
-    setExtraList(prev => [...prev, e]);
-    setExtraInput('');
+    setExtraList(prev => [...prev, e]); setExtraInput('');
   };
 
   const removeEmail = (e: string) => setExtraList(prev => prev.filter(x => x !== e));
 
   const handleSend = async () => {
-    setSending(true);
-    setResult(null);
+    setSending(true); setResult(null);
     try {
-      // NOTA: El envío de correo requiere una Edge Function en Supabase llamada 'send-report-email'
       const { data, error } = await supabase.functions.invoke('send-report-email', {
         body: { record_id: recordId, extra_emails: extraList }
       });
       if (error) throw error;
       setResult({ ok: true, msg: data?.message || t('reporte_en_camino') });
-    } catch (e: any) {
-      setResult({ ok: false, msg: e.message || t('error_enviar_correo') });
-    } finally {
-      setSending(false);
-    }
+    } catch (e: any) { setResult({ ok: false, msg: e.message || t('error_enviar_correo') }); }
+    finally { setSending(false); }
   };
 
-  const handleClose = () => {
-    setExtraInput('');
-    setExtraList([]);
-    setResult(null);
-    onClose();
-  };
+  const handleClose = () => { setExtraInput(''); setExtraList([]); setResult(null); onClose(); };
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.modalBox}>
-          {/* Header */}
-          <View style={styles.modalHeader}>
-            <Ionicons name="mail" size={18} color="#FFF" />
-            <Text style={styles.modalTitle}>{t('enviar_reporte_correo').toUpperCase()}</Text>
+      <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={s.modalBox}>
+          <View style={s.modalHeader}>
+            <Ionicons name="mail" size={18} color="#FFFFFF" />
+            <Text style={s.modalTitle}>{t('enviar_reporte_correo').toUpperCase()}</Text>
             <Pressable onPress={handleClose} hitSlop={10}>
-              <Ionicons name="close" size={20} color="#FFF" />
+              <Ionicons name="close" size={20} color="#FFFFFF" />
             </Pressable>
           </View>
-
-          <View style={styles.modalBody}>
-            {/* Unidad */}
-            <View style={styles.modalInfo}>
-              <Text style={styles.modalInfoLabel}>{t('unidad')}</Text>
-              <Text style={styles.modalInfoValue}>{plates || 'N/A'}</Text>
+          <View style={s.modalBody}>
+            <View style={s.modalInfoRow}>
+              <Text style={s.modalInfoLabel}>{t('unidad')}</Text>
+              <Text style={s.modalInfoValue}>{plates || 'N/A'}</Text>
             </View>
-
-            {/* Destinatario fijo */}
-            <Text style={styles.sectionLabel}>{t('destinatario_principal_desc').toUpperCase()}</Text>
-            <View style={styles.fixedEmail}>
-              <Ionicons name="shield-checkmark-outline" size={14} color="#10B981" />
-              <Text style={styles.fixedEmailText}>{DEFAULT_EMAIL}</Text>
+            <Text style={s.sectionLabel}>{t('destinatario_principal_desc').toUpperCase()}</Text>
+            <View style={s.fixedEmailChip}>
+              <Ionicons name="shield-checkmark" size={14} color={colors.success} />
+              <Text style={s.fixedEmailText}>{DEFAULT_EMAIL}</Text>
             </View>
-
-            {/* Agregar correos extra */}
-            <Text style={[styles.sectionLabel, { marginTop: 14 }]}>{t('agregar_destinatarios').toUpperCase()}</Text>
-            <View style={styles.inputRow}>
-              <TextInput
-                style={styles.emailInput}
-                placeholder="correo@ejemplo.com"
-                placeholderTextColor="#9CA3AF"
-                value={extraInput}
-                onChangeText={setExtraInput}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                onSubmitEditing={addEmail}
-                returnKeyType="done"
-              />
-              <Pressable style={styles.addBtn} onPress={addEmail}>
-                <Ionicons name="add" size={18} color="#FFF" />
+            <Text style={[s.sectionLabel, { marginTop: 14 }]}>{t('agregar_destinatarios').toUpperCase()}</Text>
+            <View style={s.inputRow}>
+              <TextInput style={s.emailInput} placeholder="correo@ejemplo.com" placeholderTextColor={colors.mutedLight}
+                value={extraInput} onChangeText={setExtraInput} keyboardType="email-address" autoCapitalize="none"
+                onSubmitEditing={addEmail} returnKeyType="done" />
+              <Pressable style={s.addBtn} onPress={addEmail}>
+                <Ionicons name="add" size={18} color="#FFFFFF" />
               </Pressable>
             </View>
-
-            {/* Lista de extras */}
             {extraList.length > 0 && (
-              <View style={styles.extraList}>
+              <View style={s.extraList}>
                 {extraList.map(e => (
-                  <View key={e} style={styles.extraChip}>
-                    <Text style={styles.extraChipText}>{e}</Text>
+                  <View key={e} style={s.extraChip}>
+                    <Text style={s.extraChipText}>{e}</Text>
                     <Pressable onPress={() => removeEmail(e)} hitSlop={8}>
-                      <Ionicons name="close-circle" size={16} color="#EF4444" />
+                      <Ionicons name="close-circle" size={16} color={colors.error} />
                     </Pressable>
                   </View>
                 ))}
               </View>
             )}
-
-            {/* Resumen */}
-            <View style={styles.summaryBox}>
-              <Ionicons name="people-outline" size={14} color="#374151" />
-              <Text style={styles.summaryText}>
-                {t('destinatarios_total', { count: 1 + extraList.length })}
-              </Text>
+            <View style={s.summaryBox}>
+              <Ionicons name="people" size={14} color={colors.mutedDark} />
+              <Text style={s.summaryText}>{t('destinatarios_total', { count: 1 + extraList.length })}</Text>
             </View>
-
-            {/* Resultado */}
             {result && (
-              <View style={[styles.resultBox, { borderColor: result.ok ? '#10B981' : '#EF4444', backgroundColor: result.ok ? '#F0FDF4' : '#FEF2F2' }]}>
-                <Ionicons name={result.ok ? 'checkmark-circle' : 'alert-circle'} size={16} color={result.ok ? '#10B981' : '#EF4444'} />
-                <Text style={[styles.resultText, { color: result.ok ? '#065F46' : '#991B1B' }]}>{result.msg}</Text>
+              <View style={[s.resultBox, { borderColor: result.ok ? colors.success : colors.error, backgroundColor: result.ok ? colors.successSurface : colors.errorSurface }]}>
+                <Ionicons name={result.ok ? 'checkmark-circle' : 'alert-circle'} size={16} color={result.ok ? colors.success : colors.error} />
+                <Text style={[s.resultText, { color: result.ok ? colors.success : colors.error }]}>{result.msg}</Text>
               </View>
             )}
           </View>
-
-          {/* Botones */}
-          <View style={styles.modalFooter}>
-            <Pressable style={styles.cancelBtn} onPress={handleClose} disabled={sending}>
-              <Text style={styles.cancelBtnText}>{t('cancelar').toUpperCase()}</Text>
+          <View style={s.modalFooter}>
+            <Pressable style={s.cancelBtn} onPress={handleClose} disabled={sending}>
+              <Text style={s.cancelBtnText}>{t('cancelar').toUpperCase()}</Text>
             </Pressable>
-            <Pressable
-              style={[styles.sendBtn, sending && { opacity: 0.6 }]}
-              onPress={result?.ok ? handleClose : handleSend}
-              disabled={sending}
-            >
-              {sending
-                ? <ActivityIndicator size="small" color="#FFF" />
-                : <Ionicons name={result?.ok ? 'checkmark' : 'send'} size={16} color="#FFF" />
-              }
-              <Text style={styles.sendBtnText}>
-                {sending ? t('enviando').toUpperCase() : result?.ok ? t('cerrar').toUpperCase() : t('enviar_reporte').toUpperCase()}
-              </Text>
+            <Pressable style={[s.sendBtn, sending && { opacity: 0.6 }]} onPress={result?.ok ? handleClose : handleSend} disabled={sending}>
+              {sending ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name={result?.ok ? 'checkmark' : 'send'} size={16} color="#FFFFFF" />}
+              <Text style={s.sendBtnText}>{sending ? t('enviando').toUpperCase() : result?.ok ? t('cerrar').toUpperCase() : t('enviar_reporte').toUpperCase()}</Text>
             </Pressable>
           </View>
         </View>
       </KeyboardAvoidingView>
     </Modal>
+  );
+}
+
+// ─── DuplicatesModal ─────────────────────────────────────────────────────────
+function DuplicatesModal({ visible, token, onClose, onMerged }: { visible: boolean; token: string; onClose: () => void; onMerged: () => void; }) {
+  const [loading, setLoading] = useState(false);
+  const [groups, setGroups] = useState<any[]>([]);
+  const [merging, setMerging] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('vehicle_records').select('*');
+      if (error) throw error;
+      const recordMap: Record<string, any[]> = {};
+      (data || []).forEach(r => {
+        const p = (r.plates || '').toUpperCase();
+        if (!recordMap[p]) recordMap[p] = [];
+        recordMap[p].push(r);
+      });
+      const dupGroups = Object.entries(recordMap)
+        .filter(([_, recs]) => recs.length > 1)
+        .map(([plates, recs]) => ({
+          canon: plates,
+          records: recs.map(r => ({ id: r.id, placas: r.plates, chofer: r.entry_data?.chofer_nombre,
+            status: r.status, created_at: r.created_at, has_shipping_ticket: !!r.shipping_ticket_id }))
+        }));
+      setGroups(dupGroups);
+    } catch (e: any) { Alert.alert('Error', e.message); }
+    finally { setLoading(false); }
+  }, [token]);
+
+  React.useEffect(() => { if (visible) load(); }, [visible, load]);
+
+  const handleMerge = (keepId: string, removeId: string, keepPlates: string, removePlates: string) => {
+    Alert.alert('Fusionar registros',
+      `Se conservará "${keepPlates}" y se le pasarán todas las inspecciones de "${removePlates}". El duplicado se eliminará. ¿Continuar?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Fusionar', style: 'destructive', onPress: async () => {
+          setMerging(removeId);
+          try {
+            await supabase.from('inspections').update({ record_id: keepId }).eq('record_id', removeId);
+            await supabase.from('vehicle_records').delete().eq('id', removeId);
+            await load(); onMerged();
+          } catch (e: any) { Alert.alert('Error', e.message); }
+          finally { setMerging(null); }
+        }}
+      ]
+    );
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }}>
+        <View style={s.dupHeader}>
+          <Pressable onPress={onClose} style={s.dupBackBtn}><Ionicons name="arrow-back" size={22} color={colors.onSurface} /></Pressable>
+          <Text style={s.dupTitle}>Posibles duplicados por OCR</Text>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 16 }}>
+          <Text style={s.dupDesc}>
+            Se agrupan registros cuya placa difiere solo en un carácter fácilmente confundido por OCR
+            (Z/2, O/0, I/1, S/5, B/8, G/6). Elige cuál placa conservar — el otro registro se fusiona en ese y se elimina.
+          </Text>
+          {loading && <ActivityIndicator style={{ marginTop: 20 }} color={colors.brandPrimary} />}
+          {!loading && groups.length === 0 && (
+            <View style={s.dupEmpty}>
+              <Ionicons name="checkmark-circle" size={40} color={colors.success} />
+              <Text style={s.dupEmptyText}>No se encontraron duplicados por confusión de OCR 🎉</Text>
+            </View>
+          )}
+          {groups.map((g) => (
+            <View key={g.canon} style={s.dupGroup}>
+              {g.records.map((r: any) => (
+                <View key={r.id} style={s.dupRecord}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.dupPlates}>{r.placas}</Text>
+                    <Text style={s.dupMeta}>{r.chofer || '-'} · {r.status} · {r.has_shipping_ticket ? 'con ticket' : 'sin ticket'}</Text>
+                    <Text style={s.dupDate}>{new Date(r.created_at).toLocaleString()}</Text>
+                  </View>
+                  <Pressable disabled={merging === r.id} style={s.dupMergeBtn} onPress={() => {
+                    const other = g.records.find((x: any) => x.id !== r.id);
+                    if (other) handleMerge(r.id, other.id, r.placas, other.placas);
+                  }}>
+                    {merging === r.id ? <ActivityIndicator size={12} color="#FFFFFF" /> : <Text style={s.dupMergeBtnText}>Conservar</Text>}
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          ))}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+// ─── Tab Button ──────────────────────────────────────────────────────────────
+function TabBtn({ label, icon, active, on, isMCI }: any) {
+  const Icon = isMCI ? MaterialCommunityIcons : Ionicons;
+  return (
+    <Pressable
+      style={({ pressed }) => [s.tab, active && s.tabActive, pressed && !active && { backgroundColor: colors.surfaceTertiary }]}
+      onPress={on}
+    >
+      <Icon name={icon} size={18} color={active ? '#FFFFFF' : colors.mutedDark} />
+      <Text style={[s.tabText, active && s.tabTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+// ─── Master Row ──────────────────────────────────────────────────────────────
+function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records, tickets, inspections, isAdmin, token, onDeleted }: any) {
+  const [deleting, setDeleting] = useState(false);
+  const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
+  const getDate = (s: string) => s?.substring(0, 10) || '';
+  const plates = item.placas_unidad || item.entry?.placas_unidad || 'S/P';
+  const normPlates = normalize(plates);
+  const itemDate = getDate(item.created_at || item.entry?.fecha_entrada);
+  const subtitle = item.entry?.chofer_nombre || item.chofer_nombre || item.inspector_nombre || item.cliente || '-';
+  const company = item.entry?.compania_transporte || item.compania_transportista || '-';
+
+  const relatedRecord = type === 'caseta' ? (item._is_virtual ? null : item) : records.find((r: any) => normalize(r.entry?.placas_unidad) === normPlates && getDate(r.created_at) === itemDate);
+  const isFull = (relatedRecord?.entry?.tipo_unidad === 'full') || (item.inspection_type === '19_puntos' && item.numero_trailer?.includes('-2'));
+  const isDescarga = relatedRecord?.entry?.condicion_carga === 'descarga';
+  const showShipping = !isFull && !isDescarga;
+
+  const relatedInsps = inspections.filter((i: any) => i.record_id === relatedRecord?.id || (normalize(i.placas_unidad) === normPlates && getDate(i.created_at) === itemDate));
+  const matchTicket = tickets.find((tk: any) => normalize(tk.placas_unidad) === normPlates && getDate(tk.created_at) === itemDate);
+  const recordInspCount = (relatedRecord?.inspection_ids?.length || 0) + (relatedRecord?.inspection_id && !relatedRecord?.inspection_ids?.includes(relatedRecord.inspection_id) ? 1 : 0);
+  const totalInspCount = Math.max(recordInspCount, relatedInsps.length);
+  const inspectionComplete = isFull ? totalInspCount >= 2 : totalInspCount >= 1;
+  const hasTicket = !!(relatedRecord?.has_shipping_ticket || relatedRecord?.shipping_ticket_id || matchTicket);
+
+  const steps = {
+    entry: !!relatedRecord || item._is_virtual,
+    inspection: inspectionComplete,
+    shipping: hasTicket,
+    exit: relatedRecord?.status?.toLowerCase() === 'salida' || item.status?.toLowerCase() === 'salida' || !!(item.exit?.fecha_salida)
+  };
+
+  const rawStatus = relatedRecord?.status || (inspectionComplete ? 'inspeccionado' : 'entrada');
+  const status = rawStatus.toUpperCase();
+  const canEmail = !item._is_pending && (!!relatedRecord || (!item._is_virtual && item.entry));
+  const canGenerateTicket = !item._is_pending && inspectionComplete && !hasTicket && showShipping;
+  const linkedInspectionId = relatedRecord?.inspection_id || relatedInsps[0]?.id || (type === 'inspeccion' ? item.id : '');
+
+  const handleGenerateTicket = () => {
+    router.push({
+      pathname: '/embarque/nuevo',
+      params: {
+        record_id: relatedRecord?.id || '', inspection_id: linkedInspectionId || '',
+        placas: plates !== 'S/P' ? plates : '', compania: relatedRecord?.entry?.compania_transporte || '',
+        trailer: relatedRecord?.entry?.numero_caja || '', sello: relatedRecord?.entry?.sello_entrada || '',
+        operador: relatedRecord?.entry?.chofer_nombre || '', destino: relatedRecord?.entry?.destino || '',
+      },
+    });
+  };
+
+  const canDelete = isAdmin && !item._is_virtual && !item._is_pending && !!item.id;
+
+  const handleDelete = () => {
+    if (!canDelete || deleting) return;
+    Alert.alert(t('eliminar_proceso_title') || 'Eliminar proceso',
+      (t('eliminar_proceso_msg', { plates }) as string) || `¿Seguro que quieres eliminar el proceso de la unidad ${plates}? No se puede deshacer.`,
+      [
+        { text: t('cancelar') || 'Cancelar', style: 'cancel' },
+        { text: t('eliminar') || 'Eliminar', style: 'destructive', onPress: async () => {
+          setDeleting(true);
+          try {
+            const table = type === 'inspeccion' ? 'inspections' : type === 'embarque' ? 'shipping_tickets' : 'vehicle_records';
+            const { error } = await supabase.from(table).delete().eq('id', item.id);
+            if (error) throw error;
+            onDeleted?.();
+          } catch (e: any) { Alert.alert(t('error') || 'Error', e.message); }
+          finally { setDeleting(false); }
+        }}
+      ]
+    );
+  };
+
+  const statusColor = steps.exit ? colors.success : status === 'INSPECCIONADO' ? colors.info : status === 'ENTRADA' ? colors.warning : colors.mutedLight;
+  const statusSurface = steps.exit ? colors.successSurface : status === 'INSPECCIONADO' ? colors.infoSurface : status === 'ENTRADA' ? colors.warningSurface : colors.surfaceTertiary;
+  const statusLabel = steps.exit ? t('salio').toUpperCase() : status === 'INSPECCIONADO' ? t('inspeccion_ok').toUpperCase() : status === 'ENTRADA' ? t('entrada').toUpperCase() : status;
+
+  return (
+    <View style={s.masterRow}>
+      <View style={{ flex: 1 }}>
+        <View style={s.masterRowTop}>
+          <Text style={s.masterPlates}>
+            {plates} {item.numero_trailer ? `· ${item.numero_trailer}` : ''}{' '}
+            {item._is_virtual || item._is_pending ? `(${t('historico').toUpperCase()})` : ''}
+          </Text>
+          <View style={[s.statusBadge, { backgroundColor: statusSurface }]}>
+            <View style={[s.statusDot, { backgroundColor: statusColor }]} />
+            <Text style={[s.statusText, { color: statusColor }]}>{statusLabel}</Text>
+          </View>
+        </View>
+        <Text style={s.masterSub}>{subtitle} {company !== '-' ? `· ${company}` : ''}</Text>
+        <View style={{ marginVertical: 10 }}>
+          <ProcessTracker steps={steps} compact showShipping={showShipping} />
+        </View>
+        <View style={s.masterActions}>
+          <Pressable style={s.actionBtn} onPress={() => {
+            if (type === 'inspeccion') { router.push(`/inspection/${item.id}`); }
+            else if (type === 'embarque') {
+              if (item._is_pending_ticket) {
+                router.push({ pathname: '/embarque/nuevo', params: {
+                  inspection_id: item.id.replace('p-', ''), record_id: relatedRecord?.id || '',
+                  placas: item.placas_unidad || '', compania: relatedRecord?.entry?.compania_transporte || '',
+                  trailer: relatedRecord?.entry?.numero_caja || '', sello: relatedRecord?.entry?.sello_entrada || '',
+                  operador: item.operador || relatedRecord?.entry?.chofer_nombre || '', destino: relatedRecord?.entry?.destino || '',
+                }});
+              } else { router.push(`/embarque/${item.id}`); }
+            } else {
+              const targetId = item.record_id || relatedRecord?.id || (item._is_virtual ? null : item.id);
+              if (targetId) { router.push(`/caseta/${targetId}`); }
+              else if (item._is_virtual) {
+                router.push({ pathname: '/caseta/nuevo', params: {
+                  placas: item.entry?.placas_unidad || '', chofer: item.entry?.chofer_nombre || '',
+                  compania: item.entry?.compania_transporte || '', tractor: item.entry?.numero_tractor || '',
+                  caja: item.entry?.numero_caja || '', sello: item.entry?.sello_entrada || '',
+                }});
+              } else { router.push(`/caseta/${item.id}`); }
+            }
+          }}>
+            <Ionicons name="create-outline" size={14} color={colors.mutedDark} />
+            <Text style={s.actionBtnText}>{type === 'inspeccion' ? t('editar_inspeccion').toUpperCase() : type === 'embarque' ? t('editar_ticket').toUpperCase() : ((item._is_virtual && !relatedRecord) ? t('registrar_entrada').toUpperCase() : t('editor_caseta').toUpperCase())}</Text>
+          </Pressable>
+
+          <Pressable style={s.pdfBtn} onPress={onPdf} disabled={loadingPdf}>
+            <Ionicons name="eye-outline" size={15} color="#FFFFFF" />
+            <Text style={s.pdfBtnText}>{t('ver_reporte_pdf').toUpperCase()}</Text>
+            {loadingPdf && <ActivityIndicator size="small" color="#FFFFFF" style={{ marginLeft: 5 }} />}
+          </Pressable>
+
+          <Pressable style={[s.emailBtn, !canEmail && s.emailBtnDisabled]} onPress={canEmail ? onEmail : undefined} disabled={!canEmail}>
+            <Ionicons name="mail-outline" size={14} color={canEmail ? colors.brandPrimary : colors.mutedLight} />
+            <Text style={[s.emailBtnText, !canEmail && { color: colors.mutedLight }]}>{t('enviar_correo_caps').toUpperCase()}</Text>
+          </Pressable>
+
+          {canGenerateTicket && (
+            <Pressable style={s.ticketBtn} onPress={handleGenerateTicket}>
+              <Ionicons name="cube-outline" size={14} color="#FFFFFF" />
+              <Text style={s.ticketBtnText}>{(t('generar_ticket_caps') || 'GENERAR TICKET').toUpperCase()}</Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
+
+      <View style={s.masterSide}>
+        {type === 'embarque' && (
+          <View style={[s.sideBadge, { backgroundColor: item._is_pending_ticket ? colors.warningSurface : colors.successSurface, marginBottom: 4 }]}>
+            <Text style={[s.sideBadgeText, { color: item._is_pending_ticket ? colors.warning : colors.success }]}>
+              {item._is_pending_ticket ? t('pendiente').toUpperCase() : t('realizados').toUpperCase()}
+            </Text>
+          </View>
+        )}
+        <View style={[s.sideBadge, { backgroundColor: inspectionComplete ? colors.successSurface : colors.surfaceTertiary }]}>
+          <Text style={[s.sideBadgeText, { color: inspectionComplete ? colors.success : colors.mutedLight }]}>{inspectionComplete ? t('insp_completa').toUpperCase() : t('sin_inspeccion').toUpperCase()}</Text>
+        </View>
+        {canDelete && (
+          <Pressable style={s.deleteBtn} onPress={handleDelete} disabled={deleting}>
+            {deleting ? <ActivityIndicator size="small" color={colors.error} /> : <Ionicons name="trash-outline" size={16} color={colors.error} />}
+          </Pressable>
+        )}
+        <Text style={s.masterDate}>{new Date(item.created_at || item.entry?.fecha_entrada).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' })}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -187,23 +401,20 @@ export default function Supervisor() {
   const router = useRouter();
   const { allInspections, refreshAll: refreshInspections, loading: inspLoading } = useInspections();
   const { t, i18n } = useTranslation();
+  const { width } = useWindowDimensions();
+  const isDesktop = isWeb && width >= 1080;
 
   const isAdminOrSup = user?.role === 'admin' || user?.role === 'supervisor' ||
     ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
 
-  // Bloquear acceso directo (deep link) de roles sin permiso al panel maestro
   React.useEffect(() => {
-    if (user && !isAdminOrSup) {
-      router.replace('/inicio');
-    }
+    if (user && !isAdminOrSup) router.replace('/inicio');
   }, [user, isAdminOrSup, router]);
 
-  if (user && !isAdminOrSup) {
-    return null;
-  }
+  if (user && !isAdminOrSup) return null;
 
   const [activeTab, setActiveTab] = useState<TabType>('caseta');
-  const [selectedDate, setSelectedDate] = useState<string>(''); // '' = hoy
+  const [selectedDate, setSelectedDate] = useState<string>('');
   const [allRecords, setAllRecords] = useState<any[]>([]);
   const [allTickets, setAllTickets] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -211,18 +422,11 @@ export default function Supervisor() {
   const [forceSyncing, setForceSyncing] = useState(false);
   const [query, setQuery] = useState('');
   const [reportLoading, setReportLoading] = useState<string | null>(null);
-
-  // Modal email
-  const [emailModal, setEmailModal] = useState<{ visible: boolean; recordId: string; plates: string }>({
-    visible: false, recordId: '', plates: '',
-  });
+  const [emailModal, setEmailModal] = useState<{ visible: boolean; recordId: string; plates: string }>({ visible: false, recordId: '', plates: '' });
   const [duplicatesModalVisible, setDuplicatesModalVisible] = useState(false);
 
-  // Asegurar recarga al cambiar a pestaña inspección
   React.useEffect(() => {
-    if (activeTab === 'inspeccion' && token) {
-      refreshInspections();
-    }
+    if (activeTab === 'inspeccion' && token) refreshInspections();
   }, [activeTab, token, refreshInspections]);
 
   const fetchEverything = useCallback(async () => {
@@ -236,11 +440,8 @@ export default function Supervisor() {
       await refreshInspections();
       setAllRecords(recsRes.data?.map(r => ({ ...r, entry: r.entry_data, exit: r.exit_data })) || []);
       setAllTickets(ticksRes.data?.map(t => ({ ...t, ...t.data })) || []);
-    } catch (e) {
-      console.error("Error loading master data", e);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error("Error loading master data", e); }
+    finally { setLoading(false); }
   }, [token, refreshInspections]);
 
   useFocusEffect(useCallback(() => { fetchEverything(); }, [fetchEverything]));
@@ -248,81 +449,34 @@ export default function Supervisor() {
   const handleRepair = async () => {
     setSyncing(true);
     try {
-      // Logic to link orphan inspections to records
-      const { data: orphans, error: errOrp } = await supabase
-        .from('inspections')
-        .select('*')
-        .is('record_id', null);
-
+      const { data: orphans, error: errOrp } = await supabase.from('inspections').select('*').is('record_id', null);
       if (errOrp) throw errOrp;
-
       let reconstructed = 0;
       const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
       const getDate = (s: string) => s?.substring(0, 10) || '';
-
       for (const insp of (orphans || [])) {
         const normP = normalize(insp.plates);
         const date = getDate(insp.created_at);
-
-        const match = allRecords.find(r =>
-          normalize(r.entry?.placas_unidad) === normP && getDate(r.created_at) === date
-        );
-
-        if (match) {
-          await supabase.from('inspections').update({ record_id: match.id }).eq('id', insp.id);
-          reconstructed++;
-        }
+        const match = allRecords.find(r => normalize(r.entry?.placas_unidad) === normP && getDate(r.created_at) === date);
+        if (match) { await supabase.from('inspections').update({ record_id: match.id }).eq('id', insp.id); reconstructed++; }
       }
-
       Alert.alert(t('auditoria_finalizada_title'), t('auditoria_finalizada_msg', { reconstructed, total_records: allRecords.length }));
       await fetchEverything();
-    } catch (e: any) {
-      Alert.alert(t('error'), e.message);
-    } finally {
-      setSyncing(false);
-    }
+    } catch (e: any) { Alert.alert(t('error'), e.message); }
+    finally { setSyncing(false); }
   };
 
-  const handleDeepRepair = async () => {
-    Alert.alert(
-      '🔧 Reparación Profunda',
-      'Esto analizará y corregirá vínculos rotos e inspecciones huérfanas en el cliente. ¿Continuar?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Reparar', style: 'destructive', onPress: async () => {
-          setSyncing(true);
-          try {
-            // Similar logic to handleRepair but more aggressive or checking other fields
-            await handleRepair();
-            Alert.alert('✅ Reparación Completada', 'Se intentaron vincular todas las inspecciones huérfanas detectadas.');
-          } catch (e: any) {
-            Alert.alert('Error', e.message);
-          } finally {
-            setSyncing(false);
-          }
-        }}
-      ]
+  const handleDeepRepair = () => {
+    Alert.alert('🔧 Reparación Profunda', 'Esto analizará y corregirá vínculos rotos e inspecciones huérfanas. ¿Continuar?',
+      [{ text: 'Cancelar', style: 'cancel' },
+       { text: 'Reparar', style: 'destructive', onPress: async () => { setSyncing(true); try { await handleRepair(); Alert.alert('✅ Reparación Completada', 'Se intentaron vincular todas las inspecciones huérfanas.'); } catch (e: any) { Alert.alert('Error', e.message); } finally { setSyncing(false); } } }]
     );
   };
 
-  const handleForceSync = async () => {
-    Alert.alert(
-      '🔄 Forzar Sincronización',
-      'Esto refrescará los datos locales desde Supabase. ¿Continuar?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Sincronizar', onPress: async () => {
-          setForceSyncing(true);
-          try {
-            await fetchEverything();
-            Alert.alert('✅ Sincronización Completada', 'Los datos han sido actualizados.');
-          } catch (e: any) {
-            Alert.alert('Error', e.message);
-          } finally {
-            setForceSyncing(false);
-          }
-        }}
-      ]
+  const handleForceSync = () => {
+    Alert.alert('🔄 Forzar Sincronización', 'Esto refrescará los datos locales desde Supabase. ¿Continuar?',
+      [{ text: 'Cancelar', style: 'cancel' },
+       { text: 'Sincronizar', onPress: async () => { setForceSyncing(true); try { await fetchEverything(); Alert.alert('✅ Sincronización Completada', 'Los datos han sido actualizados.'); } catch (e: any) { Alert.alert('Error', e.message); } finally { setForceSyncing(false); } } }]
     );
   };
 
@@ -330,61 +484,38 @@ export default function Supervisor() {
     const q = query.toLowerCase().trim();
     const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
     const getDate = (s: string) => s?.substring(0, 10) || '';
-
     const safeRecords = Array.isArray(allRecords) ? allRecords : [];
     const safeTickets = Array.isArray(allTickets) ? allTickets : [];
     const safeInsps = Array.isArray(allInspections) ? allInspections : [];
-
     let source: any[] = [];
-
-    const ticketPlatesDate = new Set(safeTickets.map(tk => `${normalize(tk.placas_unidad)}|${getDate(tk.created_at)}`));
-
-    // FIX: filtrar por fecha seleccionada (hoy por default)
     const todayStr = new Date().toLocaleDateString('en-CA');
     const activeDateStr = selectedDate || todayStr;
 
     if (activeTab === 'caseta') {
-      // FIX: solo registros e inspecciones del día activo
       const dayRecords = safeRecords.filter(r => getDate(r.created_at) === activeDateStr);
       const dayInsps = safeInsps.filter(i => getDate(i.created_at) === activeDateStr);
       const recordsByPlateDate = new Set(dayRecords.map(r => `${normalize(r.entry?.placas_unidad)}|${getDate(r.created_at)}`));
       const recordsById = new Set(dayRecords.map(r => r.id));
-
-      const virtuals = dayInsps
-        .filter(i => {
-          const normP = normalize(i.placas_unidad);
-          const date = getDate(i.created_at);
-          if (i.record_id && recordsById.has(i.record_id)) return false;
-          if (recordsByPlateDate.has(`${normP}|${date}`)) return false;
-          return true;
-        })
-        .map(i => ({
-           ...i,
-           _is_virtual: true, status: 'inspeccionado', created_at: i.created_at,
-           entry: { placas_unidad: i.placas_unidad, chofer_nombre: i.inspector_nombre, compania_transporte: i.compania_transportista, fecha_entrada: i.created_at, numero_caja: i.numero_trailer, sello_entrada: i.numero_precinto }
-        }));
+      const virtuals = dayInsps.filter(i => {
+        const normP = normalize(i.placas_unidad);
+        const date = getDate(i.created_at);
+        if (i.record_id && recordsById.has(i.record_id)) return false;
+        if (recordsByPlateDate.has(`${normP}|${date}`)) return false;
+        return true;
+      }).map(i => ({ ...i, _is_virtual: true, status: 'inspeccionado', created_at: i.created_at,
+        entry: { placas_unidad: i.placas_unidad, chofer_nombre: i.inspector_nombre, compania_transporte: i.compania_transportista, fecha_entrada: i.created_at, numero_caja: i.numero_trailer, sello_entrada: i.numero_precinto }
+      }));
       source = [...dayRecords, ...virtuals];
     } else if (activeTab === 'inspeccion') {
-      // FIX: solo inspecciones del día activo
       source = safeInsps.filter(i => getDate(i.created_at) === activeDateStr);
     } else if (activeTab === 'embarque') {
-      // FIX: tickets y pendientes del día activo
       const dayTickets = safeTickets.filter(tk => getDate(tk.created_at) === activeDateStr);
       const dayInsps = safeInsps.filter(i => getDate(i.created_at) === activeDateStr);
       const dayTicketPlatesDate = new Set(dayTickets.map(tk => `${normalize(tk.placas_unidad)}|${getDate(tk.created_at)}`));
-      const pendingShipping = dayInsps
-        .filter(i => !dayTicketPlatesDate.has(`${normalize(i.placas_unidad)}|${getDate(i.created_at)}`))
-        .map(i => ({
-          id: `p-${i.id}`,
-          _is_pending_ticket: true,
-          placas_unidad: i.placas_unidad,
-          cliente: t('pendiente_despacho').toUpperCase(),
-          operador: i.inspector_nombre,
-          created_at: i.created_at
-        }));
+      const pendingShipping = dayInsps.filter(i => !dayTicketPlatesDate.has(`${normalize(i.placas_unidad)}|${getDate(i.created_at)}`))
+        .map(i => ({ id: `p-${i.id}`, _is_pending_ticket: true, placas_unidad: i.placas_unidad, cliente: t('pendiente_despacho').toUpperCase(), operador: i.inspector_nombre, created_at: i.created_at }));
       source = [...dayTickets, ...pendingShipping];
     }
-
     if (!q) return source;
     return source.filter((item: any) => {
       const plates = (item.placas_unidad || item.entry?.placas_unidad || '').toLowerCase();
@@ -401,134 +532,82 @@ export default function Supervisor() {
       const plates = item.placas_unidad || item.entry?.placas_unidad;
       const normPlates = normalize(plates);
       const itemDate = getDate(item.created_at || item.entry?.fecha_entrada);
-
       const matchTicket = allTickets.find(tk => normalize(tk.placas_unidad) === normPlates && getDate(tk.created_at) === itemDate);
       const matchInsps = allInspections.filter(i => i.record_id === item.id || (normalize(i.placas_unidad) === normPlates && getDate(i.created_at) === itemDate));
-
-      const html = generateConsolidatedReportHtml({
-        inspection: matchInsps[0] || { points: [] } as any,
-        inspections: matchInsps,
-        caseta: item.entry ? item : null,
-        embarque: matchTicket
-      });
+      const html = generateConsolidatedReportHtml({ inspection: matchInsps[0] || { points: [] } as any, inspections: matchInsps, caseta: item.entry ? item : null, embarque: matchTicket });
       await outputPdf(html);
-    } catch (e: any) {
-      Alert.alert(t('error'), e.message);
-    } finally {
-      setReportLoading(null);
-    }
+    } catch (e: any) { Alert.alert(t('error'), e.message); }
+    finally { setReportLoading(null); }
   };
 
   const outputPdf = async (html: string) => {
-    if (Platform.OS === 'web') {
-      const win = window.open('', '_blank');
-      win?.document.write(html); win?.document.close();
-      setTimeout(() => win?.print(), 500);
-    } else {
-      const { uri } = await Print.printToFileAsync({ html });
-      await Sharing.shareAsync(uri);
-    }
+    if (Platform.OS === 'web') { const win = window.open('', '_blank'); win?.document.write(html); win?.document.close(); setTimeout(() => win?.print(), 500); }
+    else { const { uri } = await Print.printToFileAsync({ html }); await Sharing.shareAsync(uri); }
   };
 
-  // Obtener el record_id real para un item del panel maestro
   const getRecordIdForEmail = (item: any): { recordId: string; plates: string } => {
     const plates = item.placas_unidad || item.entry?.placas_unidad || '';
     const norm = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
-    // Si el item tiene ID de registro real
-    if (!item._is_virtual && !item._is_pending && item.id && !item.id.startsWith('p-') && item.entry) {
-      return { recordId: item.id, plates };
-    }
-    // Buscar registro por placas
+    if (!item._is_virtual && !item._is_pending && item.id && !item.id.startsWith('p-') && item.entry) return { recordId: item.id, plates };
     const matched = allRecords.find(r => norm(r.entry?.placas_unidad) === norm(plates));
     return { recordId: matched?.id || item.id || '', plates };
   };
 
   const handleEmail = (item: any) => {
     const { recordId, plates } = getRecordIdForEmail(item);
-    if (!recordId) {
-      Alert.alert(t('sin_registro_title'), t('sin_registro_msg'));
-      return;
-    }
+    if (!recordId) { Alert.alert(t('sin_registro_title'), t('sin_registro_msg')); return; }
     setEmailModal({ visible: true, recordId, plates });
   };
 
+  const adminTools = [
+    { icon: 'link', label: t('vincular_huerfanos').toUpperCase(), color: colors.brandPrimary, surface: colors.brandTertiary, onPress: handleRepair, disabled: syncing, loading: syncing },
+    { icon: 'people', label: t('usuarios_caps').toUpperCase(), color: colors.info, surface: colors.infoSurface, onPress: () => router.push('/(app)/usuarios'), disabled: false, loading: false },
+    { icon: 'git-merge', label: 'DUPLICADOS POR OCR (FUSIONAR)', color: colors.warning, surface: colors.warningSurface, onPress: () => setDuplicatesModalVisible(true), disabled: false, loading: false },
+    { icon: 'build', label: 'REPARACIÓN PROFUNDA (VÍNCULOS + FECHAS)', color: colors.error, surface: colors.errorSurface, onPress: handleDeepRepair, disabled: syncing, loading: syncing },
+    { icon: 'cloud-upload', label: 'FORZAR SYNC OTROS DISPOSITIVOS', color: colors.success, surface: colors.successSurface, onPress: handleForceSync, disabled: forceSyncing, loading: forceSyncing },
+    { icon: 'bar-chart', label: `${t('kpis')} / ${t('reporte_analitica').toUpperCase()}`, color: '#4338CA', surface: '#E0E7FF', onPress: () => router.push('/(app)/analitica'), disabled: false, loading: false },
+  ];
+
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={s.safe} edges={['top']}>
       <MainHeader title="NAF" subtitle={t('panel').toUpperCase()} />
 
-      {/* Modal de correo */}
-      <EmailModal
-        visible={emailModal.visible}
-        recordId={emailModal.recordId}
-        plates={emailModal.plates}
-        token={token || ''}
-        onClose={() => setEmailModal({ visible: false, recordId: '', plates: '' })}
-      />
+      <EmailModal visible={emailModal.visible} recordId={emailModal.recordId} plates={emailModal.plates} token={token || ''} onClose={() => setEmailModal({ visible: false, recordId: '', plates: '' })} />
+      <DuplicatesModal visible={duplicatesModalVisible} token={token || ''} onClose={() => setDuplicatesModalVisible(false)} onMerged={fetchEverything} />
 
-      <DuplicatesModal
-        visible={duplicatesModalVisible}
-        token={token || ''}
-        onClose={() => setDuplicatesModalVisible(false)}
-        onMerged={fetchEverything}
-      />
-
-      <ScrollView
-        stickyHeaderIndices={[1]}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchEverything} />}
-      >
-        {/* HERRAMIENTAS ADMIN */}
-        <View style={styles.adminBox}>
-          <Text style={styles.adminTitle}>{t('admin_tools').toUpperCase()}</Text>
-          <View style={styles.adminRow}>
-            <Pressable style={styles.adminBtn} onPress={handleRepair} disabled={syncing}>
-              {syncing ? <ActivityIndicator size={14} color={colors.brandPrimary} /> : <Ionicons name="link-outline" size={16} color={colors.brandPrimary} />}
-              <Text style={styles.adminBtnText}>{t('vincular_huerfanos').toUpperCase()}</Text>
-            </Pressable>
-            <Pressable style={styles.adminBtn} onPress={() => router.push('/(app)/usuarios')}>
-              <Ionicons name="people-outline" size={16} color="#333" />
-              <Text style={styles.adminBtnText}>{t('usuarios_caps').toUpperCase()}</Text>
-            </Pressable>
+      <ScrollView stickyHeaderIndices={[1]} refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchEverything} tintColor={colors.brandPrimary} />}>
+        {/* Admin tools */}
+        <View style={s.adminGrid}>
+          <Text style={s.adminLabel}>{t('admin_tools').toUpperCase()}</Text>
+          <View style={s.adminCardRow}>
+            {adminTools.map((tool, i) => (
+              <Pressable key={i} style={({ pressed }) => [s.adminCard, pressed && { opacity: 0.88 }]} onPress={tool.onPress} disabled={tool.disabled}>
+                <View style={[s.adminCardIcon, { backgroundColor: tool.surface }]}>
+                  {tool.loading ? <ActivityIndicator size={14} color={tool.color} /> : <Ionicons name={tool.icon as any} size={16} color={tool.color} />}
+                </View>
+                <Text style={[s.adminCardText, { color: tool.color }]}>{tool.label}</Text>
+              </Pressable>
+            ))}
           </View>
-          <Pressable style={[styles.adminBtn, { marginTop: 8, backgroundColor: '#FEF3C7' }]} onPress={() => setDuplicatesModalVisible(true)}>
-            <Ionicons name="git-merge-outline" size={16} color="#92400E" />
-            <Text style={[styles.adminBtnText, { color: '#92400E' }]}>DUPLICADOS POR OCR (FUSIONAR)</Text>
-          </Pressable>
-          <Pressable style={[styles.adminBtn, { marginTop: 8, backgroundColor: '#FEE2E2' }]} onPress={handleDeepRepair} disabled={syncing}>
-            {syncing ? <ActivityIndicator size={14} color="#991B1B" /> : <Ionicons name="build-outline" size={16} color="#991B1B" />}
-            <Text style={[styles.adminBtnText, { color: '#991B1B' }]}>REPARACIÓN PROFUNDA (VÍNCULOS + FECHAS)</Text>
-          </Pressable>
-          <Pressable style={[styles.adminBtn, { marginTop: 8, backgroundColor: '#D1FAE5' }]} onPress={handleForceSync} disabled={forceSyncing}>
-            {forceSyncing ? <ActivityIndicator size={14} color="#065F46" /> : <Ionicons name="cloud-upload-outline" size={16} color="#065F46" />}
-            <Text style={[styles.adminBtnText, { color: '#065F46' }]}>FORZAR SYNC OTROS DISPOSITIVOS</Text>
-          </Pressable>
-          <Pressable style={[styles.adminBtn, { marginTop: 8, backgroundColor: '#E0E7FF' }]} onPress={() => router.push('/(app)/analitica')}>
-            <Ionicons name="stats-chart" size={16} color="#4338CA" />
-            <Text style={[styles.adminBtnText, { color: '#4338CA' }]}>{t('kpis')} / {t('reporte_analitica').toUpperCase()}</Text>
-          </Pressable>
         </View>
 
-        <View style={styles.headerFixed}>
-          <View style={styles.tabRow}>
+        {/* Tabs + search */}
+        <View style={s.stickyHeader}>
+          <View style={s.tabRow}>
             <TabBtn label={t('caseta').toUpperCase()} icon="business" active={activeTab === 'caseta'} on={() => setActiveTab('caseta')} />
             <TabBtn label={t('inspeccion').toUpperCase()} icon="clipboard" active={activeTab === 'inspeccion'} on={() => setActiveTab('inspeccion')} />
             <TabBtn label={t('embarque').toUpperCase()} icon="truck-fast" active={activeTab === 'embarque'} on={() => setActiveTab('embarque')} isMCI />
           </View>
-          {/* Selector de fecha — por default muestra HOY */}
-          <View style={styles.dateRow}>
+          <View style={s.dateRow}>
             <Ionicons name="calendar-outline" size={16} color={colors.muted} />
-            <Pressable
-              style={styles.dateChip}
-              onPress={() => {
-                // Ir al día anterior
-                const base = selectedDate || new Date().toLocaleDateString('en-CA');
-                const d = new Date(base + 'T12:00:00');
-                d.setDate(d.getDate() - 1);
-                setSelectedDate(d.toLocaleDateString('en-CA'));
-              }}
-            >
+            <Pressable style={s.dateChip} onPress={() => {
+              const base = selectedDate || new Date().toLocaleDateString('en-CA');
+              const d = new Date(base + 'T12:00:00'); d.setDate(d.getDate() - 1);
+              setSelectedDate(d.toLocaleDateString('en-CA'));
+            }}>
               <Ionicons name="chevron-back" size={14} color={colors.onSurface} />
             </Pressable>
-            <Text style={styles.dateLabel}>
+            <Text style={s.dateLabel}>
               {(() => {
                 const todayStr = new Date().toLocaleDateString('en-CA');
                 const active = selectedDate || todayStr;
@@ -536,57 +615,44 @@ export default function Supervisor() {
                 return new Date(active + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'short', day: '2-digit', month: 'short' }).toUpperCase();
               })()}
             </Text>
-            <Pressable
-              style={styles.dateChip}
-              onPress={() => {
-                const base = selectedDate || new Date().toLocaleDateString('en-CA');
-                const d = new Date(base + 'T12:00:00');
-                d.setDate(d.getDate() + 1);
-                const next = d.toLocaleDateString('en-CA');
-                const today = new Date().toLocaleDateString('en-CA');
-                setSelectedDate(next >= today ? '' : next);
-              }}
-            >
+            <Pressable style={s.dateChip} onPress={() => {
+              const base = selectedDate || new Date().toLocaleDateString('en-CA');
+              const d = new Date(base + 'T12:00:00'); d.setDate(d.getDate() + 1);
+              const todayStr = new Date().toLocaleDateString('en-CA');
+              if (d.toLocaleDateString('en-CA') > todayStr) { setSelectedDate(''); } else { setSelectedDate(d.toLocaleDateString('en-CA')); }
+            }}>
               <Ionicons name="chevron-forward" size={14} color={colors.onSurface} />
             </Pressable>
-            {selectedDate ? (
-              <Pressable onPress={() => setSelectedDate('')} style={{ marginLeft: 4 }}>
-                <Ionicons name="close-circle" size={16} color={colors.warning} />
+            {selectedDate && (
+              <Pressable style={s.dateReset} onPress={() => setSelectedDate('')}>
+                <Ionicons name="close" size={12} color={colors.muted} />
               </Pressable>
-            ) : null}
+            )}
           </View>
-          <View style={styles.searchCont}>
-            <Ionicons name="search" size={20} color={colors.muted} />
-            <TextInput
-              style={styles.search}
-              placeholder={t('buscar_placas_placeholder')}
-              value={query}
-              onChangeText={setQuery}
-            />
+          <View style={s.searchCont}>
+            <View style={s.searchWrap}>
+              <Ionicons name="search" size={16} color={colors.mutedLight} />
+              <TextInput style={s.searchInput} placeholder={t('buscar_placeholder')} placeholderTextColor={colors.mutedLight} value={query} onChangeText={setQuery} />
+              {query ? <Pressable onPress={() => setQuery('')} hitSlop={8}><Ionicons name="close-circle" size={16} color={colors.mutedLight} /></Pressable> : null}
+            </View>
           </View>
         </View>
 
-        <View style={{ padding: spacing.md }}>
-          {filteredData.map((item) => (
-            <MasterRow
-              key={item.id}
-              item={item}
-              type={activeTab}
-              t={t}
-              onPdf={() => handlePdf(item)}
-              onEmail={() => handleEmail(item)}
-              loadingPdf={reportLoading === item.id}
-              router={router}
-              records={allRecords}
-              tickets={allTickets}
-              inspections={allInspections}
-              isAdmin={user?.role === 'admin' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '')}
-              token={token}
-              onDeleted={fetchEverything}
-            />
-          ))}
-          {filteredData.length === 0 && !loading && (
-            <Text style={styles.empty}>{t('sin_registros_mostrar')}</Text>
+        {/* Data */}
+        <View style={s.dataContainer}>
+          {loading ? (
+            <View style={s.loadingWrap}><ActivityIndicator size="large" color={colors.brandPrimary} /></View>
+          ) : filteredData.length === 0 ? (
+            <View style={s.emptyWrap}>
+              <Ionicons name="documents-outline" size={40} color={colors.mutedLight} />
+              <Text style={s.emptyText}>{t('no_hay_actividad') || 'Sin registros para mostrar'}</Text>
+            </View>
+          ) : (
+            filteredData.map((item: any) => (
+              <MasterRow key={item.id} item={item} type={activeTab} t={t} onPdf={() => handlePdf(item)} onEmail={() => handleEmail(item)}
+                loadingPdf={reportLoading === item.id} router={router} records={allRecords} tickets={allTickets} inspections={allInspections}
+                isAdmin={isAdminOrSup} token={token || ''} onDeleted={fetchEverything} />
+            ))
           )}
         </View>
       </ScrollView>
@@ -594,447 +660,118 @@ export default function Supervisor() {
   );
 }
 
-// ─── Modal de Duplicados por OCR ────────────────────────────────────────────
-function DuplicatesModal({ visible, token, onClose, onMerged }: {
-  visible: boolean; token: string; onClose: () => void; onMerged: () => void;
-}) {
-  const [loading, setLoading] = useState(false);
-  const [groups, setGroups] = useState<any[]>([]);
-  const [merging, setMerging] = useState<string | null>(null);
+const s = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.surface },
 
-  const load = useCallback(async () => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      // Reemplazamos apiCall con lógica de cliente o RPC si existiera
-      // Por simplicidad, implementamos una búsqueda básica de duplicados por placa
-      const { data, error } = await supabase.from('vehicle_records').select('*');
-      if (error) throw error;
+  // Admin tools
+  adminGrid: { padding: 16 },
+  adminLabel: { fontSize: 11, fontWeight: '800', color: colors.mutedDark, letterSpacing: 1.5, marginBottom: 10, textTransform: 'uppercase' },
+  adminCardRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  adminCard: {
+    backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border, borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 10,
+    ...shadows.xs, flexGrow: 1, flexBasis: '47%',
+  },
+  adminCardIcon: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  adminCardText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3, flexShrink: 1 },
 
-      const recordMap: Record<string, any[]> = {};
-      (data || []).forEach(r => {
-        const p = (r.plates || '').toUpperCase();
-        if (!recordMap[p]) recordMap[p] = [];
-        recordMap[p].push(r);
-      });
-
-      const dupGroups = Object.entries(recordMap)
-        .filter(([_, recs]) => recs.length > 1)
-        .map(([plates, recs]) => ({
-          canon: plates,
-          records: recs.map(r => ({
-            id: r.id,
-            placas: r.plates,
-            chofer: r.entry_data?.chofer_nombre,
-            status: r.status,
-            created_at: r.created_at,
-            has_shipping_ticket: !!r.shipping_ticket_id
-          }))
-        }));
-
-      setGroups(dupGroups);
-    } catch (e: any) {
-      Alert.alert('Error', e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
-
-  React.useEffect(() => { if (visible) load(); }, [visible, load]);
-
-  const handleMerge = (keepId: string, removeId: string, keepPlates: string, removePlates: string) => {
-    Alert.alert(
-      'Fusionar registros',
-      `Se conservará "${keepPlates}" y se le pasarán todas las inspecciones de "${removePlates}". El duplicado se eliminará. ¿Continuar?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Fusionar', style: 'destructive', onPress: async () => {
-            setMerging(removeId);
-            try {
-              // 1. Mover inspecciones
-              await supabase.from('inspections').update({ record_id: keepId }).eq('record_id', removeId);
-              // 2. Eliminar duplicado
-              await supabase.from('vehicle_records').delete().eq('id', removeId);
-
-              await load();
-              onMerged();
-            } catch (e: any) {
-              Alert.alert('Error', e.message);
-            } finally {
-              setMerging(null);
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#FFF' }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', padding: spacing.md, borderBottomWidth: 1, borderColor: '#EEE' }}>
-          <Pressable onPress={onClose} style={{ marginRight: spacing.sm }}><Ionicons name="arrow-back" size={24} /></Pressable>
-          <Text style={{ fontSize: 17, fontWeight: '700', flex: 1 }}>Posibles duplicados por OCR</Text>
-        </View>
-        <ScrollView contentContainerStyle={{ padding: spacing.md }}>
-          <Text style={{ color: '#666', marginBottom: spacing.md, fontSize: 13 }}>
-            Se agrupan registros cuya placa difiere solo en un carácter fácilmente confundido por OCR
-            (Z/2, O/0, I/1, S/5, B/8, G/6). Elige cuál placa conservar — el otro registro se fusiona en ese
-            y se elimina.
-          </Text>
-          {loading && <ActivityIndicator style={{ marginTop: 20 }} />}
-          {!loading && groups.length === 0 && (
-            <Text style={{ textAlign: 'center', color: '#999', marginTop: 30 }}>No se encontraron duplicados por confusión de OCR 🎉</Text>
-          )}
-          {groups.map((g) => (
-            <View key={g.canon} style={{ borderWidth: 1, borderColor: '#EEE', borderRadius: 10, padding: spacing.sm, marginBottom: spacing.md }}>
-              {g.records.map((r: any) => (
-                <View key={r.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderColor: '#F5F5F5' }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontWeight: '700', fontSize: 15 }}>{r.placas}</Text>
-                    <Text style={{ color: '#666', fontSize: 12 }}>{r.chofer || '-'} · {r.status} · {r.inspection_count} insp. · {r.has_shipping_ticket ? 'con ticket' : 'sin ticket'}</Text>
-                    <Text style={{ color: '#999', fontSize: 11 }}>{new Date(r.created_at).toLocaleString()}</Text>
-                  </View>
-                  <Pressable
-                    disabled={merging === r.id}
-                    style={{ backgroundColor: colors.brandPrimary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}
-                    onPress={() => {
-                      const other = g.records.find((x: any) => x.id !== r.id);
-                      if (other) handleMerge(r.id, other.id, r.placas, other.placas);
-                    }}
-                  >
-                    {merging === r.id ? <ActivityIndicator size={12} color="#FFF" /> : <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>Conservar este</Text>}
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          ))}
-        </ScrollView>
-      </SafeAreaView>
-    </Modal>
-  );
-}
-
-// ─── Tab Button ──────────────────────────────────────────────────────────────
-function TabBtn({ label, icon, active, on, isMCI }: any) {
-  return (
-    <Pressable style={[styles.tab, active && styles.tabActive]} onPress={on}>
-      {isMCI ? (
-        <MaterialCommunityIcons name={icon as any} size={18} color={active ? '#FFF' : '#333'} />
-      ) : (
-        <Ionicons name={icon as any} size={18} color={active ? '#FFF' : '#333'} />
-      )}
-      <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-// ─── Master Row ──────────────────────────────────────────────────────────────
-function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records, tickets, inspections, isAdmin, token, onDeleted }: any) {
-  const [deleting, setDeleting] = useState(false);
-  const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
-  const getDate = (s: string) => s?.substring(0, 10) || '';
-  const plates = item.placas_unidad || item.entry?.placas_unidad || 'S/P';
-  const normPlates = normalize(plates);
-  const itemDate = getDate(item.created_at || item.entry?.fecha_entrada);
-
-  const subtitle = item.entry?.chofer_nombre || item.chofer_nombre || item.inspector_nombre || item.cliente || '-';
-  const company = item.entry?.compania_transporte || item.compania_transportista || '-';
-
-  const relatedRecord = type === 'caseta' ? (item._is_virtual ? null : item) : records.find((r: any) => normalize(r.entry?.placas_unidad) === normPlates && getDate(r.created_at) === itemDate);
-  const isFull = (relatedRecord?.entry?.tipo_unidad === 'full') || (item.inspection_type === '19_puntos' && item.numero_trailer?.includes('-2'));
-  const isDescarga = relatedRecord?.entry?.condicion_carga === 'descarga';
-  const showShipping = !isFull && !isDescarga;
-
-  const relatedInsps = inspections.filter((i: any) => i.record_id === relatedRecord?.id || (normalize(i.placas_unidad) === normPlates && getDate(i.created_at) === itemDate));
-  const matchTicket = tickets.find((tk: any) => normalize(tk.placas_unidad) === normPlates && getDate(tk.created_at) === itemDate);
-
-  const recordInspCount = (relatedRecord?.inspection_ids?.length || 0) + (relatedRecord?.inspection_id && !relatedRecord?.inspection_ids?.includes(relatedRecord.inspection_id) ? 1 : 0);
-  const localInspCount = relatedInsps.length;
-  const totalInspCount = Math.max(recordInspCount, localInspCount);
-  const inspectionComplete = isFull ? totalInspCount >= 2 : totalInspCount >= 1;
-
-  const hasTicket = !!(relatedRecord?.has_shipping_ticket || relatedRecord?.shipping_ticket_id || matchTicket);
-
-  const steps = {
-    entry: !!relatedRecord || item._is_virtual,
-    inspection: inspectionComplete,
-    shipping: hasTicket,
-    exit: relatedRecord?.status?.toLowerCase() === 'salida' || item.status?.toLowerCase() === 'salida' || !!(item.exit?.fecha_salida)
-  };
-
-  const rawStatus = relatedRecord?.status || (inspectionComplete ? 'inspeccionado' : 'entrada');
-  const status = rawStatus.toUpperCase();
-
-  // El botón de email se activa si hay registro real (no virtual/pending)
-  const canEmail = !item._is_pending && (!!relatedRecord || (!item._is_virtual && item.entry));
-
-  // "Generar ticket" aparece cuando la inspección ya está completa pero
-  // todavía no existe ticket de embarque para esta unidad — este botón no
-  // existía antes, así que no había forma directa de saltar a crear el
-  // ticket con los datos ya prellenados (placas, compañía, caja, etc.).
-  const canGenerateTicket = !item._is_pending && inspectionComplete && !hasTicket && showShipping;
-  const linkedInspectionId = relatedRecord?.inspection_id || relatedInsps[0]?.id || (type === 'inspeccion' ? item.id : '');
-  const handleGenerateTicket = () => {
-    router.push({
-      pathname: '/embarque/nuevo',
-      params: {
-        record_id: relatedRecord?.id || '',
-        inspection_id: linkedInspectionId || '',
-        placas: plates !== 'S/P' ? plates : '',
-        compania: relatedRecord?.entry?.compania_transporte || '',
-        trailer: relatedRecord?.entry?.numero_caja || '',
-        sello: relatedRecord?.entry?.sello_entrada || '',
-        operador: relatedRecord?.entry?.chofer_nombre || '',
-        destino: relatedRecord?.entry?.destino || '',
-      },
-    });
-  };
-
-  // El botón de eliminar sólo aplica a registros reales (no filas virtuales/pendientes
-  // armadas en el cliente a partir de otra colección) y sólo lo puede usar un admin.
-  const canDelete = isAdmin && !item._is_virtual && !item._is_pending && !!item.id;
-
-  const deleteEndpoint = type === 'inspeccion'
-    ? `/inspections/${item.id}`
-    : type === 'embarque'
-      ? `/shipping-tickets/${item.id}`
-      : `/vehicle-records/${item.id}`;
-
-  const deleteLabelMap: Record<string, string> = {
-    caseta: t('editor_caseta') || 'este registro de caseta',
-    inspeccion: t('editar_inspeccion') || 'esta inspección',
-    embarque: t('editar_ticket') || 'este ticket de embarque',
-  };
-
-  const handleDelete = () => {
-    if (!canDelete || deleting) return;
-    Alert.alert(
-      t('eliminar_proceso_title') || 'Eliminar proceso',
-      (t('eliminar_proceso_msg', { plates }) as string) ||
-        `¿Seguro que quieres eliminar el proceso de la unidad ${plates}? No se puede deshacer.`,
-      [
-        { text: t('cancelar') || 'Cancelar', style: 'cancel' },
-        {
-          text: t('eliminar') || 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              const table = type === 'inspeccion' ? 'inspections' : type === 'embarque' ? 'shipping_tickets' : 'vehicle_records';
-              const { error } = await supabase.from(table).delete().eq('id', item.id);
-              if (error) throw error;
-              onDeleted?.();
-            } catch (e: any) {
-              Alert.alert(t('error') || 'Error', e.message);
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  return (
-    <View style={styles.row}>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.rowTitle}>
-          {plates} {item.numero_trailer ? `· ${item.numero_trailer}` : ''}{' '}
-          {item._is_virtual || item._is_pending ? `(${t('historico').toUpperCase()})` : ''}
-        </Text>
-        <Text style={styles.rowSub}>{subtitle} {company !== '-' ? `· ${company}` : ''}</Text>
-
-        <View style={{ marginVertical: 10 }}>
-          <ProcessTracker steps={steps} compact showShipping={showShipping} />
-        </View>
-
-        <View style={styles.rowActions}>
-          <Pressable
-            style={styles.actionLink}
-            onPress={() => {
-              if (type === 'inspeccion') {
-                router.push(`/inspection/${item.id}`);
-              } else if (type === 'embarque') {
-                if (item._is_pending_ticket) {
-                  // Si es un ticket pendiente de despacho, vamos a "nuevo" con los datos precargados
-                  router.push({
-                    pathname: '/embarque/nuevo',
-                    params: {
-                      inspection_id: item.id.replace('p-', ''),
-                      record_id: relatedRecord?.id || '',
-                      placas: item.placas_unidad || '',
-                      compania: relatedRecord?.entry?.compania_transporte || '',
-                      trailer: relatedRecord?.entry?.numero_caja || '',
-                      sello: relatedRecord?.entry?.sello_entrada || '',
-                      operador: item.operador || relatedRecord?.entry?.chofer_nombre || '',
-                      destino: relatedRecord?.entry?.destino || '',
-                    },
-                  });
-                } else {
-                  router.push(`/embarque/${item.id}`);
-                }
-              } else {
-                // Caso Caseta
-                const targetId = item.record_id || relatedRecord?.id || (item._is_virtual ? null : item.id);
-
-                if (targetId) {
-                  router.push(`/caseta/${targetId}`);
-                } else if (item._is_virtual) {
-                  // Si es virtual y no tiene record_id, entonces sí es un nuevo registro
-                  router.push({
-                    pathname: '/caseta/nuevo',
-                    params: {
-                      placas: item.entry?.placas_unidad || '',
-                      chofer: item.entry?.chofer_nombre || '',
-                      compania: item.entry?.compania_transporte || '',
-                      tractor: item.entry?.numero_tractor || '',
-                      caja: item.entry?.numero_caja || '',
-                      sello: item.entry?.sello_entrada || '',
-                    }
-                  });
-                } else {
-                  router.push(`/caseta/${item.id}`);
-                }
-              }
-            }}
-          >
-            <Ionicons name="create-outline" size={14} color="#333" />
-            <Text style={styles.actionLinkText}>
-              {type === 'inspeccion' ? t('editar_inspeccion').toUpperCase() : type === 'embarque' ? t('editar_ticket').toUpperCase() : ((item._is_virtual && !relatedRecord) ? t('registrar_entrada').toUpperCase() : t('editor_caseta').toUpperCase())}
-            </Text>
-          </Pressable>
-
-          <Pressable style={styles.pdfBtn} onPress={onPdf} disabled={loadingPdf}>
-            <Ionicons name="eye-outline" size={16} color="#FFF" />
-            <Text style={styles.pdfBtnText}>{t('ver_reporte_pdf').toUpperCase()}</Text>
-            {loadingPdf && <ActivityIndicator size="small" color="#FFF" style={{ marginLeft: 5 }} />}
-          </Pressable>
-
-          {/* BOTÓN DE CORREO — funcional */}
-          <Pressable
-            style={[styles.emailBtn, !canEmail && styles.emailBtnDisabled]}
-            onPress={canEmail ? onEmail : undefined}
-            disabled={!canEmail}
-          >
-            <Ionicons name="mail-outline" size={14} color={canEmail ? '#0A2540' : '#9CA3AF'} />
-            <Text style={[styles.emailBtnText, !canEmail && { color: '#9CA3AF' }]}>{t('enviar_correo_caps').toUpperCase()}</Text>
-          </Pressable>
-
-          {/* BOTÓN GENERAR TICKET — visible sólo si ya hay inspección completa y aún no hay ticket */}
-          {canGenerateTicket && (
-            <Pressable style={styles.ticketBtn} onPress={handleGenerateTicket}>
-              <Ionicons name="cube-outline" size={14} color="#FFF" />
-              <Text style={styles.ticketBtnText}>{(t('generar_ticket_caps') || 'GENERAR TICKET').toUpperCase()}</Text>
-            </Pressable>
-          )}
-        </View>
-      </View>
-
-      <View style={styles.statusSide}>
-        {type === 'embarque' && (
-          <View style={[styles.statusChip, { backgroundColor: item._is_pending_ticket ? colors.warning : colors.success, marginBottom: 4 }]}>
-            <Text style={styles.statusChipText}>
-              {item._is_pending_ticket ? t('pendiente').toUpperCase() : t('realizados').toUpperCase()}
-            </Text>
-          </View>
-        )}
-        <View style={[styles.statusChip, {
-          backgroundColor: steps.exit ? '#10B981'
-            : status === 'INSPECCIONADO' ? '#0284C7'
-            : status === 'ENTRADA' ? '#F59E0B'
-            : '#6B7280'
-        }]}>
-          <Text style={styles.statusChipText}>
-            {steps.exit ? t('salio').toUpperCase() : status === 'INSPECCIONADO' ? t('inspeccion_ok').toUpperCase() : status === 'ENTRADA' ? t('entrada').toUpperCase() : status}
-          </Text>
-        </View>
-        <View style={[styles.statusChip, { backgroundColor: inspectionComplete ? '#10B981' : '#94A3B8', marginTop: 4 }]}>
-          <Text style={styles.statusChipText}>{inspectionComplete ? t('insp_completa').toUpperCase() : t('sin_inspeccion').toUpperCase()}</Text>
-        </View>
-        {canDelete && (
-          <Pressable style={styles.deleteBtn} onPress={handleDelete} disabled={deleting}>
-            {deleting ? (
-              <ActivityIndicator size="small" color={colors.error} />
-            ) : (
-              <Ionicons name="trash-outline" size={18} color={colors.error} />
-            )}
-          </Pressable>
-        )}
-        <Text style={styles.dateText}>{new Date(item.created_at || item.entry?.fecha_entrada).toLocaleDateString()}</Text>
-      </View>
-    </View>
-  );
-}
-
-// ─── Styles ──────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F3F4F6' },
-  // Admin
-  adminBox: { backgroundColor: '#DBEAFE', padding: 15, margin: 10, borderWidth: 1, borderColor: '#1E40AF' },
-  adminTitle: { fontWeight: '900', fontSize: 11, color: '#1E40AF', marginBottom: 10, letterSpacing: 1 },
-  adminRow: { flexDirection: 'row', gap: 10 },
-  adminBtn: { flex: 1, backgroundColor: '#FFF', padding: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#BFDBFE' },
-  adminBtnText: { fontWeight: '900', fontSize: 9, color: '#1E40AF' },
-  // Header/Tabs
-  headerFixed: { backgroundColor: '#FFF', borderBottomWidth: 2, borderBottomColor: '#000' },
+  // Sticky header (tabs + date + search)
+  stickyHeader: { backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: colors.border },
   tabRow: { flexDirection: 'row' },
-  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 12, backgroundColor: colors.surfaceSecondary, borderBottomWidth: 1, borderBottomColor: colors.border },
-  dateChip: { padding: 4, borderRadius: 4, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  dateLabel: { fontSize: 12, fontWeight: '900', color: colors.onSurface, letterSpacing: 0.5, flex: 1, textAlign: 'center' },
-  tab: { flex: 1, padding: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRightWidth: 1, borderRightColor: '#EEE' },
-  tabActive: { backgroundColor: '#0A2540', borderBottomWidth: 4, borderBottomColor: '#F59E0B' },
-  tabText: { fontWeight: '900', fontSize: 11, color: '#333' },
-  tabTextActive: { color: '#FFF' },
-  searchCont: { padding: 10, flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: '#EEE' },
-  search: { flex: 1, height: 40, fontSize: 14, fontWeight: '600' },
-  // Rows
-  row: { backgroundColor: '#FFF', padding: 15, marginBottom: 12, borderWidth: 1, borderColor: '#000', flexDirection: 'row' },
-  rowTitle: { fontWeight: '900', fontSize: 15 },
-  rowSub: { color: '#6B7280', fontSize: 12, marginTop: 2, fontWeight: '600' },
-  rowActions: { flexDirection: 'row', gap: 10, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' },
-  actionLink: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  actionLinkText: { fontWeight: '900', fontSize: 9, textDecorationLine: 'underline' },
-  pdfBtn: { backgroundColor: '#0A2540', paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  pdfBtnText: { color: '#FFF', fontWeight: '900', fontSize: 9 },
-  emailBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1.5, borderColor: '#0A2540', borderRadius: 2 },
-  emailBtnDisabled: { borderColor: '#D1D5DB' },
-  emailBtnText: { fontWeight: '900', fontSize: 9, color: '#0A2540' },
-  ticketBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#F59E0B', borderRadius: 2 },
-  ticketBtnText: { fontWeight: '900', fontSize: 9, color: '#FFF' },
-  statusSide: { alignItems: 'flex-end', width: 100 },
-  statusChip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 2, width: '100%', alignItems: 'center' },
-  statusChipText: { color: '#FFF', fontWeight: '900', fontSize: 9 },
-  dateText: { fontSize: 9, color: '#666', marginTop: 10, textAlign: 'right' },
-  deleteBtn: { marginTop: 10, padding: 5 },
-  empty: { textAlign: 'center', marginTop: 50, color: '#6B7280', fontWeight: '700' },
-  // Modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalBox: { backgroundColor: '#FFF', width: '100%', maxWidth: 480, borderRadius: 4, overflow: 'hidden', borderWidth: 1, borderColor: '#0A2540' },
-  modalHeader: { backgroundColor: '#0A2540', flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 },
-  modalTitle: { flex: 1, color: '#FFF', fontWeight: '900', fontSize: 13, letterSpacing: 1 },
-  modalBody: { padding: 18 },
-  modalInfo: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F3F4F6', padding: 10, marginBottom: 14, borderRadius: 3 },
-  modalInfoLabel: { fontWeight: '900', fontSize: 10, color: '#6B7280' },
-  modalInfoValue: { fontWeight: '900', fontSize: 14, color: '#0A2540' },
-  sectionLabel: { fontWeight: '900', fontSize: 9, color: '#374151', letterSpacing: 1, marginBottom: 6 },
-  fixedEmail: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#10B981', padding: 10, borderRadius: 3 },
-  fixedEmailText: { fontSize: 12, fontWeight: '700', color: '#065F46' },
-  inputRow: { flexDirection: 'row', gap: 8 },
-  emailInput: { flex: 1, borderWidth: 1.5, borderColor: '#D1D5DB', borderRadius: 3, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13, fontWeight: '600' },
-  addBtn: { backgroundColor: '#0A2540', width: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 3 },
-  extraList: { marginTop: 10, gap: 6 },
-  extraChip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE', padding: 8, borderRadius: 3 },
-  extraChipText: { fontSize: 12, fontWeight: '600', color: '#1E40AF', flex: 1 },
-  summaryBox: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, backgroundColor: '#F9FAFB', padding: 8, borderRadius: 3 },
-  summaryText: { fontSize: 11, fontWeight: '700', color: '#374151' },
-  resultBox: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, borderWidth: 1, padding: 10, borderRadius: 3 },
-  resultText: { flex: 1, fontSize: 12, fontWeight: '600' },
-  modalFooter: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#E5E7EB' },
-  cancelBtn: { flex: 1, padding: 14, alignItems: 'center', borderRightWidth: 1, borderRightColor: '#E5E7EB' },
-  cancelBtnText: { fontWeight: '900', fontSize: 12, color: '#6B7280' },
-  sendBtn: { flex: 2, padding: 14, backgroundColor: '#0A2540', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  sendBtnText: { color: '#FFF', fontWeight: '900', fontSize: 12 },
-});
+  tab: { flex: 1, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  tabActive: { backgroundColor: colors.brandPrimary, borderBottomWidth: 3, borderBottomColor: colors.brandSecondary },
+  tabText: { fontWeight: '700', fontSize: 12, color: colors.mutedDark },
+  tabTextActive: { color: '#FFFFFF' },
+  dateRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    paddingVertical: 10, paddingHorizontal: 16, backgroundColor: colors.surfaceTertiary,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
+  dateChip: { padding: 6, borderRadius: 8, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border },
+  dateLabel: { fontSize: 13, fontWeight: '700', color: colors.onSurface, letterSpacing: 0.5, flex: 1, textAlign: 'center' },
+  dateReset: { padding: 4 },
+  searchCont: { padding: 12 },
+  searchWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+    borderRadius: 10, paddingHorizontal: 14, height: 40,
+  },
+  searchInput: { flex: 1, color: colors.onSurface, fontSize: 14, fontWeight: '500' },
 
+  // Data
+  dataContainer: { padding: 16, paddingBottom: 48 },
+  loadingWrap: { alignItems: 'center', paddingVertical: 48 },
+  emptyWrap: { alignItems: 'center', paddingVertical: 48 },
+  emptyText: { color: colors.muted, fontWeight: '600', marginTop: 12, fontSize: 14 },
+
+  masterRow: {
+    backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border,
+    borderRadius: 12, padding: 16, marginBottom: 10, flexDirection: 'row', gap: 12, ...shadows.sm,
+  },
+  masterRowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  masterPlates: { fontSize: 15, fontWeight: '800', color: colors.onSurface, flex: 1 },
+  masterSub: { color: colors.muted, fontSize: 12, marginTop: 3, fontWeight: '500' },
+  masterActions: { flexDirection: 'row', gap: 8, marginTop: 12, alignItems: 'center', flexWrap: 'wrap' },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.surfaceTertiary, borderRadius: 8 },
+  actionBtnText: { fontSize: 10, fontWeight: '700', color: colors.mutedDark, letterSpacing: 0.3 },
+  pdfBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: colors.brandPrimary, borderRadius: 8, ...shadows.xs },
+  pdfBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 10, letterSpacing: 0.3 },
+  emailBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1.5, borderColor: colors.brandPrimary, borderRadius: 8 },
+  emailBtnDisabled: { borderColor: colors.border },
+  emailBtnText: { fontWeight: '700', fontSize: 10, color: colors.brandPrimary, letterSpacing: 0.3 },
+  ticketBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: colors.warning, borderRadius: 8, ...shadows.xs },
+  ticketBtnText: { fontWeight: '700', fontSize: 10, color: '#FFFFFF', letterSpacing: 0.3 },
+
+  masterSide: { alignItems: 'flex-end', width: 90, gap: 4 },
+  sideBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, width: '100%', alignItems: 'center' },
+  sideBadgeText: { fontWeight: '800', fontSize: 8, letterSpacing: 0.3 },
+  deleteBtn: { marginTop: 6, padding: 4 },
+  masterDate: { fontSize: 9, color: colors.muted, marginTop: 6, textAlign: 'right' },
+
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  statusText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.3 },
+
+  // Email modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalBox: { backgroundColor: '#FFFFFF', width: '100%', maxWidth: 480, borderRadius: 14, overflow: 'hidden', ...shadows.lg },
+  modalHeader: { backgroundColor: colors.brandPrimary, flexDirection: 'row', alignItems: 'center', padding: 16, gap: 10 },
+  modalTitle: { flex: 1, color: '#FFFFFF', fontWeight: '700', fontSize: 13, letterSpacing: 0.5 },
+  modalBody: { padding: 20 },
+  modalInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.surfaceTertiary, padding: 12, marginBottom: 16, borderRadius: 8 },
+  modalInfoLabel: { fontWeight: '700', fontSize: 10, color: colors.muted, letterSpacing: 0.5 },
+  modalInfoValue: { fontWeight: '800', fontSize: 14, color: colors.onSurface },
+  sectionLabel: { fontWeight: '800', fontSize: 9, color: colors.mutedDark, letterSpacing: 1, marginBottom: 6 },
+  fixedEmailChip: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.successSurface, borderWidth: 1, borderColor: colors.success, padding: 10, borderRadius: 8 },
+  fixedEmailText: { fontSize: 12, fontWeight: '600', color: colors.success },
+  inputRow: { flexDirection: 'row', gap: 8 },
+  emailInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, fontWeight: '500', backgroundColor: colors.surface, color: colors.onSurface },
+  addBtn: { backgroundColor: colors.brandPrimary, width: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 8, ...shadows.xs },
+  extraList: { marginTop: 10, gap: 6 },
+  extraChip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.infoSurface, borderWidth: 1, borderColor: colors.border, padding: 8, borderRadius: 8 },
+  extraChipText: { fontSize: 12, fontWeight: '500', color: colors.info, flex: 1 },
+  summaryBox: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, backgroundColor: colors.surfaceTertiary, padding: 10, borderRadius: 8 },
+  summaryText: { fontSize: 11, fontWeight: '600', color: colors.mutedDark },
+  resultBox: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, borderWidth: 1, padding: 10, borderRadius: 8 },
+  resultText: { flex: 1, fontSize: 12, fontWeight: '600' },
+  modalFooter: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: colors.border },
+  cancelBtn: { flex: 1, padding: 16, alignItems: 'center', borderRightWidth: 1, borderRightColor: colors.border },
+  cancelBtnText: { fontWeight: '700', fontSize: 12, color: colors.muted },
+  sendBtn: { flex: 2, padding: 16, backgroundColor: colors.brandPrimary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  sendBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12, letterSpacing: 0.5 },
+
+  // Duplicates modal
+  dupHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: '#FFFFFF' },
+  dupBackBtn: { marginRight: 12, padding: 4 },
+  dupTitle: { fontSize: 16, fontWeight: '700', color: colors.onSurface, flex: 1 },
+  dupDesc: { color: colors.muted, marginBottom: 16, fontSize: 13, lineHeight: 18, fontWeight: '500' },
+  dupEmpty: { alignItems: 'center', paddingVertical: 40 },
+  dupEmptyText: { color: colors.success, fontWeight: '600', marginTop: 12, fontSize: 14, textAlign: 'center' },
+  dupGroup: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 12, marginBottom: 12, backgroundColor: '#FFFFFF' },
+  dupRecord: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  dupPlates: { fontWeight: '700', fontSize: 15, color: colors.onSurface },
+  dupMeta: { color: colors.muted, fontSize: 12, marginTop: 2 },
+  dupDate: { color: colors.mutedLight, fontSize: 11, marginTop: 2 },
+  dupMergeBtn: { backgroundColor: colors.brandPrimary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, ...shadows.xs },
+  dupMergeBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
+});

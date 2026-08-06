@@ -91,6 +91,7 @@ export interface Notification {
   kind: string | null;
   metadata: any;
   created_at: string;
+  urgent?: boolean;
 }
 
 interface NotificationsContextValue {
