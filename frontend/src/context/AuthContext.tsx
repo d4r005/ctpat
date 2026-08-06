@@ -3,11 +3,8 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { supabase } from '../api/supabase';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
 const TOKEN_KEY = 'naf_jwt_token';
 const USER_KEY = 'naf_user';
-const BACK_TOKEN = 'userToken'; // Key used by background task
 
 export interface User {
   id: string;

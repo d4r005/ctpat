@@ -12,67 +12,75 @@ const BACKGROUND_NOTIFICATION_TASK = 'BACKGROUND_NOTIFICATION_TASK';
 const NOTIF_DEDUP_WINDOW_MS = 60_000; // 1 minute — don't re-show the same notification in this period
 
 // Configure notification behavior
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+if (Platform.OS !== 'web' || typeof window !== 'undefined') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 // ─── BACKGROUND TASK ───────────────────────────────────────────────────────
-TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async () => {
+if (Platform.OS !== 'web' || typeof window !== 'undefined') {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return BackgroundFetch.BackgroundFetchResult.NoData;
+    TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return BackgroundFetch.BackgroundFetchResult.NoData;
 
-    // Background fetch still works by polling the database via Supabase REST API
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .or(`user_id.eq.${session.user.id},user_id.is.null`)
-      .order('created_at', { ascending: false })
-      .limit(5);
+        // Background fetch still works by polling the database via Supabase REST API
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .or(`user_id.eq.${session.user.id},user_id.is.null`)
+          .order('created_at', { ascending: false })
+          .limit(5);
 
-    if (error || !data || data.length === 0) return BackgroundFetch.BackgroundFetchResult.NoData;
+        if (error || !data || data.length === 0) return BackgroundFetch.BackgroundFetchResult.NoData;
 
-    const lastNotifId = await AsyncStorage.getItem('last_notif_id');
-    const lastNotifTs = await AsyncStorage.getItem('last_notif_ts');
-    const now = Date.now();
-    const lastTs = lastNotifTs ? parseInt(lastNotifTs) : 0;
+        const lastNotifId = await AsyncStorage.getItem('last_notif_id');
+        const lastNotifTs = await AsyncStorage.getItem('last_notif_ts');
+        const now = Date.now();
+        const lastTs = lastNotifTs ? parseInt(lastNotifTs) : 0;
 
-    // Find the first unread notification that hasn't been shown recently
-    const newest = data.find((n: any) => !n.read && n.id !== lastNotifId);
-    if (!newest) return BackgroundFetch.BackgroundFetchResult.NoData;
+        // Find the first unread notification that hasn't been shown recently
+        const newest = data.find((n: any) => !n.read && n.id !== lastNotifId);
+        if (!newest) return BackgroundFetch.BackgroundFetchResult.NoData;
 
-    // Avoid duplicates with deduplication window
-    if (newest.id === lastNotifId && now - lastTs < NOTIF_DEDUP_WINDOW_MS) {
-      return BackgroundFetch.BackgroundFetchResult.NoData;
-    }
+        // Avoid duplicates with deduplication window
+        if (newest.id === lastNotifId && now - lastTs < NOTIF_DEDUP_WINDOW_MS) {
+          return BackgroundFetch.BackgroundFetchResult.NoData;
+        }
 
-    const metadata = newest.metadata || {};
-    const isUrgent = metadata.urgent || newest.kind === 'falla' || newest.kind === 'mention';
+        const metadata = newest.metadata || {};
+        const isUrgent = metadata.urgent || newest.kind === 'falla' || newest.kind === 'mention';
 
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: `${isUrgent ? '🔴' : '📋'} ${newest.title}`,
-        body: newest.message,
-        data: metadata,
-        sound: 'default',
-      },
-      trigger: null,
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: `${isUrgent ? '🔴' : '📋'} ${newest.title}`,
+            body: newest.message,
+            data: metadata,
+            sound: 'default',
+          },
+          trigger: null,
+        });
+
+        await AsyncStorage.setItem('last_notif_id', newest.id);
+        await AsyncStorage.setItem('last_notif_ts', String(now));
+        return BackgroundFetch.BackgroundFetchResult.NewData;
+      } catch (error) {
+        console.error('[BGTask] Error:', error);
+        return BackgroundFetch.BackgroundFetchResult.Failed;
+      }
     });
-
-    await AsyncStorage.setItem('last_notif_id', newest.id);
-    await AsyncStorage.setItem('last_notif_ts', String(now));
-    return BackgroundFetch.BackgroundFetchResult.NewData;
-  } catch (error) {
-    console.error('[BGTask] Error:', error);
-    return BackgroundFetch.BackgroundFetchResult.Failed;
+  } catch (e) {
+    console.warn('[Notifications] TaskManager error:', e);
   }
-});
+}
 
 export interface Notification {
   id: string;
