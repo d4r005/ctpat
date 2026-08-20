@@ -17,7 +17,7 @@ interface NavItem {
 
 const isWeb = Platform.OS === 'web';
 
-// Left navigation rail for desktop/web — premium enterprise sidebar
+// Left navigation rail for desktop/web â€” premium enterprise sidebar
 export default function SidebarNav() {
   const router = useRouter();
   const pathname = usePathname();
@@ -25,8 +25,7 @@ export default function SidebarNav() {
   const { user, signOut } = useAuth();
   const { isOnline } = useInspections();
 
-  const isAdminOrSup = user?.role === 'admin' || user?.role === 'supervisor' ||
-    ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+  const isAdminOrSup = user?.role === 'admin' || user?.role === 'supervisor';
 
   const items: NavItem[] = [
     { key: 'inicio', route: '/(app)/inicio', match: '/inicio', label: t('inicio'), render: (c, s) => <Ionicons name="home" size={s} color={c} /> },
@@ -37,7 +36,7 @@ export default function SidebarNav() {
   ];
 
   const adminItems: NavItem[] = isAdminOrSup ? [
-    { key: 'analitica', route: '/(app)/analitica', match: '/analitica', label: t('analitica') || 'Analítica', render: (c, s) => <Ionicons name="bar-chart" size={s} color={c} /> },
+    { key: 'analitica', route: '/(app)/analitica', match: '/analitica', label: t('analitica') || 'AnalÃ­tica', render: (c, s) => <Ionicons name="bar-chart" size={s} color={c} /> },
     { key: 'supervisor', route: '/(app)/supervisor', match: '/supervisor', label: t('maestro').toUpperCase(), render: (c, s) => <Ionicons name="shield-checkmark" size={s} color={c} /> },
   ] : [];
 
@@ -69,7 +68,7 @@ export default function SidebarNav() {
 
   return (
     <View style={styles.sidebar}>
-      {/* ── Brand area ── */}
+      {/* â”€â”€ Brand area â”€â”€ */}
       <View style={styles.brandArea}>
         <View style={styles.logoWrap}>
           <View style={styles.logoBadge}>
@@ -82,16 +81,16 @@ export default function SidebarNav() {
         </View>
       </View>
 
-      {/* ── Navigation ── */}
+      {/* â”€â”€ Navigation â”€â”€ */}
       <ScrollView style={styles.navScroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.navSectionLabel}>{t('menu') || 'MENÚ'}</Text>
+        <Text style={styles.navSectionLabel}>{t('menu') || 'MENÃš'}</Text>
         <View style={styles.navGroup}>
           {items.map(renderNavItem)}
         </View>
 
         {adminItems.length > 0 && (
           <>
-            <Text style={[styles.navSectionLabel, { marginTop: spacing.xl }]}>{t('administracion') || 'ADMINISTRACIÓN'}</Text>
+            <Text style={[styles.navSectionLabel, { marginTop: spacing.xl }]}>{t('administracion') || 'ADMINISTRACIÃ“N'}</Text>
             <View style={styles.navGroup}>
               {adminItems.map(renderNavItem)}
             </View>
@@ -99,7 +98,7 @@ export default function SidebarNav() {
         )}
       </ScrollView>
 
-      {/* ── Footer / user ── */}
+      {/* â”€â”€ Footer / user â”€â”€ */}
       <View style={styles.footer}>
         <View style={styles.footerDivider} />
         <Pressable
@@ -242,3 +241,4 @@ const styles = StyleSheet.create({
 });
 
 export { SIDEBAR_WIDTH };
+

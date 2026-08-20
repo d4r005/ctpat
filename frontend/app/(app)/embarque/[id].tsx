@@ -28,11 +28,11 @@ export default function EmbarqueDetail() {
   const [sigTarget, setSigTarget] = useState<'almacenista' | 'guardia'>('almacenista');
   const sigRef = React.useRef<any>(null);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'supervisor' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+  const isAdmin = user?.role === 'admin' || user?.role === 'supervisor';
   // Borrar el ticket es una acción destructiva reservada a admin real (el
   // backend rechaza con 403 a supervisor, así que el botón sólo se muestra
   // a quien realmente puede usarlo).
-  const isRealAdmin = user?.role === 'admin' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+  const isRealAdmin = user?.role === 'admin';
   const [deleting, setDeleting] = useState(false);
 
   const load = async () => {

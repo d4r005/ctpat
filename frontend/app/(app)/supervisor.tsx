@@ -21,7 +21,7 @@ import MainHeader from '@/src/components/MainHeader';
 const isWeb = Platform.OS === 'web';
 type TabType = 'caseta' | 'inspeccion' | 'embarque';
 
-// ─── Modal de Envío de Correo ───────────────────────────────────────────────
+// â”€â”€â”€ Modal de EnvÃ­o de Correo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function EmailModal({ visible, recordId, plates, token, onClose }: {
   visible: boolean; recordId: string; plates: string; token: string; onClose: () => void;
 }) {
@@ -126,7 +126,7 @@ function EmailModal({ visible, recordId, plates, token, onClose }: {
   );
 }
 
-// ─── DuplicatesModal ─────────────────────────────────────────────────────────
+// â”€â”€â”€ DuplicatesModal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function DuplicatesModal({ visible, token, onClose, onMerged }: { visible: boolean; token: string; onClose: () => void; onMerged: () => void; }) {
   const [loading, setLoading] = useState(false);
   const [groups, setGroups] = useState<any[]>([]);
@@ -160,7 +160,7 @@ function DuplicatesModal({ visible, token, onClose, onMerged }: { visible: boole
 
   const handleMerge = (keepId: string, removeId: string, keepPlates: string, removePlates: string) => {
     Alert.alert('Fusionar registros',
-      `Se conservará "${keepPlates}" y se le pasarán todas las inspecciones de "${removePlates}". El duplicado se eliminará. ¿Continuar?`,
+      `Se conservarÃ¡ "${keepPlates}" y se le pasarÃ¡n todas las inspecciones de "${removePlates}". El duplicado se eliminarÃ¡. Â¿Continuar?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         { text: 'Fusionar', style: 'destructive', onPress: async () => {
@@ -185,14 +185,14 @@ function DuplicatesModal({ visible, token, onClose, onMerged }: { visible: boole
         </View>
         <ScrollView contentContainerStyle={{ padding: 16 }}>
           <Text style={s.dupDesc}>
-            Se agrupan registros cuya placa difiere solo en un carácter fácilmente confundido por OCR
-            (Z/2, O/0, I/1, S/5, B/8, G/6). Elige cuál placa conservar — el otro registro se fusiona en ese y se elimina.
+            Se agrupan registros cuya placa difiere solo en un carÃ¡cter fÃ¡cilmente confundido por OCR
+            (Z/2, O/0, I/1, S/5, B/8, G/6). Elige cuÃ¡l placa conservar â€” el otro registro se fusiona en ese y se elimina.
           </Text>
           {loading && <ActivityIndicator style={{ marginTop: 20 }} color={colors.brandPrimary} />}
           {!loading && groups.length === 0 && (
             <View style={s.dupEmpty}>
               <Ionicons name="checkmark-circle" size={40} color={colors.success} />
-              <Text style={s.dupEmptyText}>No se encontraron duplicados por confusión de OCR 🎉</Text>
+              <Text style={s.dupEmptyText}>No se encontraron duplicados por confusiÃ³n de OCR ðŸŽ‰</Text>
             </View>
           )}
           {groups.map((g) => (
@@ -201,7 +201,7 @@ function DuplicatesModal({ visible, token, onClose, onMerged }: { visible: boole
                 <View key={r.id} style={s.dupRecord}>
                   <View style={{ flex: 1 }}>
                     <Text style={s.dupPlates}>{r.placas}</Text>
-                    <Text style={s.dupMeta}>{r.chofer || '-'} · {r.status} · {r.has_shipping_ticket ? 'con ticket' : 'sin ticket'}</Text>
+                    <Text style={s.dupMeta}>{r.chofer || '-'} Â· {r.status} Â· {r.has_shipping_ticket ? 'con ticket' : 'sin ticket'}</Text>
                     <Text style={s.dupDate}>{new Date(r.created_at).toLocaleString()}</Text>
                   </View>
                   <Pressable disabled={merging === r.id} style={s.dupMergeBtn} onPress={() => {
@@ -220,7 +220,7 @@ function DuplicatesModal({ visible, token, onClose, onMerged }: { visible: boole
   );
 }
 
-// ─── Tab Button ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Tab Button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function TabBtn({ label, icon, active, on, isMCI }: any) {
   const Icon = isMCI ? MaterialCommunityIcons : Ionicons;
   return (
@@ -234,7 +234,7 @@ function TabBtn({ label, icon, active, on, isMCI }: any) {
   );
 }
 
-// ─── Master Row ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Master Row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records, tickets, inspections, isAdmin, token, onDeleted }: any) {
   const [deleting, setDeleting] = useState(false);
   const normalize = (s: string) => s?.replace(/[^A-Z0-9]/g, '').toUpperCase() || '';
@@ -287,7 +287,7 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
   const handleDelete = () => {
     if (!canDelete || deleting) return;
     Alert.alert(t('eliminar_proceso_title') || 'Eliminar proceso',
-      (t('eliminar_proceso_msg', { plates }) as string) || `¿Seguro que quieres eliminar el proceso de la unidad ${plates}? No se puede deshacer.`,
+      (t('eliminar_proceso_msg', { plates }) as string) || `Â¿Seguro que quieres eliminar el proceso de la unidad ${plates}? No se puede deshacer.`,
       [
         { text: t('cancelar') || 'Cancelar', style: 'cancel' },
         { text: t('eliminar') || 'Eliminar', style: 'destructive', onPress: async () => {
@@ -313,7 +313,7 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
       <View style={{ flex: 1 }}>
         <View style={s.masterRowTop}>
           <Text style={s.masterPlates}>
-            {plates} {item.numero_trailer ? `· ${item.numero_trailer}` : ''}{' '}
+            {plates} {item.numero_trailer ? `Â· ${item.numero_trailer}` : ''}{' '}
             {item._is_virtual || item._is_pending ? `(${t('historico').toUpperCase()})` : ''}
           </Text>
           <View style={[s.statusBadge, { backgroundColor: statusSurface }]}>
@@ -321,7 +321,7 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
             <Text style={[s.statusText, { color: statusColor }]}>{statusLabel}</Text>
           </View>
         </View>
-        <Text style={s.masterSub}>{subtitle} {company !== '-' ? `· ${company}` : ''}</Text>
+        <Text style={s.masterSub}>{subtitle} {company !== '-' ? `Â· ${company}` : ''}</Text>
         <View style={{ marginVertical: 10 }}>
           <ProcessTracker steps={steps} compact showShipping={showShipping} />
         </View>
@@ -395,7 +395,7 @@ function MasterRow({ item, type, t, onPdf, onEmail, loadingPdf, router, records,
   );
 }
 
-// ─── Pantalla Principal ─────────────────────────────────────────────────────
+// â”€â”€â”€ Pantalla Principal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function Supervisor() {
   const { user, token } = useAuth();
   const router = useRouter();
@@ -404,8 +404,7 @@ export default function Supervisor() {
   const { width } = useWindowDimensions();
   const isDesktop = isWeb && width >= 1080;
 
-  const isAdminOrSup = user?.role === 'admin' || user?.role === 'supervisor' ||
-    ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+  const isAdminOrSup = user?.role === 'admin' || user?.role === 'supervisor';
 
   React.useEffect(() => {
     if (user && !isAdminOrSup) router.replace('/inicio');
@@ -467,16 +466,16 @@ export default function Supervisor() {
   };
 
   const handleDeepRepair = () => {
-    Alert.alert('🔧 Reparación Profunda', 'Esto analizará y corregirá vínculos rotos e inspecciones huérfanas. ¿Continuar?',
+    Alert.alert('ðŸ”§ ReparaciÃ³n Profunda', 'Esto analizarÃ¡ y corregirÃ¡ vÃ­nculos rotos e inspecciones huÃ©rfanas. Â¿Continuar?',
       [{ text: 'Cancelar', style: 'cancel' },
-       { text: 'Reparar', style: 'destructive', onPress: async () => { setSyncing(true); try { await handleRepair(); Alert.alert('✅ Reparación Completada', 'Se intentaron vincular todas las inspecciones huérfanas.'); } catch (e: any) { Alert.alert('Error', e.message); } finally { setSyncing(false); } } }]
+       { text: 'Reparar', style: 'destructive', onPress: async () => { setSyncing(true); try { await handleRepair(); Alert.alert('âœ… ReparaciÃ³n Completada', 'Se intentaron vincular todas las inspecciones huÃ©rfanas.'); } catch (e: any) { Alert.alert('Error', e.message); } finally { setSyncing(false); } } }]
     );
   };
 
   const handleForceSync = () => {
-    Alert.alert('🔄 Forzar Sincronización', 'Esto refrescará los datos locales desde Supabase. ¿Continuar?',
+    Alert.alert('ðŸ”„ Forzar SincronizaciÃ³n', 'Esto refrescarÃ¡ los datos locales desde Supabase. Â¿Continuar?',
       [{ text: 'Cancelar', style: 'cancel' },
-       { text: 'Sincronizar', onPress: async () => { setForceSyncing(true); try { await fetchEverything(); Alert.alert('✅ Sincronización Completada', 'Los datos han sido actualizados.'); } catch (e: any) { Alert.alert('Error', e.message); } finally { setForceSyncing(false); } } }]
+       { text: 'Sincronizar', onPress: async () => { setForceSyncing(true); try { await fetchEverything(); Alert.alert('âœ… SincronizaciÃ³n Completada', 'Los datos han sido actualizados.'); } catch (e: any) { Alert.alert('Error', e.message); } finally { setForceSyncing(false); } } }]
     );
   };
 
@@ -563,7 +562,7 @@ export default function Supervisor() {
     { icon: 'link', label: t('vincular_huerfanos').toUpperCase(), color: colors.brandPrimary, surface: colors.brandTertiary, onPress: handleRepair, disabled: syncing, loading: syncing },
     { icon: 'people', label: t('usuarios_caps').toUpperCase(), color: colors.info, surface: colors.infoSurface, onPress: () => router.push('/(app)/usuarios'), disabled: false, loading: false },
     { icon: 'git-merge', label: 'DUPLICADOS POR OCR (FUSIONAR)', color: colors.warning, surface: colors.warningSurface, onPress: () => setDuplicatesModalVisible(true), disabled: false, loading: false },
-    { icon: 'build', label: 'REPARACIÓN PROFUNDA (VÍNCULOS + FECHAS)', color: colors.error, surface: colors.errorSurface, onPress: handleDeepRepair, disabled: syncing, loading: syncing },
+    { icon: 'build', label: 'REPARACIÃ“N PROFUNDA (VÃNCULOS + FECHAS)', color: colors.error, surface: colors.errorSurface, onPress: handleDeepRepair, disabled: syncing, loading: syncing },
     { icon: 'cloud-upload', label: 'FORZAR SYNC OTROS DISPOSITIVOS', color: colors.success, surface: colors.successSurface, onPress: handleForceSync, disabled: forceSyncing, loading: forceSyncing },
   ];
 
@@ -621,7 +620,7 @@ export default function Supervisor() {
               {(() => {
                 const todayStr = new Date().toLocaleDateString('en-CA');
                 const active = selectedDate || todayStr;
-                if (active === todayStr) return 'HOY · ' + new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }).toUpperCase();
+                if (active === todayStr) return 'HOY Â· ' + new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }).toUpperCase();
                 return new Date(active + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'short', day: '2-digit', month: 'short' }).toUpperCase();
               })()}
             </Text>
@@ -806,3 +805,4 @@ const s = StyleSheet.create({
   sendBtn: { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: colors.brandPrimary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, ...shadows.xs },
   sendBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14, letterSpacing: 0.5 },
 });
+

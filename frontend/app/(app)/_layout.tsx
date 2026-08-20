@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+﻿import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '@/src/context/AuthContext';
@@ -18,8 +18,7 @@ export default function AppLayout() {
   const { width } = useWindowDimensions();
   const isDesktopWeb = isWeb && width >= 1080;
 
-  const isAdminOrSup = user?.role === 'admin' || user?.role === 'supervisor' ||
-    ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+  const isAdminOrSup = user?.role === 'admin' || user?.role === 'supervisor';
 
   useEffect(() => {
     if (!loading && !token) router.replace('/login');
@@ -118,3 +117,4 @@ export default function AppLayout() {
 
   return tabsElement;
 }
+

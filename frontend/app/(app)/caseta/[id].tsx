@@ -46,11 +46,11 @@ export default function CasetaDetail() {
   // embarque, para no tener que escribir el nombre a mano cada vez.
   const [guardiaSalidaOpcion, setGuardiaSalidaOpcion] = useState<'MARIO AGUILAR' | 'ADELAIDO SAENZ' | 'OTRO' | ''>('');
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'supervisor' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+  const isAdmin = user?.role === 'admin' || user?.role === 'supervisor';
   // Borrar sólo la salida (deshacer) es una acción destructiva reservada a
   // admin real — a diferencia de "isAdmin" arriba, que también incluye
   // supervisor para edición normal.
-  const isRealAdmin = user?.role === 'admin' || ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+  const isRealAdmin = user?.role === 'admin';
   const [deletingExit, setDeletingExit] = useState(false);
 
   const [entryForm, setEntryForm] = useState<any>(null);

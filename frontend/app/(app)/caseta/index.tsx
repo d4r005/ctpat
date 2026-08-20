@@ -66,8 +66,7 @@ export default function CasetaList() {
     );
   });
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'supervisor' ||
-    ['d.trujillo@brancoindustries.com', 'd4r005@gmail.com'].includes(user?.email || '');
+  const isAdmin = user?.role === 'admin' || user?.role === 'supervisor';
 
   const getStatus = (r: any) => {
     const map = {
@@ -78,7 +77,7 @@ export default function CasetaList() {
     return map[r.status as keyof typeof map] || map.entrada;
   };
 
-  // ── Desktop: premium data table ──
+  // â”€â”€ Desktop: premium data table â”€â”€
   const renderTableRow = ({ item: r, index }: { item: any; index: number }) => {
     const isFull = r.entry?.tipo_unidad === 'full';
     const isDescarga = r.entry?.condicion_carga === 'descarga';
@@ -97,10 +96,10 @@ export default function CasetaList() {
           <Text style={styles.tablePlate}>{r.plates || r.entry?.placas_unidad || 'S/P'}{isFull ? ' (FULL)' : ''}</Text>
         </View>
         <View style={[styles.tableCell, { flex: 1.4 }]}>
-          <Text style={styles.tableText} numberOfLines={1}>{r.entry?.chofer_nombre || '—'}</Text>
+          <Text style={styles.tableText} numberOfLines={1}>{r.entry?.chofer_nombre || 'â€”'}</Text>
         </View>
         <View style={[styles.tableCell, { flex: 1.4 }]}>
-          <Text style={styles.tableText} numberOfLines={1}>{r.entry?.compania_transporte || '—'}</Text>
+          <Text style={styles.tableText} numberOfLines={1}>{r.entry?.compania_transporte || 'â€”'}</Text>
         </View>
         <View style={[styles.tableCell, { flex: 1.6 }]}>
           <ProcessTracker steps={steps} compact showShipping={showShipping} />
@@ -115,7 +114,7 @@ export default function CasetaList() {
           <Text style={styles.tableMeta}>
             {(() => {
               const d = r.entry?.fecha_entrada || r.created_at;
-              return d ? new Date(d).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+              return d ? new Date(d).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'â€”';
             })()}
           </Text>
         </View>
@@ -126,7 +125,7 @@ export default function CasetaList() {
     );
   };
 
-  // ── Mobile: card ──
+  // â”€â”€ Mobile: card â”€â”€
   const renderCard = ({ item: r }: { item: any }) => {
     const isFull = r.entry?.tipo_unidad === 'full';
     const isDescarga = r.entry?.condicion_carga === 'descarga';
@@ -145,7 +144,7 @@ export default function CasetaList() {
               <Text style={styles.badgeText}>{label}</Text>
             </View>
           </View>
-          <Text style={styles.cardSub}>{r.entry?.chofer_nombre || '—'} · {r.entry?.compania_transporte || '—'}</Text>
+          <Text style={styles.cardSub}>{r.entry?.chofer_nombre || 'â€”'} Â· {r.entry?.compania_transporte || 'â€”'}</Text>
           <View style={{ marginVertical: 8 }}>
             <ProcessTracker steps={steps} compact showShipping={showShipping} showLabels />
           </View>
@@ -168,7 +167,7 @@ export default function CasetaList() {
     <View style={styles.tableHeader}>
       <Text style={[styles.tableHeaderText, { flex: 1.2 }]}>PLACAS</Text>
       <Text style={[styles.tableHeaderText, { flex: 1.4 }]}>CHOFER</Text>
-      <Text style={[styles.tableHeaderText, { flex: 1.4 }]}>COMPAÑÍA</Text>
+      <Text style={[styles.tableHeaderText, { flex: 1.4 }]}>COMPAÃ‘ÃA</Text>
       <Text style={[styles.tableHeaderText, { flex: 1.6 }]}>PROGRESO</Text>
       <Text style={[styles.tableHeaderText, { flex: 1 }]}>ESTADO</Text>
       <Text style={[styles.tableHeaderText, { flex: 1.3 }]}>FECHA</Text>
@@ -307,7 +306,7 @@ const styles = StyleSheet.create({
   },
   newBtnWebText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
 
-  // ── Desktop table ──
+  // â”€â”€ Desktop table â”€â”€
   tableContainer: { flex: 1, paddingHorizontal: 32, paddingTop: 24 },
   tableCard: {
     backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: colors.border,
@@ -335,7 +334,7 @@ const styles = StyleSheet.create({
   statusDot: { width: 7, height: 7, borderRadius: 4 },
   statusText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.4 },
 
-  // ── Mobile ──
+  // â”€â”€ Mobile â”€â”€
   list: { padding: spacing.md, paddingBottom: 90 },
   card: {
     backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border, borderRadius: 12,
@@ -359,3 +358,4 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 }, shadowRadius: 6,
   },
 });
+

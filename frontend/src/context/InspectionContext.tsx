@@ -415,7 +415,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     await setQueue(queue);
   }, [getQueue, setQueue]);
 
-  const saveInspection = useCallback(async (payload: InspectionPayload): Promise<any> => {
+  const saveInspection = useCallback(async (payload: InspectionPayload, isFromSync: boolean = false): Promise<any> => {
     const client_uuid = payload.client_uuid || uuid();
     const full = { ...payload, client_uuid, fecha_hora: payload.fecha_hora || new Date().toISOString() };
 
@@ -483,7 +483,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     return pending;
   }, [token, user, isOnline, refresh, addToQueue]);
 
-  const saveVehicleRecord = useCallback(async (payload: any): Promise<any> => {
+  const saveVehicleRecord = useCallback(async (payload: any, isFromSync: boolean = false): Promise<any> => {
     const tempId = uuid();
     if (isOnline) {
       try {
@@ -528,7 +528,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     return offlineRec;
   }, [token, isOnline, addToQueue, refresh, user]);
 
-  const saveShippingTicket = useCallback(async (payload: any): Promise<any> => {
+  const saveShippingTicket = useCallback(async (payload: any, isFromSync: boolean = false): Promise<any> => {
     const tempId = uuid();
     if (isOnline) {
       try {
@@ -562,7 +562,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     return { id: tempId, _offline: true, ...payload };
   }, [token, isOnline, addToQueue, user]);
 
-  const patchVehicleExit = useCallback(async (id: string, payload: any): Promise<any> => {
+  const patchVehicleExit = useCallback(async (id: string, payload: any, isFromSync: boolean = false): Promise<any> => {
     if (isOnline) {
       try {
         const processedPayload = { ...payload };
