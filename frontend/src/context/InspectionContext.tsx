@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import { Platform } from 'react-native';
@@ -9,13 +9,65 @@ const QUEUE_KEY = 'naf_universal_sync_queue';
 const CACHE_KEY = 'naf_inspections_cache';
 
 /**
- * Sube una imagen en Base64 a Supabase Storage y devuelve la URL pública.
+ * Guarda una imagen base64 como archivo temporal en el dispositivo (offline)
+ * o la sube directamente a Supabase Storage (online). Devuelve una URI o URL.
+ *
+ * Estrategia para evitar saturar AsyncStorage:
+ * - ONLINE: sube a Supabase Storage → devuelve URL pública
+ * - OFFLINE: guarda como archivo temporal con expo-file-system → devuelve file:// URI
+ *   La cola solo guarda la URI (decenas de bytes), no el base64 (megabytes)
  */
-async function uploadImage(bucket: string, b64: string): Promise<string> {
-  if (!b64 || typeof b64 !== 'string' || !b64.startsWith('data:image')) return b64;
+import * as FileSystem from 'expo-file-system';
+
+const OFFLINE_IMG_DIR = `${FileSystem.documentDirectory}naf_offline_images/`;
+
+async function ensureOfflineDir() {
+  const info = await FileSystem.getInfoAsync(OFFLINE_IMG_DIR);
+  if (!info.exists) {
+    await FileSystem.makeDirectoryAsync(OFFLINE_IMG_DIR, { intermediates: true });
+  }
+}
+
+async function saveOfflineImage(b64: string): Promise<string> {
+  await ensureOfflineDir();
+  const fileName = `img_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
+  const filePath = `${OFFLINE_IMG_DIR}${fileName}`;
+  // Extraer solo el base64 sin el prefijo data:image/jpeg;base64,
+  const pureB64 = b64.split(',')[1] || b64;
+  await FileSystem.writeAsStringAsync(filePath, pureB64, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  return filePath; // file:// URI
+}
+
+async function uploadImage(bucket: string, b64OrUri: string): Promise<string> {
+  if (!b64OrUri || typeof b64OrUri !== 'string') return b64OrUri;
+
+  // Si ya es una URL de Supabase, no procesar
+  if (b64OrUri.startsWith('http') && !b64OrUri.startsWith('data:image')) return b64OrUri;
+
   try {
-    const response = await fetch(b64);
-    const blob = await response.blob();
+    let blob: Blob;
+
+    if (b64OrUri.startsWith('data:image')) {
+      // Es base64 → convertir a blob
+      const response = await fetch(b64OrUri);
+      blob = await response.blob();
+    } else if (b64OrUri.startsWith('file://')) {
+      // Es un archivo local (offline) → leer y convertir
+      const fileInfo = await FileSystem.getInfoAsync(b64OrUri);
+      if (!fileInfo.exists) return b64OrUri; // archivo ya no existe
+      const base64Data = await FileSystem.readAsStringAsync(b64OrUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const response = await fetch(`data:image/jpeg;base64,${base64Data}`);
+      blob = await response.blob();
+      // Limpiar archivo temporal después de subir
+      FileSystem.deleteAsync(b64OrUri, { idempotent: true }).catch(() => {});
+    } else {
+      return b64OrUri;
+    }
+
     const fileName = `${Date.now()}-${uuid()}.jpg`;
 
     const { data, error } = await supabase.storage
@@ -37,6 +89,45 @@ async function uploadImage(bucket: string, b64: string): Promise<string> {
     console.error(`Error uploading to ${bucket}:`, e);
     throw e;
   }
+}
+
+/**
+ * Procesa un payload: si tiene imágenes base64, las guarda como archivos
+ * temporales y reemplaza el base64 con la URI del archivo.
+ * Esto reduce el tamaño de la cola de megabytes a kilobytes.
+ */
+async function offlineizeImages(payload: any): Promise<any> {
+  if (!payload || typeof payload !== 'object') return payload;
+  const result = { ...payload };
+
+  // Procesar puntos de inspección
+  if (result.points && Array.isArray(result.points)) {
+    result.points = await Promise.all(
+      result.points.map(async (p: any) => {
+        if (p.photo && p.photo.startsWith('data:image')) {
+          return { ...p, photo: await saveOfflineImage(p.photo) };
+        }
+        return p;
+      })
+    );
+  }
+
+  // Procesar firmas
+  if (result.inspector_firma && result.inspector_firma.startsWith('data:image')) {
+    result.inspector_firma = await saveOfflineImage(result.inspector_firma);
+  }
+  if (result.guard_signature && result.guard_signature.startsWith('data:image')) {
+    result.guard_signature = await saveOfflineImage(result.guard_signature);
+  }
+
+  // Procesar cualquier otro campo que sea data:image
+  for (const key in result) {
+    if (typeof result[key] === 'string' && result[key].startsWith('data:image')) {
+      result[key] = await saveOfflineImage(result[key]);
+    }
+  }
+
+  return result;
 }
 
 export interface InspectionPoint {
@@ -95,7 +186,14 @@ interface SyncItem {
   method: 'POST' | 'PATCH' | 'PUT';
   endpoint: string;
   payload: any;
+  retries?: number;
+  queuedAt?: string;
 }
+
+// --- Límites para evitar saturar AsyncStorage (~6MB en Android) ---
+const MAX_QUEUE_ITEMS = 10;        // máximo de items pendientes
+const MAX_QUEUE_BYTES = 4 * 1024 * 1024;  // 4MB máx de la cola serializada
+const MAX_RETRIES = 5;             // reintentos antes de descartar un item con error
 
 interface InspectionContextValue {
   inspections: Inspection[];
@@ -142,6 +240,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [offlineRecords, setOfflineRecords] = useState<any[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  const isSyncingRef = useRef(false); // anti-reentrancia en syncQueue
 
   const getQueue = useCallback(async (): Promise<SyncItem[]> => {
     const raw = await AsyncStorage.getItem(QUEUE_KEY);
@@ -150,19 +249,32 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setQueue = useCallback(async (q: SyncItem[]) => {
+    // Limitar número de items
+    if (q.length > MAX_QUEUE_ITEMS) {
+      console.warn(`[SyncQueue] Cola excede ${MAX_QUEUE_ITEMS} items, recortando los más antiguos`);
+      q = q.slice(-MAX_QUEUE_ITEMS);
+    }
     try {
+      const serialized = JSON.stringify(q);
+      // Verificar tamaño antes de guardar
+      if (serialized.length > MAX_QUEUE_BYTES) {
+        console.warn(`[SyncQueue] Cola excede ${MAX_QUEUE_BYTES / 1024 / 1024}MB, eliminando items más antiguos`);
+        while (q.length > 1 && JSON.stringify(q).length > MAX_QUEUE_BYTES) {
+          q = q.slice(1);
+        }
+      }
       await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(q));
       setPendingCount(q.length);
     } catch (e: any) {
       if (e.message?.includes('quota') || e.name === 'QuotaExceededError' || e.message?.includes('exceeded the quota')) {
+        console.error('[SyncQueue] AsyncStorage quota exceeded — limpiando cola para que la app siga funcionando');
+        await AsyncStorage.removeItem(QUEUE_KEY);
+        setPendingCount(0);
+        setOfflineRecords([]);
         if (Platform.OS === 'web') {
-          const clear = window.confirm("⚠️ MEMORIA LLENA: No se pueden guardar más registros offline porque la memoria del navegador está llena.\n\n¿Deseas limpiar la cola de sincronización para poder seguir usando la app? (Se perderán los registros que no se han subido)");
-          if (clear) {
-            await AsyncStorage.removeItem(QUEUE_KEY);
-            setPendingCount(0);
-            return;
-          }
+          alert('⚠️ Memoria llena. Se limpió la cola de sincronización para que la app siga funcionando.');
         }
+        return;
       }
       throw e;
     }
@@ -203,12 +315,14 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
 
   const syncQueue = useCallback(async () => {
     if (!token) return;
+    // Anti-reentrancia: si ya está sincronizando, no iniciar otra tanda
+    if (isSyncingRef.current) return;
+    isSyncingRef.current = true;
+
     const queue = await getQueue();
-    if (queue.length === 0) return;
+    if (queue.length === 0) { isSyncingRef.current = false; return; }
 
     setIsSyncing(true);
-
-    let successCount = 0;
     const remaining: SyncItem[] = [];
 
     for (const item of queue) {
@@ -222,10 +336,15 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
         } else if (item.type === 'vehicle_exit') {
           await patchVehicleExit(item.id, item.payload);
         }
-        successCount++;
-      } catch (err) {
-        console.error(`Sync error for ${item.type}:`, err);
-        remaining.push(item);
+        // Éxito: no agregar a remaining → se elimina de la cola
+      } catch (err: any) {
+        console.error(`Sync error for ${item.type}:`, err?.message || err);
+        const retries = (item.retries || 0) + 1;
+        if (retries < MAX_RETRIES) {
+          remaining.push({ ...item, retries });
+        } else {
+          console.warn(`[SyncQueue] Item ${item.id} descartado después de ${retries} intentos`);
+        }
       }
     }
 
@@ -236,6 +355,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     }
     await refresh();
     setIsSyncing(false);
+    isSyncingRef.current = false;
   }, [token, refresh, getQueue, setQueue]);
 
   useEffect(() => {
@@ -286,7 +406,12 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
 
   const addToQueue = useCallback(async (item: SyncItem) => {
     const queue = await getQueue();
-    queue.push(item);
+    queue.push({ ...item, queuedAt: new Date().toISOString(), retries: 0 });
+    // Si la cola está llena, eliminar el item más antiguo
+    if (queue.length > MAX_QUEUE_ITEMS) {
+      console.warn('[SyncQueue] Cola llena, eliminando item más antiguo');
+      queue.shift();
+    }
     await setQueue(queue);
   }, [getQueue, setQueue]);
 
@@ -344,7 +469,9 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    await addToQueue({ id: client_uuid, type: 'inspection', method: 'POST', endpoint: '/inspections', payload: full });
+    // Guardar imágenes como archivos temporales para no saturar AsyncStorage
+    const offlinePayload = await offlineizeImages(full);
+    await addToQueue({ id: client_uuid, type: 'inspection', method: 'POST', endpoint: '/inspections', payload: offlinePayload });
     const pending: Inspection = {
       ...full, id: client_uuid, user_id: user?.id || 'offline',
       created_at: new Date().toISOString(),
@@ -387,7 +514,8 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
         if (!isNetworkError) throw err;
       }
     }
-    await addToQueue({ id: tempId, type: 'vehicle_record', method: 'POST', endpoint: '/vehicle-records', payload });
+    const offlineVRPayload = await offlineizeImages(payload);
+    await addToQueue({ id: tempId, type: 'vehicle_record', method: 'POST', endpoint: '/vehicle-records', payload: offlineVRPayload });
     const offlineRec = {
       id: tempId, _offline: true, _pending: true,
       status: 'entrada',
@@ -429,7 +557,8 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
         if (!isNetworkError) throw err;
       }
     }
-    await addToQueue({ id: tempId, type: 'shipping_ticket', method: 'POST', endpoint: '/shipping-tickets', payload });
+    const offlineSTPayload = await offlineizeImages(payload);
+    await addToQueue({ id: tempId, type: 'shipping_ticket', method: 'POST', endpoint: '/shipping-tickets', payload: offlineSTPayload });
     return { id: tempId, _offline: true, ...payload };
   }, [token, isOnline, addToQueue, user]);
 
@@ -460,7 +589,8 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
         if (!isNetworkError) throw err;
       }
     }
-    await addToQueue({ id, type: 'vehicle_exit', method: 'PATCH', endpoint: `/vehicle-records/${id}/exit`, payload });
+    const offlineExitPayload = await offlineizeImages(payload);
+    await addToQueue({ id, type: 'vehicle_exit', method: 'PATCH', endpoint: `/vehicle-records/${id}/exit`, payload: offlineExitPayload });
     return { id, _offline: true, exit: payload };
   }, [token, isOnline, addToQueue]);
 

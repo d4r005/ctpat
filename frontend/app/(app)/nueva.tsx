@@ -505,10 +505,11 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
     } catch (e: any) {
       console.error('Error saving inspection:', e);
       let msg = e?.message || 'Error desconocido';
-      if (msg === 'Failed to fetch' || msg.includes('network') || msg.includes('Network')) {
+      const isOffline = msg === 'Failed to fetch' || msg.includes('network') || msg.includes('Network') || msg.includes('fetch') || msg.includes('conexión') || e?.isNetworkError;
+      if (isOffline) {
         Alert.alert(
-          '✅ Inspección guardada en tu dispositivo',
-          'No hay señal ahora. La inspección se enviará automáticamente cuando haya conexión. NO necesitas volver a hacerla.',
+          '✅ Inspección guardada',
+          'Sin conexión. La inspección se guardó en tu dispositivo y se enviará automáticamente cuando haya señal.\n\n⚠️ NO necesitas volver a hacerla.',
           [{ text: 'Entendido', onPress: () => onClose() }]
         );
         return;
@@ -863,7 +864,9 @@ function InspectionWizard({ type, onClose, initialData, t, saveInspection, user 
            onPress={() => step < 3 ? setStep(step+1) : handleFinish()}
            disabled={!canNext() || saving}
          >
-           {saving ? <ActivityIndicator color="#FFF" /> : <Text style={[styles.wizBtnText, { color: '#FFF' }]}>{step === 3 ? t('finalizar').toUpperCase() : t('siguiente').toUpperCase()}</Text>}
+           {saving
+            ? <><ActivityIndicator color="#FFF" size="small" /><Text style={[styles.wizBtnText, { color: '#FFF', marginLeft: 8 }]}>GUARDANDO...</Text></>
+            : <Text style={[styles.wizBtnText, { color: '#FFF' }]}>{step === 3 ? t('finalizar').toUpperCase() : t('siguiente').toUpperCase()}</Text>}
          </Pressable>
       </View>
 
