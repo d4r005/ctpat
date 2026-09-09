@@ -1,4 +1,8 @@
 import { DAMAGE_SURFACES, countDamages, DamageMap } from '@/src/components/BoxDamageMap';
+import {
+  ChecklistState,
+  CHECKLIST_FISICO_MECANICO, CHECKLIST_CUIDADO_MERCANCIA, CHECKLIST_ASEGURAMIENTO_CARGA,
+} from '@/src/components/WarehouseChecklist';
 
 /**
  * Generador del REPORTE CONSOLIDADO DE ALMACÉN (HTML → PDF).
@@ -26,7 +30,11 @@ export interface WarehouseReportData {
   foto_pared_der?: string;
   damage_map?: DamageMap;
   damage_notes?: Record<string, string>;
-  materiales?: Array<{ descripcion?: string; tipo?: string; cantidad?: string; observaciones?: string }>;
+  materiales?: Array<{ descripcion?: string; tipo?: string; cantidad?: string; observaciones?: string; fotos?: string[] }>;
+  checklist_fisico_mecanico?: ChecklistState;
+  checklist_cuidado_mercancia?: ChecklistState;
+  checklist_aseguramiento_carga?: ChecklistState;
+  sello_numero?: string;
   firma_almacenista?: string;
   firma_supervisor?: string;
   supervisor_nombre?: string;
@@ -118,6 +126,40 @@ const getDamageMapHtml = (map: DamageMap | undefined, notes: Record<string, stri
   `;
 };
 
+const getChecklistHtml = (items: { key: string; label: string }[], state: ChecklistState | undefined) => {
+  const rows = items.map((it) => {
+    const entry = (state && state[it.key]) || { valor: '', nota: '' };
+    const valor = entry.valor || '—';
+    const bg = valor === 'CUMPLE' ? '#10B981' : valor === 'NO_CUMPLE' ? '#EF4444' : '#94A3B8';
+    const badge = `<span style="background:${bg}; color:#FFF; font-size:8px; font-weight:900; padding:2px 8px; border-radius:3px; letter-spacing:0.5px;">${valor === 'NO_CUMPLE' ? 'NO CUMPLE' : valor}</span>`;
+    const nota = entry.nota ? `<div style="font-size:8px; color:#B91C1C; margin-top:2px; font-style:italic;">${entry.nota}</div>` : '';
+    return `
+      <tr>
+        <td style="border:1px solid #cbd5e1; padding:5px 6px; font-size:9px; width:78%;">${it.label}${nota}</td>
+        <td style="border:1px solid #cbd5e1; padding:5px 6px; text-align:center; width:22%;">${badge}</td>
+      </tr>
+    `;
+  }).join('');
+  return `<table style="width:100%; border-collapse:collapse; table-layout:fixed;">${rows}</table>`;
+};
+
+const getMaterialPhotosHtml = (materiales: WarehouseReportData['materiales']) => {
+  const conFotos = (materiales || []).filter(m => Array.isArray(m.fotos) && m.fotos.length > 0);
+  if (conFotos.length === 0) return '';
+  const blocks = conFotos.map((m, idx) => {
+    const imgs = (m.fotos || []).filter(f => validImg(f)).map(f => `
+      <img src="${f}" style="width:80px; height:80px; object-fit:cover; border:1px solid #ddd; border-radius:3px; margin:2px;" />
+    `).join('');
+    return `
+      <div style="margin-bottom:6px;">
+        <p style="margin:0 0 3px 0; font-size:8px; font-weight:bold; color:#0A2540;">MATERIAL ${idx + 1} — ${(m.descripcion || m.tipo || '').toUpperCase()}</p>
+        <div style="display:flex; flex-wrap:wrap;">${imgs}</div>
+      </div>
+    `;
+  }).join('');
+  return `<div style="margin-top:8px;">${blocks}</div>`;
+};
+
 export const generateWarehouseReportHtml = (d: WarehouseReportData): string => {
   const totalDanos = countDamages(d.damage_map);
   const materiales = Array.isArray(d.materiales) ? d.materiales.filter(m => m && (m.descripcion || m.cantidad)) : [];
@@ -184,8 +226,21 @@ export const generateWarehouseReportHtml = (d: WarehouseReportData): string => {
     ${getDamageMapHtml(d.damage_map, d.damage_notes)}
   </div>
 
-  <!-- 4. Lista de verificación de material -->
-  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">4. LISTA DE VERIFICACIÓN DE MATERIAL CARGADO</h3>
+  <!-- 4. Inspección físico-mecánica -->
+  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">4. INSPECCIÓN FÍSICO-MECÁNICA CONTENEDOR/CAJA</h3>
+  ${getChecklistHtml(CHECKLIST_FISICO_MECANICO, d.checklist_fisico_mecanico)}
+
+  <!-- 5. Verificación del cuidado de la mercancía -->
+  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">5. VERIFICACIÓN DEL CUIDADO DE LA MERCANCÍA</h3>
+  ${getChecklistHtml(CHECKLIST_CUIDADO_MERCANCIA, d.checklist_cuidado_mercancia)}
+
+  <!-- 6. Aseguramiento y sujeción de la carga -->
+  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">6. ASEGURAMIENTO Y SUJECIÓN DE LA CARGA</h3>
+  ${getChecklistHtml(CHECKLIST_ASEGURAMIENTO_CARGA, d.checklist_aseguramiento_carga)}
+  ${d.sello_numero ? `<table style="width:100%; border-collapse:collapse; margin-top:4px;"><tr>${infoCell('NO. DE SELLO', d.sello_numero.toUpperCase())}<td style="border:1px solid #cbd5e1;"></td></tr></table>` : ''}
+
+  <!-- 7. Lista de verificación de material -->
+  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">7. LISTA DE VERIFICACIÓN DE MATERIAL CARGADO</h3>
   <table style="width:100%; border-collapse:collapse; table-layout:fixed;">
     <tr>
       <th style="border:1px solid #cbd5e1; background:#F1F5F9; padding:4px 6px; font-size:8px; width:5%;">#</th>
@@ -196,15 +251,16 @@ export const generateWarehouseReportHtml = (d: WarehouseReportData): string => {
     </tr>
     ${materialRows || emptyRow}
   </table>
+  ${getMaterialPhotosHtml(materiales)}
 
-  <!-- 5. Observaciones generales -->
-  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">5. OBSERVACIONES GENERALES</h3>
+  <!-- 8. Observaciones generales -->
+  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">8. OBSERVACIONES GENERALES</h3>
   <table style="width:100%; border-collapse:collapse;">
     <tr><td style="border:1px solid #cbd5e1; padding:6px 8px; font-size:9px; min-height:40px;">${(d.observaciones || 'SIN OBSERVACIONES').toUpperCase()}</td></tr>
   </table>
 
-  <!-- 6. Firmas -->
-  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">6. VALIDACIÓN Y FIRMAS</h3>
+  <!-- 9. Firmas -->
+  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">9. VALIDACIÓN Y FIRMAS</h3>
   <div style="display:flex; justify-content:space-around; border:1px solid #cbd5e1; padding:8px 4px; margin-top:4px;">
     ${inlineSig(d.firma_almacenista, 'Firma Almacenista', d.almacenista)}
     ${inlineSig(d.firma_supervisor, 'Firma Supervisor', d.supervisor_nombre)}

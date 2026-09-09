@@ -13,6 +13,10 @@ import { colors, spacing, typography } from '@/src/constants/theme';
 import { sanitizePlate } from '@/src/utils/text';
 import { compressImage } from '@/src/utils/image';
 import BoxDamageMap, { DamageMap, emptyDamageMap, countDamages, DAMAGE_SURFACES } from '@/src/components/BoxDamageMap';
+import WarehouseChecklist, {
+  ChecklistState, buildChecklistState,
+  CHECKLIST_FISICO_MECANICO, CHECKLIST_CUIDADO_MERCANCIA, CHECKLIST_ASEGURAMIENTO_CARGA,
+} from '@/src/components/WarehouseChecklist';
 
 export default function AlmacenNuevo() {
   const router = useRouter();
@@ -39,14 +43,17 @@ export default function AlmacenNuevo() {
     hora_inicio: '', hora_fin: '', observaciones: '',
     foto_techo: '', foto_piso: '', foto_pared_izq: '', foto_pared_der: '',
     firma_almacenista: '', firma_supervisor: '', supervisor_nombre: '',
-    cliente_otro: '',
+    cliente_otro: '', sello_numero: '',
   });
 
   const [almacenistaOpcion, setAlmacenistaOpcion] = useState<'CARLOS CANIZALES' | 'CYNTHIA SAUCEDA' | 'OTRO' | ''>('');
   const [damageMap, setDamageMap] = useState<DamageMap>(emptyDamageMap());
   const [damageNotes, setDamageNotes] = useState<Record<string, string>>({});
   const [noteTarget, setNoteTarget] = useState<string | null>(null);
-  const [materiales, setMateriales] = useState<Array<{ descripcion: string; tipo: string; cantidad: string; observaciones: string }>>([]);
+  const [materiales, setMateriales] = useState<Array<{ descripcion: string; tipo: string; cantidad: string; observaciones: string; fotos: string[] }>>([]);
+  const [checklistFisico, setChecklistFisico] = useState<ChecklistState>(buildChecklistState(CHECKLIST_FISICO_MECANICO));
+  const [checklistMercancia, setChecklistMercancia] = useState<ChecklistState>(buildChecklistState(CHECKLIST_CUIDADO_MERCANCIA));
+  const [checklistCarga, setChecklistCarga] = useState<ChecklistState>(buildChecklistState(CHECKLIST_ASEGURAMIENTO_CARGA));
 
   const set = (k: string, v: any) => setForm({ ...form, [k]: v });
 
@@ -104,13 +111,48 @@ export default function AlmacenNuevo() {
     } catch (e: any) { alert(e.message || 'Error'); }
   };
 
-  const addMaterial = () => setMateriales([...materiales, { descripcion: '', tipo: 'PALLET', cantidad: '', observaciones: '' }]);
+  const addMaterial = () => setMateriales([...materiales, { descripcion: '', tipo: 'PALLET', cantidad: '', observaciones: '', fotos: [] }]);
   const setMaterial = (idx: number, k: string, v: string) => {
     const next = [...materiales];
     next[idx] = { ...next[idx], [k]: v };
     setMateriales(next);
   };
   const removeMaterial = (idx: number) => setMateriales(materiales.filter((_, i) => i !== idx));
+
+  const addMaterialPhoto = async (idx: number, source: 'camera' | 'gallery') => {
+    try {
+      if (source === 'camera') {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) { alert(t('acceso_restringido')); return; }
+      } else {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) { alert(t('acceso_restringido')); return; }
+      }
+      const r = source === 'camera'
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.2, base64: true })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.2, base64: true });
+      if (!r.canceled && r.assets[0]?.base64) {
+        const b64 = await compressImage(`data:image/jpeg;base64,${r.assets[0].base64}`);
+        const next = [...materiales];
+        next[idx] = { ...next[idx], fotos: [...(next[idx].fotos || []), b64] };
+        setMateriales(next);
+      }
+    } catch (e: any) { alert(e.message || 'Error'); }
+  };
+
+  const promptAddMaterialPhoto = (idx: number) => {
+    Alert.alert('Agregar fotografía', 'Foto del PO / material cargado', [
+      { text: 'Cámara', onPress: () => addMaterialPhoto(idx, 'camera') },
+      { text: 'Galería', onPress: () => addMaterialPhoto(idx, 'gallery') },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  };
+
+  const removeMaterialPhoto = (idx: number, photoIdx: number) => {
+    const next = [...materiales];
+    next[idx] = { ...next[idx], fotos: (next[idx].fotos || []).filter((_, i) => i !== photoIdx) };
+    setMateriales(next);
+  };
 
   const save = async () => {
     const finalCliente = form.cliente === 'OTRO' ? form.cliente_otro : form.cliente;
@@ -129,6 +171,9 @@ export default function AlmacenNuevo() {
         damage_map: damageMap,
         damage_notes: damageNotes,
         materiales,
+        checklist_fisico_mecanico: checklistFisico,
+        checklist_cuidado_mercancia: checklistMercancia,
+        checklist_aseguramiento_carga: checklistCarga,
       };
       const created = await saveWarehouseRecord(payload);
       Alert.alert('Guardado', 'Registro de almacén guardado correctamente.', [
@@ -229,6 +274,19 @@ export default function AlmacenNuevo() {
             ))}
           </Section>
 
+          <Section title="1. INSPECCIÓN FÍSICO-MECÁNICA CONTENEDOR/CAJA">
+            <WarehouseChecklist items={CHECKLIST_FISICO_MECANICO} state={checklistFisico} onChange={setChecklistFisico} />
+          </Section>
+
+          <Section title="2. VERIFICACIÓN DEL CUIDADO DE LA MERCANCÍA">
+            <WarehouseChecklist items={CHECKLIST_CUIDADO_MERCANCIA} state={checklistMercancia} onChange={setChecklistMercancia} />
+          </Section>
+
+          <Section title="3. ASEGURAMIENTO Y SUJECIÓN DE LA CARGA">
+            <WarehouseChecklist items={CHECKLIST_ASEGURAMIENTO_CARGA} state={checklistCarga} onChange={setChecklistCarga} />
+            <F label="NÚMERO DE SELLO DE SEGURIDAD" v={form.sello_numero} on={(v: string) => set('sello_numero', v)} placeholder="Ej. SL-0012345" />
+          </Section>
+
           <Section title="LISTA DE VERIFICACIÓN DE MATERIAL CARGADO">
             {materiales.map((m, idx) => (
               <View key={idx} style={styles.materialCard}>
@@ -253,6 +311,21 @@ export default function AlmacenNuevo() {
                 </View>
                 <F label="CANTIDAD" v={m.cantidad} on={(v: string) => setMaterial(idx, 'cantidad', v)} kb="number-pad" />
                 <F label="OBSERVACIONES" v={m.observaciones} on={(v: string) => setMaterial(idx, 'observaciones', v)} />
+                <Text style={styles.label}>FOTOGRAFÍAS DEL PO / MATERIAL CARGADO</Text>
+                <View style={styles.materialPhotosRow}>
+                  {(m.fotos || []).map((foto: string, pIdx: number) => (
+                    <View key={pIdx} style={styles.materialPhotoThumb}>
+                      <Image source={{ uri: foto }} style={styles.materialPhotoImg} />
+                      <Pressable style={styles.materialPhotoRemove} onPress={() => removeMaterialPhoto(idx, pIdx)}>
+                        <Ionicons name="close-circle" size={18} color={colors.error} />
+                      </Pressable>
+                    </View>
+                  ))}
+                  <Pressable style={styles.materialPhotoAdd} onPress={() => promptAddMaterialPhoto(idx)}>
+                    <Ionicons name="camera" size={20} color={colors.brandPrimary} />
+                    <Text style={styles.materialPhotoAddText}>AGREGAR</Text>
+                  </Pressable>
+                </View>
               </View>
             ))}
             <Pressable style={styles.addMaterialBtn} onPress={addMaterial}>
@@ -454,4 +527,10 @@ const styles = StyleSheet.create({
   materialIdx: { fontSize: 11, fontWeight: '900', letterSpacing: 1, color: colors.brandSecondary },
   addMaterialBtn: { backgroundColor: colors.brandPrimary, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   addMaterialText: { color: colors.onBrandPrimary, fontWeight: '900', letterSpacing: 1, fontSize: 12 },
+  materialPhotosRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: 4 },
+  materialPhotoThumb: { position: 'relative', width: 72, height: 72, borderWidth: 1, borderColor: colors.borderStrong },
+  materialPhotoImg: { width: '100%', height: '100%', resizeMode: 'cover' },
+  materialPhotoRemove: { position: 'absolute', top: -6, right: -6, backgroundColor: '#FFF', borderRadius: 10 },
+  materialPhotoAdd: { width: 72, height: 72, borderWidth: 1, borderColor: colors.borderStrong, borderStyle: 'dashed', backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  materialPhotoAddText: { fontSize: 8, fontWeight: '900', color: colors.brandPrimary, letterSpacing: 0.3 },
 });

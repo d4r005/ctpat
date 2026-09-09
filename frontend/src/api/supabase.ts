@@ -1,11 +1,27 @@
-﻿import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 const supabaseUrl = 'https://nltfincxdlnunihvwlob.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5sdGZpbmN4ZGxudW5paHZ3bG9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMzM4MjAsImV4cCI6MjEwMTYwOTgyMH0.VGI02LRMljpmA6P6XYA44USytFCMnqo-sPkGGvTnFbY';
 
-const isWeb = Platform.OS === 'web' || typeof window !== 'undefined';
+// SSR-safe: en el build de Node (Cloudflare/Metro) no existe WebSocket nativo
+// en Node < 22. Pasamos un transport stub para que createClient no lance error
+// durante el render estático; en el navegador se usa el WebSocket real.
+const isBrowser = typeof window !== 'undefined' && typeof (window as any).WebSocket !== 'undefined';
+
+class StubWebSocket {
+  url: string;
+  constructor(url?: string) { this.url = url || ''; }
+  close() {}
+  send() {}
+  addEventListener() {}
+  removeEventListener() {}
+  set onopen(_: any) {}
+  set onclose(_: any) {}
+  set onerror(_: any) {}
+  set onmessage(_: any) {}
+}
 
 const webLocalStorage = {
   getItem: (key: string): Promise<string | null> => {
@@ -31,9 +47,10 @@ const webLocalStorage = {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: isWeb ? webLocalStorage : AsyncStorage,
+    storage: Platform.OS === 'web' ? webLocalStorage : AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: isWeb,
+    detectSessionInUrl: isBrowser,
   },
+  ...(isBrowser ? {} : { realtime: { transport: StubWebSocket as any } }),
 });

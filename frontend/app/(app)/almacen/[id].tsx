@@ -13,6 +13,10 @@ import { supabase } from '@/src/api/supabase';
 import { colors, spacing, radius } from '@/src/constants/theme';
 import MainHeader from '@/src/components/MainHeader';
 import BoxDamageMap, { DamageMap, countDamages, DAMAGE_SURFACES } from '@/src/components/BoxDamageMap';
+import {
+  ChecklistState, countNoCumple,
+  CHECKLIST_FISICO_MECANICO, CHECKLIST_CUIDADO_MERCANCIA, CHECKLIST_ASEGURAMIENTO_CARGA,
+} from '@/src/components/WarehouseChecklist';
 import { generateWarehouseReportHtml, WarehouseReportData } from '@/src/utils/warehouseReport';
 
 export default function AlmacenDetalle() {
@@ -97,6 +101,7 @@ export default function AlmacenDetalle() {
 
   const danos = countDamages(rec.damage_map);
   const materiales: any[] = Array.isArray(rec.materiales) ? rec.materiales : [];
+  const noCumpleTotal = countNoCumple(rec.checklist_fisico_mecanico) + countNoCumple(rec.checklist_cuidado_mercancia) + countNoCumple(rec.checklist_aseguramiento_carga);
   const validImg = (src?: string) => !!src && (src.startsWith('data:image') || src.startsWith('http'));
   const fmtDate = (d: any) => {
     if (!d) return '';
@@ -125,6 +130,7 @@ export default function AlmacenDetalle() {
         {/* Resumen */}
         <View style={styles.summaryRow}>
           <SummaryBox label="DAÑOS" value={danos > 0 ? `${danos}` : '0'} bad={danos > 0} />
+          <SummaryBox label="NO CUMPLE" value={`${noCumpleTotal}`} bad={noCumpleTotal > 0} />
           <SummaryBox label="MATERIALES" value={`${materiales.length}`} />
           <SummaryBox label="ALMACENISTA" value={(rec.almacenista || '—').split(' ')[0] || '—'} small />
         </View>
@@ -166,6 +172,15 @@ export default function AlmacenDetalle() {
           )}
         </Section>
 
+        <ChecklistReadonly title="1. INSPECCIÓN FÍSICO-MECÁNICA CONTENEDOR/CAJA" items={CHECKLIST_FISICO_MECANICO} state={rec.checklist_fisico_mecanico} />
+        <ChecklistReadonly title="2. VERIFICACIÓN DEL CUIDADO DE LA MERCANCÍA" items={CHECKLIST_CUIDADO_MERCANCIA} state={rec.checklist_cuidado_mercancia} />
+        <ChecklistReadonly title="3. ASEGURAMIENTO Y SUJECIÓN DE LA CARGA" items={CHECKLIST_ASEGURAMIENTO_CARGA} state={rec.checklist_aseguramiento_carga} />
+        {!!rec.sello_numero && (
+          <Section title="SELLO DE SEGURIDAD">
+            <Row label="NÚMERO DE SELLO" value={rec.sello_numero} />
+          </Section>
+        )}
+
         <Section title="LISTA DE VERIFICACIÓN DE MATERIAL CARGADO">
           {materiales.length === 0 ? (
             <Text style={styles.emptyMaterials}>SIN MATERIALES REGISTRADOS</Text>
@@ -178,6 +193,13 @@ export default function AlmacenDetalle() {
                 </View>
                 <Text style={styles.materialDesc}>{(m.descripcion || '—').toUpperCase()}</Text>
                 {!!m.observaciones && <Text style={styles.materialObs}>{m.observaciones.toUpperCase()}</Text>}
+                {Array.isArray(m.fotos) && m.fotos.length > 0 && (
+                  <View style={styles.materialPhotoGrid}>
+                    {m.fotos.map((foto: string, pIdx: number) => (
+                      validImg(foto) ? <Image key={pIdx} source={{ uri: foto }} style={styles.materialPhotoThumb} /> : null
+                    ))}
+                  </View>
+                )}
               </View>
             ))
           )}
@@ -219,6 +241,29 @@ function Row({ label, value }: any) {
       <Text style={styles.rowLabel}>{label}</Text>
       <Text style={styles.rowValue}>{value || '—'}</Text>
     </View>
+  );
+}
+
+function ChecklistReadonly({ title, items, state }: { title: string; items: { key: string; label: string }[]; state?: ChecklistState }) {
+  return (
+    <Section title={title}>
+      {items.map((it) => {
+        const entry = (state && state[it.key]) || { valor: '', nota: '' };
+        const valor = entry.valor || '—';
+        const badgeStyle = valor === 'CUMPLE' ? styles.checklistBadgeSuccess
+          : valor === 'NO_CUMPLE' ? styles.checklistBadgeError
+          : styles.checklistBadgeNeutral;
+        return (
+          <View key={it.key} style={styles.checklistRow}>
+            <Text style={styles.checklistLabel}>{it.label}</Text>
+            <View style={[styles.checklistBadge, badgeStyle]}>
+              <Text style={styles.checklistBadgeText}>{valor === 'NO_CUMPLE' ? 'NO CUMPLE' : valor}</Text>
+            </View>
+            {!!entry.nota && <Text style={styles.checklistNota}>{entry.nota}</Text>}
+          </View>
+        );
+      })}
+    </Section>
   );
 }
 
@@ -287,4 +332,14 @@ const styles = StyleSheet.create({
   sigName: { fontSize: 9, color: colors.muted, marginTop: 1 },
   pdfBtn: { backgroundColor: colors.brandPrimary, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: 60, borderRadius: radius.sm },
   pdfBtnText: { color: colors.onBrandPrimary, fontWeight: '900', letterSpacing: 1, fontSize: 12 },
+  checklistRow: { borderBottomWidth: 1, borderBottomColor: colors.divider, paddingVertical: spacing.sm },
+  checklistLabel: { fontSize: 11, color: colors.onSurface, fontWeight: '600', marginBottom: 6, lineHeight: 15 },
+  checklistBadge: { alignSelf: 'flex-start', paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.xs },
+  checklistBadgeSuccess: { backgroundColor: colors.success },
+  checklistBadgeError: { backgroundColor: colors.error },
+  checklistBadgeNeutral: { backgroundColor: colors.mutedLight },
+  checklistBadgeText: { fontSize: 9, fontWeight: '900', color: '#FFF', letterSpacing: 0.5 },
+  checklistNota: { fontSize: 10, color: colors.error, marginTop: 4, fontStyle: 'italic' },
+  materialPhotoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.sm },
+  materialPhotoThumb: { width: 56, height: 56, borderRadius: radius.xs, borderWidth: 1, borderColor: colors.border },
 });
