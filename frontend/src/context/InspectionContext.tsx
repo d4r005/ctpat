@@ -40,7 +40,39 @@ async function saveOfflineImage(b64: string): Promise<string> {
   return filePath; // file:// URI
 }
 
-async function uploadImage(bucket: string, b64OrUri: string): Promise<string> {
+// ---------- Organización de fotos por unidad y visita ----------
+// Estructura de carpeta en Supabase Storage:
+//   {PLACAS}-{DDMMYYYY}-{HHMM}  (hora de llegada de la unidad)
+//   ej: 73LA2J-09092026-1352 → unidad 73LA2J estuvo el 9-sep-2026, llegó 13:52
+// Si la unidad vuelve el mismo día, la hora de llegada distingue cada visita.
+
+function sanitizePlateForFolder(plates?: string | null): string {
+  const clean = (plates || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return clean || 'SINPLACAS';
+}
+
+function pad2(n: number): string {
+  return n.toString().padStart(2, '0');
+}
+
+/** Carpeta desde placas y una fecha (zona horaria local del dispositivo) */
+function folderFromLocalDate(plates: string, d: Date): string {
+  const fecha = `${pad2(d.getDate())}${pad2(d.getMonth() + 1)}${d.getFullYear()}`;
+  const hora = `${pad2(d.getHours())}${pad2(d.getMinutes())}`;
+  return `${sanitizePlateForFolder(plates)}-${fecha}-${hora}`;
+}
+
+/** Carpeta desde placas + fecha del registro (ISO o Date) + hora de llegada "HH:MM" */
+function folderFromRecord(plates: string, created: string | Date, horaLlegada?: string): string {
+  const d = typeof created === 'string' ? new Date(created) : new Date(created.getTime());
+  if (horaLlegada && /^\d{1,2}:\d{2}/.test(horaLlegada)) {
+    const [h, m] = horaLlegada.split(':');
+    d.setHours(parseInt(h, 10), parseInt(m, 10), 0, 0);
+  }
+  return folderFromLocalDate(plates, d);
+}
+
+async function uploadImage(bucket: string, b64OrUri: string, folder?: string): Promise<string> {
   if (!b64OrUri || typeof b64OrUri !== 'string') return b64OrUri;
 
   // Si ya es una URL de Supabase, no procesar
@@ -69,10 +101,12 @@ async function uploadImage(bucket: string, b64OrUri: string): Promise<string> {
     }
 
     const fileName = `${Date.now()}-${uuid()}.jpg`;
+    // Ruta con carpeta de unidad-visita: {PLACAS}-{DDMMYYYY}-{HHMM}/{archivo}
+    const path = folder ? `${folder}/${fileName}` : fileName;
 
     const { data, error } = await supabase.storage
       .from(bucket)
-      .upload(fileName, blob, {
+      .upload(path, blob, {
         contentType: 'image/jpeg',
         cacheControl: '3600',
         upsert: false
@@ -244,6 +278,44 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
   const [offlineRecords, setOfflineRecords] = useState<any[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const isSyncingRef = useRef(false); // anti-reentrancia en syncQueue
+  // Cache de carpetas de visita por record_id (evita consultas repetidas)
+  const visitFolderCache = useRef<Map<string, string>>(new Map());
+
+  /**
+   * Resuelve la carpeta de visita para las fotos de un registro.
+   * Prioriza el registro de caseta (record_id) para anclar TODAS las fotos
+   * de la visita (caseta, inspección, ticket, almacén, salida) a la MISMA
+   * carpeta usando la hora de llegada de la unidad.
+   */
+  const resolveVisitFolder = useCallback(async (
+    recordId: string | null | undefined,
+    fallbackPlates: string,
+    fallbackISO?: string
+  ): Promise<string> => {
+    const rid = recordId || undefined;
+    if (rid) {
+      const cached = visitFolderCache.current.get(rid);
+      if (cached) return cached;
+      try {
+        const { data: vr, error } = await supabase
+          .from('vehicle_records')
+          .select('id, plates, created_at, entry_data')
+          .eq('id', rid)
+          .maybeSingle();
+        if (!error && vr) {
+          const ed = vr.entry_data || {};
+          const plates = vr.plates || ed.placas_unidad || fallbackPlates;
+          const folder = folderFromRecord(plates, vr.created_at, ed.hora_llegada);
+          visitFolderCache.current.set(rid, folder);
+          return folder;
+        }
+      } catch (e) {
+        console.warn('[fotos] No se pudo anclar la carpeta al registro de caseta:', e);
+      }
+    }
+    // Fallback: placas + fecha/hora propia del payload
+    return folderFromLocalDate(fallbackPlates, fallbackISO ? new Date(fallbackISO) : new Date());
+  }, []);
 
   const getQueue = useCallback(async (): Promise<SyncItem[]> => {
     const raw = await AsyncStorage.getItem(QUEUE_KEY);
@@ -424,23 +496,26 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     const client_uuid = payload.client_uuid || uuid();
     const full = { ...payload, client_uuid, fecha_hora: payload.fecha_hora || new Date().toISOString() };
 
+    // Carpeta de visita: anclada a la hora de llegada del registro de caseta
+    const visitFolder = await resolveVisitFolder(full.record_id, full.placas_unidad, full.fecha_hora);
+
     if (isOnline) {
       try {
         // 1. Upload Point Photos
         const processedPoints = await Promise.all(
           full.points.map(async (p) => ({
             ...p,
-            photo: p.photo ? await uploadImage('inspections', p.photo) : p.photo
+            photo: p.photo ? await uploadImage('inspections', p.photo, visitFolder) : p.photo
           }))
         );
 
         // 2. Upload Signatures
         const inspector_firma = full.inspector_firma
-          ? await uploadImage('signatures', full.inspector_firma)
+          ? await uploadImage('signatures', full.inspector_firma, visitFolder)
           : full.inspector_firma;
 
         const guard_signature = full.guard_signature
-          ? await uploadImage('signatures', full.guard_signature)
+          ? await uploadImage('signatures', full.guard_signature, visitFolder)
           : full.guard_signature;
 
         const dataPayload = {
@@ -486,17 +561,23 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     };
     setInspections((prev) => [pending, ...prev]);
     return pending;
-  }, [token, user, isOnline, refresh, addToQueue]);
+  }, [token, user, isOnline, refresh, addToQueue, resolveVisitFolder]);
 
   const saveVehicleRecord = useCallback(async (payload: any, isFromSync: boolean = false): Promise<any> => {
     const tempId = uuid();
+    // Este ES el registro de llegada: carpeta con placas + hora de llegada
+    const visitFolder = folderFromRecord(
+      payload.placas_unidad || payload.placas || payload.plates || '',
+      new Date(),
+      payload.hora_llegada
+    );
     if (isOnline) {
       try {
         // Upload any base64 images found in payload (evidence)
         const processedPayload = { ...payload };
         for (const key in processedPayload) {
           if (typeof processedPayload[key] === 'string' && processedPayload[key].startsWith('data:image')) {
-            processedPayload[key] = await uploadImage('evidence', processedPayload[key]);
+            processedPayload[key] = await uploadImage('evidence', processedPayload[key], visitFolder);
           }
         }
 
@@ -535,12 +616,18 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
 
   const saveShippingTicket = useCallback(async (payload: any, isFromSync: boolean = false): Promise<any> => {
     const tempId = uuid();
+    // Carpeta anclada a la visita del registro de caseta
+    const visitFolder = await resolveVisitFolder(
+      payload.record_id,
+      payload.placas_unidad || payload.placas || payload.plates || '',
+      payload.fecha_hora
+    );
     if (isOnline) {
       try {
         const processedPayload = { ...payload };
         for (const key in processedPayload) {
           if (typeof processedPayload[key] === 'string' && processedPayload[key].startsWith('data:image')) {
-            processedPayload[key] = await uploadImage('evidence', processedPayload[key]);
+            processedPayload[key] = await uploadImage('evidence', processedPayload[key], visitFolder);
           }
         }
 
@@ -565,18 +652,23 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     const offlineSTPayload = await offlineizeImages(payload);
     await addToQueue({ id: tempId, type: 'shipping_ticket', method: 'POST', endpoint: '/shipping-tickets', payload: offlineSTPayload });
     return { id: tempId, _offline: true, ...payload };
-  }, [token, isOnline, addToQueue, user]);
+  }, [token, isOnline, addToQueue, user, resolveVisitFolder]);
 
 
   const saveWarehouseRecord = useCallback(async (payload: any, isFromSync: boolean = false): Promise<any> => {
     const tempId = uuid();
+    // Carpeta anclada a la visita del registro de caseta
+    const visitFolder = await resolveVisitFolder(
+      payload.record_id,
+      payload.placas_unidad || payload.plates || ''
+    );
     if (isOnline) {
       try {
         const processedPayload = { ...payload };
         for (const key in processedPayload) {
           if (typeof processedPayload[key] === 'string' && processedPayload[key].startsWith('data:image')) {
             const bucket = key.startsWith('firma') ? 'signatures' : 'evidence';
-            processedPayload[key] = await uploadImage(bucket, processedPayload[key]);
+            processedPayload[key] = await uploadImage(bucket, processedPayload[key], visitFolder);
           }
         }
 
@@ -602,16 +694,21 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     const offlineWRPayload = await offlineizeImages(payload);
     await addToQueue({ id: tempId, type: 'warehouse_record', method: 'POST', endpoint: '/warehouse-records', payload: offlineWRPayload });
     return { id: tempId, _offline: true, ...payload };
-  }, [token, isOnline, addToQueue, user]);
+  }, [token, isOnline, addToQueue, user, resolveVisitFolder]);
 
   const patchVehicleExit = useCallback(async (id: string, payload: any, isFromSync: boolean = false): Promise<any> => {
+    // El id ES el registro de caseta → misma carpeta de visita
+    const visitFolder = await resolveVisitFolder(
+      id,
+      payload.placas_unidad || payload.placas || payload.plates || ''
+    );
     if (isOnline) {
       try {
         const processedPayload = { ...payload };
         for (const key in processedPayload) {
           if (typeof processedPayload[key] === 'string' && processedPayload[key].startsWith('data:image')) {
             const bucket = key.includes('signature') ? 'signatures' : 'evidence';
-            processedPayload[key] = await uploadImage(bucket, processedPayload[key]);
+            processedPayload[key] = await uploadImage(bucket, processedPayload[key], visitFolder);
           }
         }
 
@@ -634,7 +731,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     const offlineExitPayload = await offlineizeImages(payload);
     await addToQueue({ id, type: 'vehicle_exit', method: 'PATCH', endpoint: `/vehicle-records/${id}/exit`, payload: offlineExitPayload });
     return { id, _offline: true, exit: payload };
-  }, [token, isOnline, addToQueue]);
+  }, [token, isOnline, addToQueue, resolveVisitFolder]);
 
   const getById = useCallback((id: string) => {
     return inspections.find((i) => i.id === id) || allInspections.find((i) => i.id === id);
@@ -642,7 +739,9 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
 
   const approveInspection = useCallback(async (id: string, note: string, name: string, signature: string) => {
     if (!token) return;
-    const signatureUrl = await uploadImage('signatures', signature);
+    const insp = getById(id);
+    const visitFolder = insp ? await resolveVisitFolder(insp.record_id, insp.placas_unidad, insp.fecha_hora) : undefined;
+    const signatureUrl = await uploadImage('signatures', signature, visitFolder);
     const { error } = await supabase
       .from('inspections')
       .update({
@@ -657,11 +756,13 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
 
     if (error) throw error;
     await Promise.all([refresh(), refreshAll()]);
-  }, [token, refresh, refreshAll, user]);
+  }, [token, refresh, refreshAll, user, getById, resolveVisitFolder]);
 
   const rejectInspection = useCallback(async (id: string, note: string, name: string, signature: string) => {
     if (!token) return;
-    const signatureUrl = await uploadImage('signatures', signature);
+    const insp = getById(id);
+    const visitFolder = insp ? await resolveVisitFolder(insp.record_id, insp.placas_unidad, insp.fecha_hora) : undefined;
+    const signatureUrl = await uploadImage('signatures', signature, visitFolder);
     const { error } = await supabase
       .from('inspections')
       .update({
@@ -676,32 +777,49 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
 
     if (error) throw error;
     await Promise.all([refresh(), refreshAll()]);
-  }, [token, refresh, refreshAll, user]);
+  }, [token, refresh, refreshAll, user, getById, resolveVisitFolder]);
 
   const updateInspection = useCallback(async (id: string, payload: Partial<Inspection>) => {
     if (!token) return;
     try {
       const processed = { ...payload };
 
+      // Carpeta de visita: la inspección existente ya conoce su record/fecha
+      const existing = getById(id);
+      let anchorRecordId = processed.record_id || existing?.record_id;
+      if (!anchorRecordId) {
+        const { data: row } = await supabase
+          .from('inspections')
+          .select('record_id')
+          .eq('id', id)
+          .maybeSingle();
+        anchorRecordId = row?.record_id;
+      }
+      const visitFolder = await resolveVisitFolder(
+        anchorRecordId,
+        processed.placas_unidad || existing?.placas_unidad || '',
+        processed.fecha_hora || existing?.fecha_hora
+      );
+
       // Process points if they exist
       if (processed.points) {
         processed.points = await Promise.all(
           processed.points.map(async (p) => ({
             ...p,
-            photo: p.photo ? await uploadImage('inspections', p.photo) : p.photo
+            photo: p.photo ? await uploadImage('inspections', p.photo, visitFolder) : p.photo
           }))
         );
       }
 
       // Process signatures
       if (processed.inspector_firma) {
-        processed.inspector_firma = await uploadImage('signatures', processed.inspector_firma);
+        processed.inspector_firma = await uploadImage('signatures', processed.inspector_firma, visitFolder);
       }
       if (processed.guard_signature) {
-        processed.guard_signature = await uploadImage('signatures', processed.guard_signature);
+        processed.guard_signature = await uploadImage('signatures', processed.guard_signature, visitFolder);
       }
       if (processed.approved_by_signature) {
-        processed.approved_by_signature = await uploadImage('signatures', processed.approved_by_signature);
+        processed.approved_by_signature = await uploadImage('signatures', processed.approved_by_signature, visitFolder);
       }
 
       const { error } = await supabase
@@ -720,15 +838,20 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
       console.error("Error updating inspection:", err);
       throw err;
     }
-  }, [token, refresh, refreshAll]);
+  }, [token, refresh, refreshAll, getById, resolveVisitFolder]);
 
   const updateVehicleRecord = useCallback(async (id: string, payload: any) => {
     if (!token) return;
     try {
+      // El id ES el registro de caseta → misma carpeta de visita
+      const visitFolder = await resolveVisitFolder(
+        id,
+        payload.placas || payload.plates || payload.placas_unidad || ''
+      );
       const processedPayload = { ...payload };
       for (const key in processedPayload) {
         if (typeof processedPayload[key] === 'string' && processedPayload[key].startsWith('data:image')) {
-          processedPayload[key] = await uploadImage('evidence', processedPayload[key]);
+          processedPayload[key] = await uploadImage('evidence', processedPayload[key], visitFolder);
         }
       }
       const { error } = await supabase
@@ -743,15 +866,29 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
       console.error("Error updating vehicle record:", err);
       throw err;
     }
-  }, [token]);
+  }, [token, resolveVisitFolder]);
 
   const updateShippingTicket = useCallback(async (id: string, payload: any) => {
     if (!token) return;
     try {
+      // Anclar al registro de caseta de la visita (del payload o del ticket en BD)
+      let anchorRecordId = payload.record_id;
+      if (!anchorRecordId) {
+        const { data: ticket } = await supabase
+          .from('shipping_tickets')
+          .select('record_id')
+          .eq('id', id)
+          .maybeSingle();
+        anchorRecordId = ticket?.record_id;
+      }
+      const visitFolder = await resolveVisitFolder(
+        anchorRecordId,
+        payload.placas || payload.plates || payload.placas_unidad || ''
+      );
       const processedPayload = { ...payload };
       for (const key in processedPayload) {
         if (typeof processedPayload[key] === 'string' && processedPayload[key].startsWith('data:image')) {
-          processedPayload[key] = await uploadImage('evidence', processedPayload[key]);
+          processedPayload[key] = await uploadImage('evidence', processedPayload[key], visitFolder);
         }
       }
 
@@ -768,7 +905,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
       console.error("Error updating shipping ticket:", err);
       throw err;
     }
-  }, [token]);
+  }, [token, resolveVisitFolder]);
 
   const sendManualReport = useCallback(async (id: string) => {
     // This functionality might need an Edge Function in Supabase
