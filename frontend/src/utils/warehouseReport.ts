@@ -90,38 +90,159 @@ const infoCell = (label: string, value: any) => `
 `;
 
 /** Mapa de daños: réplica HTML de la caja desdoblada (BoxDamageMap) */
+const SURF = {
+  stroke: '#334155', fillBox: '#FFFFFF', fillDetail: '#F1F5F9', fillDark: '#334155',
+  gridLine: '#E2E8F0', borderStrong: '#CBD5E1',
+  bad: 'rgba(239,68,68,0.55)', badBorder: '#EF4444', badText: '#FFFFFF',
+  labelBg: '#F1F5F9', labelBadBg: '#FEE2E2', labelText: '#334155', labelBadText: '#991B1B',
+};
+
+const SURFACE_LABELS_BILINGUAL: Record<string, string> = {
+  frente: 'FRENTE / 前壁',
+  puertas: 'PUERTAS / 车门',
+  pared_izq: 'PARED IZQ. / 左侧壁',
+  pared_der: 'PARED DER. / 右侧壁',
+  techo: 'TECHO / 顶棚',
+  piso: 'PISO / 地板',
+};
+
+// ─── Ilustraciones técnicas del remolque (idénticas a BoxDamageMap.tsx) ───
+
+const svgFrente = () => `
+<svg viewBox="0 0 200 170" width="100%" height="100%" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="45" y="8" width="110" height="28" rx="3" fill="${SURF.fillDetail}" stroke="${SURF.stroke}" stroke-width="2"/>
+  ${[60, 80, 100, 120, 140].map(x => `<line x1="${x}" y1="12" x2="${x}" y2="32" stroke="${SURF.gridLine}" stroke-width="1.2"/>`).join('')}
+  <rect x="15" y="34" width="170" height="110" rx="4" fill="${SURF.fillBox}" stroke="${SURF.stroke}" stroke-width="2.5"/>
+  <line x1="100" y1="34" x2="100" y2="144" stroke="${SURF.gridLine}" stroke-width="1" stroke-dasharray="4,4"/>
+  <rect x="15" y="144" width="170" height="6" fill="${SURF.fillDark}" opacity="0.7"/>
+  <rect x="28" y="150" width="9" height="18" fill="${SURF.fillDark}"/>
+  <rect x="155" y="150" width="9" height="18" fill="${SURF.fillDark}"/>
+</svg>`;
+
+const svgPuertas = () => `
+<svg viewBox="0 0 200 170" width="100%" height="100%" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="15" y="15" width="170" height="140" rx="4" fill="${SURF.fillBox}" stroke="${SURF.stroke}" stroke-width="2.5"/>
+  <line x1="100" y1="15" x2="100" y2="155" stroke="${SURF.stroke}" stroke-width="2"/>
+  <rect x="90" y="68" width="5" height="38" rx="2" fill="${SURF.fillDark}"/>
+  <rect x="105" y="68" width="5" height="38" rx="2" fill="${SURF.fillDark}"/>
+  ${[30, 85, 140].map(y => `<rect x="12" y="${y}" width="7" height="14" fill="${SURF.fillDark}"/><rect x="181" y="${y}" width="7" height="14" fill="${SURF.fillDark}"/>`).join('')}
+  <rect x="15" y="150" width="170" height="5" fill="${SURF.fillDark}" opacity="0.7"/>
+</svg>`;
+
+const svgSide = (mirrored?: boolean) => {
+  const content = `
+    <path d="M6,74 L6,50 L34,26 L64,26 L64,74 Z" fill="${SURF.fillDetail}" stroke="${SURF.stroke}" stroke-width="2"/>
+    <line x1="36" y1="26" x2="20" y2="50" stroke="${SURF.stroke}" stroke-width="1.5"/>
+    <rect x="2" y="74" width="66" height="9" fill="${SURF.fillDark}" opacity="0.85"/>
+    <rect x="20" y="83" width="372" height="7" fill="${SURF.fillDark}" opacity="0.8"/>
+    <rect x="68" y="14" width="324" height="72" rx="4" fill="${SURF.fillBox}" stroke="${SURF.stroke}" stroke-width="2.5"/>
+    <line x1="68" y1="36" x2="392" y2="36" stroke="${SURF.gridLine}" stroke-width="1"/>
+    <line x1="68" y1="60" x2="392" y2="60" stroke="${SURF.gridLine}" stroke-width="1"/>
+    <line x1="376" y1="14" x2="376" y2="86" stroke="${SURF.gridLine}" stroke-width="1.5"/>
+    <circle cx="44" cy="96" r="13" fill="${SURF.fillDark}"/>
+    <circle cx="44" cy="96" r="5" fill="${SURF.fillDetail}"/>
+    ${[300, 328, 356].map(cx => `<circle cx="${cx}" cy="96" r="13" fill="${SURF.fillDark}"/><circle cx="${cx}" cy="96" r="5" fill="${SURF.fillDetail}"/>`).join('')}
+  `;
+  return `
+<svg viewBox="0 0 400 110" width="100%" height="100%" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+  ${mirrored ? `<g transform="scale(-1,1) translate(-400,0)">${content}</g>` : content}
+</svg>`;
+};
+
+const svgTecho = () => `
+<svg viewBox="0 0 400 100" width="100%" height="100%" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M0,38 L18,24 L18,76 L0,66 Z" fill="${SURF.fillDetail}" opacity="0.5" stroke="${SURF.stroke}" stroke-width="1" stroke-dasharray="3,3"/>
+  <rect x="20" y="15" width="360" height="70" rx="6" fill="${SURF.fillBox}" stroke="${SURF.stroke}" stroke-width="2.5"/>
+  <rect x="20" y="15" width="46" height="70" rx="3" fill="${SURF.fillDetail}" stroke="${SURF.stroke}" stroke-width="2"/>
+  <line x1="30" y1="22" x2="30" y2="78" stroke="${SURF.gridLine}" stroke-width="1"/>
+  <line x1="40" y1="22" x2="40" y2="78" stroke="${SURF.gridLine}" stroke-width="1"/>
+  <line x1="50" y1="22" x2="50" y2="78" stroke="${SURF.gridLine}" stroke-width="1"/>
+  ${[140, 220, 300].map(cx => `<circle cx="${cx}" cy="50" r="6" fill="none" stroke="${SURF.stroke}" stroke-width="1.5"/>`).join('')}
+  <line x1="66" y1="50" x2="380" y2="50" stroke="${SURF.gridLine}" stroke-width="1" stroke-dasharray="4,4"/>
+</svg>`;
+
+const svgPiso = () => {
+  const ribs = Array.from({ length: 21 }).map((_, i) => {
+    const x = 30 + i * 16;
+    return x > 372 ? '' : `<line x1="${x}" y1="17" x2="${x}" y2="83" stroke="${SURF.gridLine}" stroke-width="1"/>`;
+  }).join('');
+  return `
+<svg viewBox="0 0 400 100" width="100%" height="100%" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="20" y="15" width="360" height="70" rx="6" fill="${SURF.fillBox}" stroke="${SURF.stroke}" stroke-width="2.5"/>
+  ${ribs}
+  <rect x="60" y="83" width="9" height="16" fill="${SURF.fillDark}"/>
+  <rect x="90" y="83" width="9" height="16" fill="${SURF.fillDark}"/>
+  <line x1="286" y1="85" x2="370" y2="85" stroke="${SURF.stroke}" stroke-width="2"/>
+  ${[300, 328, 356].map(cx => `<circle cx="${cx}" cy="90" r="13" fill="${SURF.fillDark}"/><circle cx="${cx}" cy="90" r="5" fill="${SURF.fillDetail}"/>`).join('')}
+</svg>`;
+};
+
+const illustrationFor = (key: string) => {
+  switch (key) {
+    case 'pared_izq': return svgSide(false);
+    case 'pared_der': return svgSide(true);
+    case 'techo': return svgTecho();
+    case 'piso': return svgPiso();
+    case 'frente': return svgFrente();
+    case 'puertas': return svgPuertas();
+    default: return '';
+  }
+};
+
+// ─── Panel de superficie: ilustración real + rejilla de zonas dañadas ───
+
+const surfacePanelHtml = (key: string, zones: boolean[], wide: boolean, paddingBottomPct: number) => {
+  const label = SURFACE_LABELS_BILINGUAL[key] || key.toUpperCase();
+  const damaged = zones.filter(Boolean).length;
+  const cols = wide ? 6 : 2;
+  const rows = wide ? 1 : 3;
+
+  const gridHtml = Array.from({ length: rows }).map((_, r) => `
+    <div style="flex:1; display:flex; flex-direction:row;">
+      ${Array.from({ length: cols }).map((__, c) => {
+        const idx = wide ? c : r * cols + c;
+        const isBad = !!zones[idx];
+        return `<div style="flex:1; margin:1px; display:flex; align-items:center; justify-content:center; ${isBad ? `background:${SURF.bad}; border:1px solid ${SURF.badBorder};` : ''}">
+          ${isBad ? `<span style="font-size:9px; font-weight:900; color:${SURF.badText};">${idx + 1}</span>` : ''}
+        </div>`;
+      }).join('')}
+    </div>
+  `).join('');
+
+  return `
+  <div style="width:100%; margin-bottom:8px;">
+    <div style="background:${damaged > 0 ? SURF.labelBadBg : SURF.labelBg}; border:1px solid ${SURF.borderStrong}; border-bottom:none; padding:4px 8px; display:flex; justify-content:space-between; align-items:center;">
+      <span style="font-size:9px; font-weight:900; letter-spacing:0.5px; color:${damaged > 0 ? SURF.labelBadText : SURF.labelText};">${label}</span>
+      ${damaged > 0 ? `<span style="font-size:8px; font-weight:900; color:${SURF.labelBadText};">${damaged} DAÑO(S) / ${damaged}处损坏</span>` : ''}
+    </div>
+    <div style="position:relative; width:100%; padding-bottom:${paddingBottomPct}%; border:1px solid ${damaged > 0 ? SURF.badBorder : SURF.borderStrong}; background:#FFFFFF; overflow:hidden;">
+      <div style="position:absolute; inset:0;">${illustrationFor(key)}</div>
+      <div style="position:absolute; inset:0; display:flex; flex-direction:${wide ? 'row' : 'column'};">
+        ${gridHtml}
+      </div>
+    </div>
+  </div>`;
+};
+
 const getDamageMapHtml = (map: DamageMap | undefined, notes: Record<string, string> | undefined) => {
   const zonas = (k: string) => (Array.isArray(map?.[k]) && map[k].length === 6 ? map[k] : Array(6).fill(false));
-  const panel = (k: string, label: string, width: string) => {
-    const zs = zonas(k);
-    const damagedCount = zs.filter(Boolean).length;
-    const cells = zs.map((d, i) => `
-      <td style="width:33.33%; height:34px; border:1px solid ${d ? '#EF4444' : '#cbd5e1'}; background:${d ? '#EF4444' : '#F1F5F9'}; text-align:center; font-size:9px; font-weight:bold; color:${d ? '#FFF' : '#94A3B8'};">${i + 1}</td>
-    `).join('');
-    return `
-      <td style="padding:2px; vertical-align:top;">
-        <table style="width:${width}; border-collapse:collapse; table-layout:fixed;">
-          <tr><td colspan="3" style="border:1px solid #cbd5e1; background:${damagedCount > 0 ? '#FEE2E2' : '#F1F5F9'}; font-size:8px; font-weight:900; color:${damagedCount > 0 ? '#991B1B' : '#334155'}; padding:3px 4px; letter-spacing:0.5px;">${label}${damagedCount > 0 ? ` — ${damagedCount} DAÑO(S)` : ''}</td></tr>
-          <tr>${cells.slice(0, 3)}</tr>
-          <tr>${cells.slice(3)}</tr>
-        </table>
-      </td>
-    `;
-  };
 
   const noteRows = DAMAGE_SURFACES
     .filter(s => (notes?.[s.key] || '').trim())
-    .map(s => `<tr>${infoCell(`NOTA ${s.label}`, (notes?.[s.key] || '').trim())}</tr>`)
+    .map(s => `<tr>${infoCell(`NOTA ${SURFACE_LABELS_BILINGUAL[s.key] || s.label}`, (notes?.[s.key] || '').trim())}</tr>`)
     .join('');
 
   return `
-    <table style="width:100%; border-collapse:collapse; table-layout:fixed;">
-      <tr><td style="width:33.33%"></td>${panel('techo', 'TECHO', '100%')}<td style="width:33.33%"></td></tr>
-      <tr>${panel('pared_izq', 'PARED IZQ.', '100%')}${panel('piso', 'PISO', '100%')}${panel('pared_der', 'PARED DER.', '100%')}</tr>
-      <tr>${panel('frente', 'FRENTE', '99%')}${panel('puertas', 'PUERTAS', '99%')}<td></td></tr>
-    </table>
+    <div style="display:flex; gap:8px;">
+      <div style="flex:1;">${surfacePanelHtml('frente', zonas('frente'), false, 85)}</div>
+      <div style="flex:1;">${surfacePanelHtml('puertas', zonas('puertas'), false, 85)}</div>
+    </div>
+    ${surfacePanelHtml('pared_izq', zonas('pared_izq'), true, 27.5)}
+    ${surfacePanelHtml('pared_der', zonas('pared_der'), true, 27.5)}
+    ${surfacePanelHtml('techo', zonas('techo'), true, 25)}
+    ${surfacePanelHtml('piso', zonas('piso'), true, 25)}
     <div style="display:flex; gap:16px; margin:6px 2px; font-size:8px; color:#64748B; font-weight:700;">
-      <span>■ ZONA OK (GRIS)</span><span style="color:#EF4444;">■ ZONA DAÑADA (ROJO)</span>
+      <span>■ ZONA OK / 正常区域</span><span style="color:#EF4444;">■ ZONA DAÑADA / 损坏区域</span>
     </div>
     ${noteRows ? `<table style="width:100%; border-collapse:collapse; margin-top:4px;">${noteRows}</table>` : ''}
   `;
