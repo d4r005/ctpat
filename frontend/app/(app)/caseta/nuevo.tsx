@@ -16,6 +16,8 @@ import { sanitizePlate } from '@/src/utils/text';
 import { compressImage } from '@/src/utils/image';
 
 import { useTranslation } from 'react-i18next';
+import RoleGate from '@/src/components/RoleGate';
+import { canAccessSecurity } from '@/src/utils/permissions';
 
 const TOTAL_STEPS = 4;
 
@@ -46,7 +48,7 @@ const DECLARACIONES = [
   '5. Declaro que toda la información proporcionada es verídica y no hay anomalías con el transporte ni conmigo.',
 ];
 
-export default function CasetaNuevo() {
+function CasetaNuevo() {
   const router = useRouter();
   const params = useLocalSearchParams<{
     placas?: string;
@@ -793,3 +795,11 @@ const styles = StyleSheet.create({
   modalCard: { backgroundColor: colors.surfaceSecondary, padding: spacing.lg, borderWidth: 1, borderColor: colors.borderStrong },
   modalTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface, marginBottom: spacing.md, letterSpacing: 1 },
 });
+
+
+// Guarda de acceso por rol: canAccessSecurity
+export default () => (
+  <RoleGate allow={canAccessSecurity}>
+    <CasetaNuevo />
+  </RoleGate>
+);

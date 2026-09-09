@@ -12,8 +12,10 @@ import { supabase } from '@/src/api/supabase';
 import { colors, spacing, typography } from '@/src/constants/theme';
 import { sanitizePlate } from '@/src/utils/text';
 import { useTranslation } from 'react-i18next';
+import RoleGate from '@/src/components/RoleGate';
+import { canAccessSecurity } from '@/src/utils/permissions';
 
-export default function EmbarqueDetail() {
+function EmbarqueDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { t } = useTranslation();
@@ -397,3 +399,11 @@ const styles = StyleSheet.create({
 });
 
 
+
+
+// Guarda de acceso por rol: canAccessSecurity
+export default () => (
+  <RoleGate allow={canAccessSecurity}>
+    <EmbarqueDetail />
+  </RoleGate>
+);

@@ -2,6 +2,7 @@
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '@/src/context/AuthContext';
+import { canAccessSecurity, canAccessWarehouse } from '@/src/utils/permissions';
 import { colors, radius, spacing } from '@/src/constants/theme';
 import { View, ActivityIndicator, Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +20,8 @@ export default function AppLayout() {
   const isDesktopWeb = isWeb && width >= 1080;
 
   const isAdminOrSup = user?.role === 'admin' || user?.role === 'supervisor';
+  const showSecurity = canAccessSecurity(user?.role); // inspector/guardia, supervisor, admin
+  const showWarehouse = canAccessWarehouse(user?.role); // almacenista, supervisor, admin
 
   useEffect(() => {
     if (!loading && !token) router.replace('/login');
@@ -67,6 +70,7 @@ export default function AppLayout() {
         name="caseta/index"
         options={{
           title: t('caseta'),
+          href: showSecurity ? undefined : null,
           tabBarIcon: ({ color }) => <Ionicons name="business-sharp" size={22} color={color} />,
         }}
       />
@@ -74,6 +78,7 @@ export default function AppLayout() {
         name="nueva"
         options={{
           title: t('inspeccion'),
+          href: showSecurity ? undefined : null,
           tabBarIcon: ({ color }) => <Ionicons name="clipboard-sharp" size={22} color={color} />,
         }}
       />
@@ -81,6 +86,7 @@ export default function AppLayout() {
         name="embarque/index"
         options={{
           title: t('embarque'),
+          href: showSecurity ? undefined : null,
           tabBarIcon: ({ color }) => <MaterialCommunityIcons name="truck-fast" size={24} color={color} />,
         }}
       />
@@ -88,6 +94,7 @@ export default function AppLayout() {
         name="almacen/index"
         options={{
           title: t('almacen'),
+          href: showWarehouse ? undefined : null,
           tabBarIcon: ({ color }) => <MaterialCommunityIcons name="warehouse" size={24} color={color} />,
         }}
       />

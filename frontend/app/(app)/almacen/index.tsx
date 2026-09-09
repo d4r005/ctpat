@@ -12,10 +12,12 @@ import { colors, spacing, radius } from '@/src/constants/theme';
 import MainHeader from '@/src/components/MainHeader';
 import { useTranslation } from 'react-i18next';
 import { countDamages } from '@/src/components/BoxDamageMap';
+import RoleGate from '@/src/components/RoleGate';
+import { canAccessWarehouse } from '@/src/utils/permissions';
 
 const isWeb = Platform.OS === 'web';
 
-export default function AlmacenList() {
+function AlmacenList() {
   const router = useRouter();
   const { t } = useTranslation();
   const { token } = useAuth();
@@ -241,3 +243,11 @@ const styles = StyleSheet.create({
   emptyTitle: { fontWeight: '900', color: colors.muted, letterSpacing: 1, fontSize: 12 },
   emptySub: { color: colors.mutedLight, fontSize: 11 },
 });
+
+
+// Guarda de acceso por rol: canAccessWarehouse
+export default () => (
+  <RoleGate allow={canAccessWarehouse}>
+    <AlmacenList />
+  </RoleGate>
+);

@@ -21,10 +21,12 @@ import { sanitizePlate } from '@/src/utils/text';
 import Signature from '@/src/components/SignaturePad';
 import * as ImagePicker from 'expo-image-picker';
 import { compressImage } from '@/src/utils/image';
+import RoleGate from '@/src/components/RoleGate';
+import { canAccessSecurity } from '@/src/utils/permissions';
 
 const TOTAL_STEPS = 4;
 
-export default function InspeccionDashboard() {
+function InspeccionDashboard() {
   const router = useRouter();
   const isTablet = useIsTablet();
   const params = useLocalSearchParams<{
@@ -986,3 +988,11 @@ const styles = StyleSheet.create({
   optionText: { fontWeight: '900', fontSize: 11, color: colors.onSurface, letterSpacing: 1 },
   optionTextActive: { color: colors.onBrandPrimary },
 });
+
+
+// Guarda de acceso por rol: canAccessSecurity
+export default () => (
+  <RoleGate allow={canAccessSecurity}>
+    <InspeccionDashboard />
+  </RoleGate>
+);

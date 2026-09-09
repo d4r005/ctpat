@@ -17,8 +17,10 @@ import { colors, spacing, typography } from '@/src/constants/theme';
 import { sanitizePlate } from '@/src/utils/text';
 import { useTranslation } from 'react-i18next';
 import { compressImage } from '@/src/utils/image';
+import RoleGate from '@/src/components/RoleGate';
+import { canAccessSecurity } from '@/src/utils/permissions';
 
-export default function CasetaDetail() {
+function CasetaDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const isTablet = useIsTablet();
@@ -922,3 +924,11 @@ const styles = StyleSheet.create({
   modalBtnPrimary: { backgroundColor: colors.brandPrimary, borderRadius: 4 },
 });
 
+
+
+// Guarda de acceso por rol: canAccessSecurity
+export default () => (
+  <RoleGate allow={canAccessSecurity}>
+    <CasetaDetail />
+  </RoleGate>
+);

@@ -22,7 +22,7 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [newRole, setNewRole] = useState<'inspector' | 'supervisor' | 'admin'>('inspector');
+  const [newRole, setNewRole] = useState<'inspector' | 'supervisor' | 'almacenista' | 'admin'>('inspector');
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -192,6 +192,9 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
                   {item.role === 'supervisor' && (
                     <View style={styles.roleChip}><Text style={styles.roleChipText}>{t('rol_super').toUpperCase()}</Text></View>
                   )}
+                  {item.role === 'almacenista' && (
+                    <View style={[styles.roleChip, { backgroundColor: '#00838F' }]}><Text style={styles.roleChipText}>ALMACENISTA</Text></View>
+                  )}
                   {!item.active && (
                     <View style={[styles.roleChip, { backgroundColor: colors.error }]}>
                       <Text style={styles.roleChipText}>{t('inactivo').toUpperCase()}</Text>
@@ -256,8 +259,8 @@ export default function Usuarios({ nested = false }: { nested?: boolean }) {
               <TextInput testID="create-user-password" style={styles.input} value={newPassword} onChangeText={setNewPassword} secureTextEntry />
 
               <Text style={styles.label}>{t('rol')}</Text>
-              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                {(['inspector', 'supervisor', 'admin'] as const).map((r) => (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+                {(['inspector', 'supervisor', 'almacenista', 'admin'] as const).map((r) => (
                   <Pressable
                     key={r}
                     testID={`create-user-role-${r}`}
@@ -321,7 +324,7 @@ const styles = StyleSheet.create({
   modalTitle: { fontWeight: '900', fontSize: typography.sizes.lg, color: colors.onSurface, marginBottom: spacing.md, letterSpacing: 1 },
   label: { fontSize: 11, fontWeight: '900', color: colors.onSurfaceTertiary, letterSpacing: 1, marginBottom: 6, marginTop: spacing.md },
   input: { borderWidth: 1, borderColor: colors.borderStrong, padding: spacing.md, fontSize: typography.sizes.base, color: colors.onSurface, backgroundColor: colors.surface },
-  roleOpt: { flex: 1, borderWidth: 1, borderColor: colors.borderStrong, padding: spacing.md, alignItems: 'center' },
+  roleOpt: { flexBasis: '48%', borderWidth: 1, borderColor: colors.borderStrong, padding: spacing.md, alignItems: 'center' },
   roleOptActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   roleOptText: { fontWeight: '900', letterSpacing: 1, color: colors.onSurface },
   btn: { flex: 1, padding: spacing.md, alignItems: 'center', minHeight: 48, justifyContent: 'center' },

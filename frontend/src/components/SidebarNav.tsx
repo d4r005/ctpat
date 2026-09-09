@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { colors, spacing, radius, shadows } from '@/src/constants/theme';
 import { useAuth } from '@/src/context/AuthContext';
 import { useInspections } from '@/src/context/InspectionContext';
+import { canAccessSecurity, canAccessWarehouse } from '@/src/utils/permissions';
 
 interface NavItem {
   key: string;
@@ -26,14 +27,20 @@ export default function SidebarNav() {
   const { isOnline } = useInspections();
 
   const isAdminOrSup = user?.role === 'admin' || user?.role === 'supervisor';
+  const showSecurity = canAccessSecurity(user?.role);
+  const showWarehouse = canAccessWarehouse(user?.role);
 
   const items: NavItem[] = [
     { key: 'inicio', route: '/(app)/inicio', match: '/inicio', label: t('inicio'), render: (c, s) => <Ionicons name="home" size={s} color={c} /> },
     { key: 'historico', route: '/(app)/historico', match: '/historico', label: t('historico'), render: (c, s) => <Ionicons name="time" size={s} color={c} /> },
-    { key: 'caseta', route: '/(app)/caseta', match: '/caseta', label: t('caseta'), render: (c, s) => <Ionicons name="business" size={s} color={c} /> },
-    { key: 'nueva', route: '/(app)/nueva', match: '/nueva', label: t('inspeccion'), render: (c, s) => <Ionicons name="clipboard" size={s} color={c} /> },
-    { key: 'embarque', route: '/(app)/embarque', match: '/embarque', label: t('embarque'), render: (c, s) => <MaterialCommunityIcons name="truck-fast" size={s} color={c} /> },
-    { key: 'almacen', route: '/(app)/almacen', match: '/almacen', label: t('almacen'), render: (c, s) => <MaterialCommunityIcons name="warehouse" size={s} color={c} /> },
+    ...(showSecurity ? [
+      { key: 'caseta', route: '/(app)/caseta', match: '/caseta', label: t('caseta'), render: (c: string, s: number) => <Ionicons name="business" size={s} color={c} /> },
+      { key: 'nueva', route: '/(app)/nueva', match: '/nueva', label: t('inspeccion'), render: (c: string, s: number) => <Ionicons name="clipboard" size={s} color={c} /> },
+      { key: 'embarque', route: '/(app)/embarque', match: '/embarque', label: t('embarque'), render: (c: string, s: number) => <MaterialCommunityIcons name="truck-fast" size={s} color={c} /> },
+    ] : []),
+    ...(showWarehouse ? [
+      { key: 'almacen', route: '/(app)/almacen', match: '/almacen', label: t('almacen'), render: (c: string, s: number) => <MaterialCommunityIcons name="warehouse" size={s} color={c} /> },
+    ] : []),
   ];
 
   const adminItems: NavItem[] = isAdminOrSup ? [

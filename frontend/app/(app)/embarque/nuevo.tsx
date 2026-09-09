@@ -14,8 +14,10 @@ import { useAuth } from '@/src/context/AuthContext';
 import { colors, spacing, typography, radius, shadows } from '@/src/constants/theme';
 import { sanitizePlate } from '@/src/utils/text';
 import { compressImage } from '@/src/utils/image';
+import RoleGate from '@/src/components/RoleGate';
+import { canAccessSecurity } from '@/src/utils/permissions';
 
-export default function EmbarqueNuevo() {
+function EmbarqueNuevo() {
   const router = useRouter();
   const isTablet = useIsTablet();
   const { t } = useTranslation();
@@ -684,3 +686,11 @@ const styles = StyleSheet.create({
   pickerEmpty: { textAlign: 'center', color: colors.muted, marginTop: 24, fontSize: 13 },
 });
 
+
+
+// Guarda de acceso por rol: canAccessSecurity
+export default () => (
+  <RoleGate allow={canAccessSecurity}>
+    <EmbarqueNuevo />
+  </RoleGate>
+);

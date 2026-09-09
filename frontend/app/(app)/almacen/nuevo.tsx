@@ -13,12 +13,14 @@ import { colors, spacing, typography, radius } from '@/src/constants/theme';
 import { sanitizePlate } from '@/src/utils/text';
 import { compressImage } from '@/src/utils/image';
 import BoxDamageMap, { DamageMap, emptyDamageMap, countDamages, DAMAGE_SURFACES } from '@/src/components/BoxDamageMap';
+import RoleGate from '@/src/components/RoleGate';
+import { canAccessWarehouse } from '@/src/utils/permissions';
 import WarehouseChecklist, {
   ChecklistState, buildChecklistState,
   CHECKLIST_FISICO_MECANICO, CHECKLIST_CUIDADO_MERCANCIA, CHECKLIST_ASEGURAMIENTO_CARGA,
 } from '@/src/components/WarehouseChecklist';
 
-export default function AlmacenNuevo() {
+function AlmacenNuevo() {
   const router = useRouter();
   const { t } = useTranslation();
   const { token, user } = useAuth();
@@ -665,3 +667,11 @@ const styles = StyleSheet.create({
   pickerItemSub: { fontSize: 11, color: colors.muted, marginTop: 2 },
   pickerEmpty: { textAlign: 'center', color: colors.muted, marginTop: 24, fontSize: 13 },
 });
+
+
+// Guarda de acceso por rol: canAccessWarehouse
+export default () => (
+  <RoleGate allow={canAccessWarehouse}>
+    <AlmacenNuevo />
+  </RoleGate>
+);

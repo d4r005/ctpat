@@ -18,8 +18,10 @@ import {
   CHECKLIST_FISICO_MECANICO, CHECKLIST_CUIDADO_MERCANCIA, CHECKLIST_ASEGURAMIENTO_CARGA,
 } from '@/src/components/WarehouseChecklist';
 import { generateWarehouseReportHtml, WarehouseReportData } from '@/src/utils/warehouseReport';
+import RoleGate from '@/src/components/RoleGate';
+import { canAccessWarehouse } from '@/src/utils/permissions';
 
-export default function AlmacenDetalle() {
+function AlmacenDetalle() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { token } = useAuth();
@@ -343,3 +345,11 @@ const styles = StyleSheet.create({
   materialPhotoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.sm },
   materialPhotoThumb: { width: 56, height: 56, borderRadius: radius.xs, borderWidth: 1, borderColor: colors.border },
 });
+
+
+// Guarda de acceso por rol: canAccessWarehouse
+export default () => (
+  <RoleGate allow={canAccessWarehouse}>
+    <AlmacenDetalle />
+  </RoleGate>
+);

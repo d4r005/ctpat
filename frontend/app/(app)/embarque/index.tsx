@@ -11,10 +11,12 @@ import { supabase } from '@/src/api/supabase';
 import { colors, spacing, radius, shadows } from '@/src/constants/theme';
 import MainHeader from '@/src/components/MainHeader';
 import { useTranslation } from 'react-i18next';
+import RoleGate from '@/src/components/RoleGate';
+import { canAccessSecurity } from '@/src/utils/permissions';
 
 const isWeb = Platform.OS === 'web';
 
-export default function EmbarqueList() {
+function EmbarqueList() {
   const router = useRouter();
   const { t } = useTranslation();
   const { token, user } = useAuth();
@@ -432,3 +434,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 }, shadowRadius: 6,
   },
 });
+
+
+// Guarda de acceso por rol: canAccessSecurity
+export default () => (
+  <RoleGate allow={canAccessSecurity}>
+    <EmbarqueList />
+  </RoleGate>
+);

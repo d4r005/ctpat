@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/context/AuthContext';
+import { canAccessSecurity } from '@/src/utils/permissions';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useNotifications } from '@/src/context/NotificationsContext';
 import * as Haptics from 'expo-haptics';
@@ -17,6 +18,7 @@ import MainHeader from '@/src/components/MainHeader';
 
 export default function Inicio() {
   const { user, token } = useAuth();
+  const showSecurity = canAccessSecurity(user?.role);
   const { t } = useTranslation();
   const isTablet = useIsTablet();
   const { width } = useWindowDimensions();
@@ -133,6 +135,7 @@ export default function Inicio() {
   };
 
   const navigateToActivity = (activity: any) => {
+    if (!showSecurity) return; // almacenista: ve la actividad pero no entra a módulos de seguridad
     const routes: any = { inspection: `/inspection/${activity.id}`, caseta: `/caseta/${activity.id}`, embarque: `/embarque/${activity.id}` };
     if (routes[activity.type]) router.push(routes[activity.type]);
   };
@@ -184,7 +187,7 @@ export default function Inicio() {
     return (
       <Pressable
         style={({ pressed }) => [styles.unitCard, pressed && { opacity: 0.95 }]}
-        onPress={() => router.push(`/caseta/${r.id}`)}
+        onPress={() => showSecurity && router.push(`/caseta/${r.id}`)}
       >
         <View style={styles.unitHeader}>
           <View>

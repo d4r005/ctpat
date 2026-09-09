@@ -16,8 +16,10 @@ import { sanitizePlate } from '@/src/utils/text';
 import { getInspectionPoints } from '@/src/constants/inspectionPoints';
 
 import { useTranslation } from 'react-i18next';
+import RoleGate from '@/src/components/RoleGate';
+import { canAccessSecurity } from '@/src/utils/permissions';
 
-export default function InspectionDetail() {
+function InspectionDetail() {
   const { id, edit } = useLocalSearchParams<{ id: string, edit?: string }>();
   const router = useRouter();
   const { t } = useTranslation();
@@ -848,3 +850,11 @@ const styles = StyleSheet.create({
   secondaryBtn: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderStrong, padding: spacing.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
   secondaryBtnText: { color: colors.onSurface, fontWeight: '900', letterSpacing: 1 },
 });
+
+
+// Guarda de acceso por rol: canAccessSecurity
+export default () => (
+  <RoleGate allow={canAccessSecurity}>
+    <InspectionDetail />
+  </RoleGate>
+);

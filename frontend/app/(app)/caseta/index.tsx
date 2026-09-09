@@ -13,10 +13,12 @@ import { colors, spacing, radius, shadows } from '@/src/constants/theme';
 import ProcessTracker from '@/src/components/ProcessTracker';
 import MainHeader from '@/src/components/MainHeader';
 import { useTranslation } from 'react-i18next';
+import RoleGate from '@/src/components/RoleGate';
+import { canAccessSecurity } from '@/src/utils/permissions';
 
 const isWeb = Platform.OS === 'web';
 
-export default function CasetaList() {
+function CasetaList() {
   const router = useRouter();
   const { t } = useTranslation();
   const { token, user } = useAuth();
@@ -359,3 +361,11 @@ const styles = StyleSheet.create({
   },
 });
 
+
+
+// Guarda de acceso por rol: canAccessSecurity
+export default () => (
+  <RoleGate allow={canAccessSecurity}>
+    <CasetaList />
+  </RoleGate>
+);
