@@ -21,7 +21,7 @@ import MainHeader from '@/src/components/MainHeader';
 const isWeb = Platform.OS === 'web';
 type TabType = 'caseta' | 'inspeccion' | 'embarque';
 
-// â”€â”€â”€ Modal de EnvÃ­o de Correo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Modal de Envío de Correo ───────────────────────────────────────
 function EmailModal({ visible, recordId, plates, token, onClose }: {
   visible: boolean; recordId: string; plates: string; token: string; onClose: () => void;
 }) {
@@ -126,7 +126,7 @@ function EmailModal({ visible, recordId, plates, token, onClose }: {
   );
 }
 
-// â”€â”€â”€ DuplicatesModal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── DuplicatesModal ─────────────────────────────────────────────────
 function DuplicatesModal({ visible, token, onClose, onMerged }: { visible: boolean; token: string; onClose: () => void; onMerged: () => void; }) {
   const [loading, setLoading] = useState(false);
   const [groups, setGroups] = useState<any[]>([]);
@@ -160,7 +160,7 @@ function DuplicatesModal({ visible, token, onClose, onMerged }: { visible: boole
 
   const handleMerge = (keepId: string, removeId: string, keepPlates: string, removePlates: string) => {
     Alert.alert('Fusionar registros',
-      `Se conservarÃ¡ "${keepPlates}" y se le pasarÃ¡n todas las inspecciones de "${removePlates}". El duplicado se eliminarÃ¡. Â¿Continuar?`,
+      `Se conservará "${keepPlates}" y se le pasarán todas las inspecciones de "${removePlates}". El duplicado se eliminará. ¿Continuar?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         { text: 'Fusionar', style: 'destructive', onPress: async () => {
@@ -185,14 +185,14 @@ function DuplicatesModal({ visible, token, onClose, onMerged }: { visible: boole
         </View>
         <ScrollView contentContainerStyle={{ padding: 16 }}>
           <Text style={s.dupDesc}>
-            Se agrupan registros cuya placa difiere solo en un carÃ¡cter fÃ¡cilmente confundido por OCR
-            (Z/2, O/0, I/1, S/5, B/8, G/6). Elige cuÃ¡l placa conservar â€” el otro registro se fusiona en ese y se elimina.
+            Se agrupan registros cuya placa difiere solo en un carácter fácilmente confundido por OCR
+            (Z/2, O/0, I/1, S/5, B/8, G/6). Elige cuál placa conservar — el otro registro se fusiona en ese y se elimina.
           </Text>
           {loading && <ActivityIndicator style={{ marginTop: 20 }} color={colors.brandPrimary} />}
           {!loading && groups.length === 0 && (
             <View style={s.dupEmpty}>
               <Ionicons name="checkmark-circle" size={40} color={colors.success} />
-              <Text style={s.dupEmptyText}>No se encontraron duplicados por confusiÃ³n de OCR ðŸŽ‰</Text>
+              <Text style={s.dupEmptyText}>No se encontraron duplicados por confusión de OCR 🎉</Text>
             </View>
           )}
           {groups.map((g) => (
@@ -220,7 +220,7 @@ function DuplicatesModal({ visible, token, onClose, onMerged }: { visible: boole
   );
 }
 
-// â”€â”€â”€ Tab Button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Tab Button ──────────────────────────────────────────────────────â”€â”€â”€â”€
 function TabBtn({ label, icon, active, on, isMCI }: any) {
   const Icon = isMCI ? MaterialCommunityIcons : Ionicons;
   return (
@@ -418,7 +418,6 @@ export default function Supervisor() {
   const [allTickets, setAllTickets] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [forceSyncing, setForceSyncing] = useState(false);
   const [query, setQuery] = useState('');
   const [reportLoading, setReportLoading] = useState<string | null>(null);
   const [emailModal, setEmailModal] = useState<{ visible: boolean; recordId: string; plates: string }>({ visible: false, recordId: '', plates: '' });
@@ -463,20 +462,6 @@ export default function Supervisor() {
       await fetchEverything();
     } catch (e: any) { Alert.alert(t('error'), e.message); }
     finally { setSyncing(false); }
-  };
-
-  const handleDeepRepair = () => {
-    Alert.alert('ðŸ”§ ReparaciÃ³n Profunda', 'Esto analizarÃ¡ y corregirÃ¡ vÃ­nculos rotos e inspecciones huÃ©rfanas. Â¿Continuar?',
-      [{ text: 'Cancelar', style: 'cancel' },
-       { text: 'Reparar', style: 'destructive', onPress: async () => { setSyncing(true); try { await handleRepair(); Alert.alert('âœ… ReparaciÃ³n Completada', 'Se intentaron vincular todas las inspecciones huÃ©rfanas.'); } catch (e: any) { Alert.alert('Error', e.message); } finally { setSyncing(false); } } }]
-    );
-  };
-
-  const handleForceSync = () => {
-    Alert.alert('ðŸ”„ Forzar SincronizaciÃ³n', 'Esto refrescarÃ¡ los datos locales desde Supabase. Â¿Continuar?',
-      [{ text: 'Cancelar', style: 'cancel' },
-       { text: 'Sincronizar', onPress: async () => { setForceSyncing(true); try { await fetchEverything(); Alert.alert('âœ… SincronizaciÃ³n Completada', 'Los datos han sido actualizados.'); } catch (e: any) { Alert.alert('Error', e.message); } finally { setForceSyncing(false); } } }]
-    );
   };
 
   const filteredData = useMemo(() => {
@@ -562,8 +547,6 @@ export default function Supervisor() {
     { icon: 'link', label: t('vincular_huerfanos').toUpperCase(), color: colors.brandPrimary, surface: colors.brandTertiary, onPress: handleRepair, disabled: syncing, loading: syncing },
     { icon: 'people', label: t('usuarios_caps').toUpperCase(), color: colors.info, surface: colors.infoSurface, onPress: () => router.push('/(app)/usuarios'), disabled: false, loading: false },
     { icon: 'git-merge', label: 'DUPLICADOS POR OCR (FUSIONAR)', color: colors.warning, surface: colors.warningSurface, onPress: () => setDuplicatesModalVisible(true), disabled: false, loading: false },
-    { icon: 'build', label: 'REPARACIÃ“N PROFUNDA (VÃNCULOS + FECHAS)', color: colors.error, surface: colors.errorSurface, onPress: handleDeepRepair, disabled: syncing, loading: syncing },
-    { icon: 'cloud-upload', label: 'FORZAR SYNC OTROS DISPOSITIVOS', color: colors.success, surface: colors.successSurface, onPress: handleForceSync, disabled: forceSyncing, loading: forceSyncing },
   ];
 
   const [showAdminTools, setShowAdminTools] = useState(false);
@@ -804,5 +787,32 @@ const s = StyleSheet.create({
   cancelBtnText: { fontWeight: '800', fontSize: 14, color: colors.muted },
   sendBtn: { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: colors.brandPrimary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, ...shadows.xs },
   sendBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14, letterSpacing: 0.5 },
+
+  // Duplicados por OCR (fusionar)
+  dupHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16,
+    borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: '#FFFFFF',
+  },
+  dupBackBtn: { padding: 4 },
+  dupTitle: { fontSize: 16, fontWeight: '800', color: colors.onSurface, flex: 1 },
+  dupDesc: { fontSize: 12, color: colors.muted, lineHeight: 18, marginBottom: 16 },
+  dupEmpty: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48, gap: 12 },
+  dupEmptyText: { color: colors.muted, fontWeight: '700', fontSize: 13, textAlign: 'center' },
+  dupGroup: {
+    backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border, borderRadius: 12,
+    marginBottom: 14, overflow: 'hidden', ...shadows.xs,
+  },
+  dupRecord: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
+  dupPlates: { fontSize: 15, fontWeight: '900', color: colors.onSurface, letterSpacing: 0.5 },
+  dupMeta: { fontSize: 11, color: colors.muted, marginTop: 2 },
+  dupDate: { fontSize: 10, color: colors.mutedLight, marginTop: 2 },
+  dupMergeBtn: {
+    backgroundColor: colors.brandPrimary, paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: 10, minWidth: 84, alignItems: 'center', justifyContent: 'center',
+  },
+  dupMergeBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 11, letterSpacing: 0.3 },
 });
 

@@ -17,7 +17,7 @@ interface NavItem {
 
 const isWeb = Platform.OS === 'web';
 
-// Left navigation rail for desktop/web â€” premium enterprise sidebar
+// Left navigation rail for desktop/web — premium enterprise sidebar
 export default function SidebarNav() {
   const router = useRouter();
   const pathname = usePathname();
@@ -37,7 +37,7 @@ export default function SidebarNav() {
   ];
 
   const adminItems: NavItem[] = isAdminOrSup ? [
-    { key: 'analitica', route: '/(app)/analitica', match: '/analitica', label: t('analitica') || 'AnalÃ­tica', render: (c, s) => <Ionicons name="bar-chart" size={s} color={c} /> },
+    { key: 'analitica', route: '/(app)/analitica', match: '/analitica', label: t('analitica') || 'Analítica', render: (c, s) => <Ionicons name="bar-chart" size={s} color={c} /> },
     { key: 'supervisor', route: '/(app)/supervisor', match: '/supervisor', label: t('maestro').toUpperCase(), render: (c, s) => <Ionicons name="shield-checkmark" size={s} color={c} /> },
   ] : [];
 
@@ -69,7 +69,7 @@ export default function SidebarNav() {
 
   return (
     <View style={styles.sidebar}>
-      {/* â”€â”€ Brand area â”€â”€ */}
+      {/* ── Brand area ── */}
       <View style={styles.brandArea}>
         <View style={styles.logoWrap}>
           <View style={styles.logoBadge}>
@@ -82,16 +82,16 @@ export default function SidebarNav() {
         </View>
       </View>
 
-      {/* â”€â”€ Navigation â”€â”€ */}
+      {/* ── Navigation ── */}
       <ScrollView style={styles.navScroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.navSectionLabel}>{t('menu') || 'MENÃš'}</Text>
+        <Text style={styles.navSectionLabel}>{t('menu') || 'MENÚ'}</Text>
         <View style={styles.navGroup}>
           {items.map(renderNavItem)}
         </View>
 
         {adminItems.length > 0 && (
           <>
-            <Text style={[styles.navSectionLabel, { marginTop: spacing.xl }]}>{t('administracion') || 'ADMINISTRACIÃ“N'}</Text>
+            <Text style={[styles.navSectionLabel, { marginTop: spacing.xl }]}>{t('administracion') || 'ADMINISTRACIÓN'}</Text>
             <View style={styles.navGroup}>
               {adminItems.map(renderNavItem)}
             </View>
@@ -99,7 +99,7 @@ export default function SidebarNav() {
         )}
       </ScrollView>
 
-      {/* â”€â”€ Footer / user â”€â”€ */}
+      {/* ── Footer / user ── */}
       <View style={styles.footer}>
         <View style={styles.footerDivider} />
         <Pressable

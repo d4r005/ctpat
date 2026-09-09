@@ -167,7 +167,7 @@ export default function CasetaList() {
     <View style={styles.tableHeader}>
       <Text style={[styles.tableHeaderText, { flex: 1.2 }]}>PLACAS</Text>
       <Text style={[styles.tableHeaderText, { flex: 1.4 }]}>CHOFER</Text>
-      <Text style={[styles.tableHeaderText, { flex: 1.4 }]}>COMPAÃ‘ÃA</Text>
+      <Text style={[styles.tableHeaderText, { flex: 1.4 }]}>COMPAÑÍA</Text>
       <Text style={[styles.tableHeaderText, { flex: 1.6 }]}>PROGRESO</Text>
       <Text style={[styles.tableHeaderText, { flex: 1 }]}>ESTADO</Text>
       <Text style={[styles.tableHeaderText, { flex: 1.3 }]}>FECHA</Text>
