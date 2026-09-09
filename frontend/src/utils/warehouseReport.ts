@@ -266,23 +266,28 @@ const getChecklistHtml = (items: { key: string; label: string }[], state: Checkl
 };
 
 const getMaterialPhotosHtml = (materiales: WarehouseReportData['materiales']) => {
-  const conFotos = (materiales || []).filter(m => Array.isArray(m.fotos) && m.fotos.length > 0);
-  if (conFotos.length === 0) return '';
-  const blocks = conFotos.map((m, idx) => {
+  const mats = materiales || [];
+  if (mats.length === 0) return '';
+  const conFotos = mats.filter(m => Array.isArray(m.fotos) && m.fotos.length > 0);
+  const blocks = conFotos.map((m) => {
+    const idx = mats.indexOf(m);
     const imgs = (m.fotos || []).filter(f => validImg(f)).map(f => `
       <img src="${f}" style="width:80px; height:80px; object-fit:cover; border:1px solid #ddd; border-radius:3px; margin:2px;" />
     `).join('');
     return `
       <div style="margin-bottom:6px;">
-        <p style="margin:0 0 3px 0; font-size:8px; font-weight:bold; color:#0A2540;">MATERIAL ${idx + 1} — ${(m.descripcion || m.tipo || '').toUpperCase()}</p>
+        <p style="margin:0 0 3px 0; font-size:8px; font-weight:bold; color:#0A2540;">MATERIAL ${idx + 1} — ${(m.descripcion || m.tipo || '').toUpperCase()} · ${(m.fotos || []).length} FOTO(S) / ${(m.fotos || []).length}张照片</p>
         <div style="display:flex; flex-wrap:wrap;">${imgs}</div>
       </div>
     `;
   }).join('');
-  return `<div style="margin-top:8px;">${blocks}</div>`;
+  return `
+    <h4 style="font-size:9px; color:#0A2540; margin:10px 0 4px 0; letter-spacing:0.5px;">FOTOGRAFÍAS DEL PO / MATERIAL CARGADO / 采购订单装载照片</h4>
+    ${blocks || '<p style="font-size:9px; color:#94A3B8; margin:4px 0;">SIN FOTOGRAFÍAS DEL PO / MATERIAL CARGADO / 无采购订单照片</p>'}
+  `;
 };
 
-export const generateWarehouseReportHtml = (d: WarehouseReportData): string => {
+const generateWarehouseReportHtml = (d: WarehouseReportData): string => {
   const totalDanos = countDamages(d.damage_map);
   const materiales = Array.isArray(d.materiales) ? d.materiales.filter(m => m && (m.descripcion || m.cantidad)) : [];
   const materialRows = materiales.map((m, idx) => `
@@ -295,6 +300,7 @@ export const generateWarehouseReportHtml = (d: WarehouseReportData): string => {
     </tr>
   `).join('');
 
+  const totalUnidades = materiales.reduce((acc, m) => acc + (parseInt(String(m.cantidad || '').replace(/[^0-9]/g, '')) || 0), 0);
   const emptyRow = `<tr><td colspan="5" style="border:1px solid #cbd5e1; padding:6px; font-size:9px; text-align:center; color:#94A3B8;">SIN MATERIALES REGISTRADOS / 无材料记录</td></tr>`;
 
   return `<!DOCTYPE html>
@@ -372,6 +378,9 @@ export const generateWarehouseReportHtml = (d: WarehouseReportData): string => {
       <th style="border:1px solid #cbd5e1; background:#F1F5F9; padding:4px 6px; font-size:8px; width:38%;">OBSERVACIONES / 备注</th>
     </tr>
     ${materialRows || emptyRow}
+  </table>
+  <table style="width:100%; border-collapse:collapse; margin-top:4px;">
+    <tr>${infoCell('CONTEO DE MATERIAL / 材料统计', `${materiales.length} MATERIAL(ES) / 种材料 · ${totalUnidades} UNIDAD(ES) TOTALES / 共${totalUnidades}件`)}</tr>
   </table>
   ${getMaterialPhotosHtml(materiales)}
 
