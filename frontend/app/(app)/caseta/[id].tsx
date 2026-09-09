@@ -27,6 +27,7 @@ export default function CasetaDetail() {
   const { patchVehicleExit, updateVehicleRecord } = useInspections();
 
   const [rec, setRec] = useState<any>(null);
+  const [warehouseId, setWarehouseId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<{ notFound: boolean; message: string } | null>(null);
@@ -115,6 +116,18 @@ export default function CasetaDetail() {
             ticketData = tickets[0].data;
           }
         } catch (e) {
+        }
+
+        // --- Registro de almacén vinculado (si existe) ---
+        try {
+          const { data: warehouses, error: whErr } = await supabase
+            .from('warehouse_records')
+            .select('id')
+            .eq('record_id', id)
+            .limit(1);
+          setWarehouseId(!whErr && warehouses && warehouses.length > 0 ? warehouses[0].id : null);
+        } catch (e) {
+          setWarehouseId(null);
         }
 
         if (mappedRec.exit) {
@@ -526,6 +539,36 @@ export default function CasetaDetail() {
                 >
                   <Ionicons name="add-circle" size={20} color="#FFF" />
                   <Text style={styles.actionBtnText}>GENERAR TICKET EMBARQUE</Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+
+          {/* SECCIÓN ALMACÉN */}
+          <View style={styles.section}>
+            <View style={[styles.sectionHeader, { backgroundColor: '#00838F' }]}>
+              <Ionicons name="archive" size={20} color="#FFF" />
+              <Text style={styles.sectionTitle}>REGISTRO DE ALMACÉN</Text>
+            </View>
+            <View style={styles.sectionBody}>
+              {warehouseId ? (
+                <Pressable
+                  style={[styles.inspectionLink]}
+                  onPress={() => router.push(`/almacen/${warehouseId}`)}
+                >
+                  <Ionicons name="archive" size={16} color="#00838F" />
+                  <Text style={[styles.inspectionLinkText, { color: '#00838F' }]}>Ver Registro de Almacén</Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.muted} style={{ marginLeft: 'auto' }} />
+                </Pressable>
+              ) : (
+                <Pressable
+                  style={[styles.actionBtn, { backgroundColor: '#00838F' }]}
+                  onPress={() => router.push(
+                    `/(app)/almacen/nuevo?record_id=${rec.id}&placas=${rec.entry?.placas_unidad || ''}&compania=${rec.entry?.compania_transporte || ''}&trailer=${rec.entry?.numero_caja || ''}&operador=${rec.entry?.chofer_nombre || ''}`
+                  )}
+                >
+                  <Ionicons name="add-circle" size={20} color="#FFF" />
+                  <Text style={styles.actionBtnText}>INICIAR REGISTRO DE ALMACÉN</Text>
                 </Pressable>
               )}
             </View>

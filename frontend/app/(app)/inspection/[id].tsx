@@ -656,6 +656,28 @@ export default function InspectionDetail() {
           ) : null}
         </Section>
 
+        {insp && (
+          <Pressable
+            testID="detail-create-ticket"
+            style={[styles.exportBtn, { marginBottom: 12 }]}
+            onPress={() => router.push({
+              pathname: '/embarque/nuevo',
+              params: {
+                inspection_id: String(insp.id || id),
+                record_id: insp.record_id || '',
+                placas: insp.placas_unidad || '',
+                compania: insp.compania_transportista || '',
+                trailer: insp.numero_trailer || '',
+                sello: insp.sello_alta_seguridad || '',
+                operador: insp.inspector_nombre || '',
+              },
+            })}
+          >
+            <Ionicons name="cube" size={24} color={colors.onBrandSecondary} />
+            <Text style={styles.exportText}>GENERAR TICKET DE EMBARQUE</Text>
+          </Pressable>
+        )}
+
         <Pressable
           testID="detail-export-pdf"
           style={[styles.exportBtn, generating && { opacity: 0.6 }]}

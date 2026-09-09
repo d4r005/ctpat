@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Image, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Image, Alert, Modal, FlatList } from 'react-native';
 import { useIsTablet } from '@/src/hooks/useIsTablet';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -37,6 +37,13 @@ export default function EmbarqueNuevo() {
 
   const [saving, setSaving] = useState(false);
   const sigRef = React.useRef<any>(null);
+
+  // --- Vínculo con registro de caseta/inspección (precarga entre módulos) ---
+  const [recordId, setRecordId] = useState<string>(params.record_id || '');
+  const [unitPickerVisible, setUnitPickerVisible] = useState(false);
+  const [patioUnits, setPatioUnits] = useState<any[]>([]);
+  const [loadingPatio, setLoadingPatio] = useState(false);
+
   const [form, setForm] = useState({
     almacenista: '', area: '', sellos: '', cliente: '', operador: params.operador || '',
     linea_transporte: params.compania || '', numero_economico: params.economico || '', placas_unidad: params.placas || '',
@@ -49,39 +56,99 @@ export default function EmbarqueNuevo() {
     cliente_otro: '',
   });
 
-  useEffect(() => {
-    const fetchRecord = async () => {
-      if (params.record_id && !form.placas_unidad) {
-        try {
-          const { data: rec, error } = await supabase
-            .from('vehicle_records')
-            .select('*')
-            .eq('id', params.record_id)
-            .single();
+  // Precarga desde registro de entrada (caseta)
+  const applyRecordPrefill = useCallback(async (rid: string) => {
+    try {
+      const { data: rec, error } = await supabase
+        .from('vehicle_records')
+        .select('*')
+        .eq('id', rid)
+        .single();
 
-          if (error) throw error;
-          if (rec && rec.entry_data) {
-            const entry = rec.entry_data;
-            setForm(prev => ({
-              ...prev,
-              operador: entry.chofer_nombre || prev.operador,
-              linea_transporte: entry.compania_transporte || prev.linea_transporte,
-              placas_unidad: entry.placas_unidad || prev.placas_unidad,
-              numero_caja: entry.numero_caja || prev.numero_caja,
-              placas_caja: entry.placas_caja || prev.placas_caja || '',
-              numero_economico: entry.numero_tractor || prev.numero_economico || '',
-              hora_llegada: entry.hora_llegada || (rec.created_at ? new Date(rec.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : prev.hora_llegada),
-              numero_orden_compra: entry.numero_orden_compra || prev.numero_orden_compra,
-              observaciones: entry.destino ? `${t('destino_caps')}: ${entry.destino}` : prev.observaciones,
-            }));
-          }
-        } catch (e) {
-          console.error("Error cargando record para embarque:", e);
+      if (error) throw error;
+      if (rec && rec.entry_data) {
+        const entry = rec.entry_data;
+        setForm(prev => ({
+          ...prev,
+          operador: entry.chofer_nombre || prev.operador,
+          linea_transporte: entry.compania_transporte || prev.linea_transporte,
+          placas_unidad: sanitizePlate(entry.placas_unidad || '') || prev.placas_unidad,
+          numero_caja: entry.numero_caja || prev.numero_caja,
+          placas_caja: entry.placas_caja || prev.placas_caja || '',
+          numero_economico: entry.numero_tractor || prev.numero_economico || '',
+          hora_llegada: entry.hora_llegada || (rec.created_at ? new Date(rec.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : prev.hora_llegada),
+          numero_orden_compra: entry.numero_orden_compra || prev.numero_orden_compra,
+          observaciones: entry.destino ? `${t('destino_caps')}: ${entry.destino}` : prev.observaciones,
+        }));
+      }
+    } catch (e) {
+      console.error("Error cargando record para embarque:", e);
+    }
+  }, [t]);
+
+  // Precarga desde inspección (sello de alta seguridad verificado, placas, etc.)
+  const applyInspectionPrefill = useCallback(async (iid: string) => {
+    try {
+      const { data: insp, error } = await supabase
+        .from('inspections')
+        .select('*')
+        .eq('id', iid)
+        .single();
+      if (error) throw error;
+      if (insp) {
+        const d = insp.data || insp;
+        setForm(prev => ({
+          ...prev,
+          numero_sello: prev.numero_sello || d.sello_alta_seguridad || '',
+          placas_unidad: prev.placas_unidad || sanitizePlate(d.placas_unidad || ''),
+          numero_caja: prev.numero_caja || d.numero_trailer || '',
+          linea_transporte: prev.linea_transporte || d.compania_transportista || '',
+        }));
+        // Si la inspección está vinculada a un registro de caseta, vincular también el ticket
+        const rid = d.record_id || insp.record_id;
+        if (rid && !recordId) {
+          setRecordId(rid);
+          applyRecordPrefill(rid);
         }
       }
-    };
-    fetchRecord();
-  }, [params.record_id, token]);
+    } catch (e) {
+      console.error("Error cargando inspección para embarque:", e);
+    }
+  }, [recordId, applyRecordPrefill]);
+
+  useEffect(() => {
+    if (recordId) applyRecordPrefill(recordId);
+    if (params.inspection_id) applyInspectionPrefill(params.inspection_id);
+  }, [recordId, params.inspection_id, token, applyRecordPrefill, applyInspectionPrefill]);
+
+  // Cargar unidades en patio para el selector (cuando no hay vínculo)
+  const loadPatioUnits = useCallback(async () => {
+    if (!token) return;
+    setLoadingPatio(true);
+    try {
+      const { data, error } = await supabase
+        .from('vehicle_records')
+        .select('id, plates, entry_data, exit_data, has_shipping_ticket, created_at')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      setPatioUnits((data || []).filter((r: any) => !r.exit_data && !r.has_shipping_ticket));
+    } catch (e) {
+      console.error('Error cargando unidades en patio:', e);
+    } finally {
+      setLoadingPatio(false);
+    }
+  }, [token]);
+
+  const openUnitPicker = () => {
+    loadPatioUnits();
+    setUnitPickerVisible(true);
+  };
+
+  const pickUnit = (u: any) => {
+    setRecordId(u.id);
+    setUnitPickerVisible(false);
+  };
   const [sigTarget, setSigTarget] = useState<'almacenista' | 'guardia' | null>(null);
   const [almacenistaOpcion, setAlmacenistaOpcion] = useState<'CARLOS CANIZALES' | 'CYNTHIA SAUCEDA' | 'OTRO' | ''>('');
   const [guardiaSeguridadOpcion, setGuardiaSeguridadOpcion] = useState<'MARIO AGUILAR' | 'ADELAIDO SAENZ' | 'OTRO' | ''>('');
@@ -184,13 +251,13 @@ export default function EmbarqueNuevo() {
         ...form,
         almacenista: finalAlmacenista,
         cliente: finalCliente,
-        record_id: params.record_id || '' // Enviar record_id para vínculo atómico
+        record_id: recordId || '' // Enviar record_id para vínculo atómico
       };
       const created = await saveShippingTicket(payload);
 
       const nextStep = () => {
-        if (params.record_id) {
-          router.replace(`/caseta/${params.record_id}`);
+        if (recordId) {
+          router.replace(`/caseta/${recordId}`);
         } else {
           router.replace(`/embarque/${created.id}`);
         }
@@ -236,6 +303,17 @@ export default function EmbarqueNuevo() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Section title={t('almacen').toUpperCase()}>
+            {!recordId ? (
+              <Pressable style={styles.prefillBtn} onPress={openUnitPicker}>
+                <Ionicons name="download" size={18} color="#FFF" />
+                <Text style={styles.prefillBtnText}>CARGAR DATOS DE UNIDAD EN PATIO</Text>
+              </Pressable>
+            ) : (
+              <View style={styles.prefillBadge}>
+                <Ionicons name="link" size={16} color={colors.success} />
+                <Text style={styles.prefillBadgeText}>Registro vinculado a la unidad de caseta</Text>
+              </View>
+            )}
             <Text style={styles.label}>{`${t('almacenista_caps').toUpperCase()} *`}</Text>
             <View style={[styles.optionsRow, { marginBottom: spacing.md }]}>
               {(['CARLOS CANIZALES', 'CYNTHIA SAUCEDA', 'OTRO'] as const).map((o) => (
@@ -394,6 +472,44 @@ export default function EmbarqueNuevo() {
         </ScrollView>
       </KeyboardAvoidingView>
 
+      {/* Modal selector de unidad en patio (precarga) */}
+      <Modal visible={unitPickerVisible} transparent animationType="slide" onRequestClose={() => setUnitPickerVisible(false)}>
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerCard}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>SELECCIONA LA UNIDAD</Text>
+              <Pressable onPress={() => setUnitPickerVisible(false)} hitSlop={8}>
+                <Ionicons name="close" size={24} color={colors.muted} />
+              </Pressable>
+            </View>
+            <FlatList
+              data={patioUnits}
+              keyExtractor={(u: any) => u.id}
+              style={{ flex: 1 }}
+              contentContainerStyle={{ padding: spacing.md }}
+              renderItem={({ item: u }: any) => (
+                <Pressable style={styles.pickerItem} onPress={() => pickUnit(u)}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.pickerItemTitle}>{u.plates || u.entry_data?.placas_unidad || '—'}</Text>
+                    <Text style={styles.pickerItemSub}>
+                      {u.entry_data?.chofer_nombre || ''} · {u.entry_data?.compania_transporte || ''}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+                </Pressable>
+              )}
+              ListEmptyComponent={
+                loadingPatio ? (
+                  <ActivityIndicator color={colors.brandPrimary} style={{ marginTop: 24 }} />
+                ) : (
+                  <Text style={styles.pickerEmpty}>No hay unidades en patio sin ticket.</Text>
+                )
+              }
+            />
+          </View>
+        </View>
+      </Modal>
+
       {sigTarget && (
         <SignatureModal
           sigTarget={sigTarget}
@@ -537,5 +653,34 @@ const styles = StyleSheet.create({
   optionText: { fontWeight: '900', fontSize: 11, color: colors.onSurface, letterSpacing: 1 },
   optionTextActive: { color: colors.onBrandPrimary },
   removeBtnSig: { position: 'absolute', top: 5, right: 5, padding: 5, backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: 15 },
+
+  // Precarga entre módulos
+  prefillBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: colors.brandPrimary, borderRadius: radius.md, paddingVertical: 14,
+    marginBottom: spacing.md,
+  },
+  prefillBtnText: { color: colors.onBrandPrimary, fontWeight: '900', fontSize: 11, letterSpacing: 1 },
+  prefillBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: colors.successSurface, borderRadius: radius.md, padding: 12,
+    marginBottom: spacing.md,
+  },
+  prefillBadgeText: { color: colors.onSuccess, fontSize: 11, fontWeight: '700', flex: 1 },
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  pickerCard: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '75%' },
+  pickerHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    padding: spacing.md + 4, borderBottomWidth: 1, borderBottomColor: colors.divider,
+  },
+  pickerTitle: { fontSize: 13, fontWeight: '900', color: colors.onSurface, letterSpacing: 1 },
+  pickerItem: {
+    flexDirection: 'row', alignItems: 'center', padding: 14, marginBottom: 8,
+    backgroundColor: colors.surfaceSecondary, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  pickerItemTitle: { fontSize: 15, fontWeight: '900', color: colors.onSurface },
+  pickerItemSub: { fontSize: 11, color: colors.muted, marginTop: 2 },
+  pickerEmpty: { textAlign: 'center', color: colors.muted, marginTop: 24, fontSize: 13 },
 });
 

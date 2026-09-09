@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Image, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Image, Alert, Modal, FlatList, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '@/src/api/supabase';
 import { useInspections } from '@/src/context/InspectionContext';
 import { useAuth } from '@/src/context/AuthContext';
-import { colors, spacing, typography } from '@/src/constants/theme';
+import { colors, spacing, typography, radius } from '@/src/constants/theme';
 import { sanitizePlate } from '@/src/utils/text';
 import { compressImage } from '@/src/utils/image';
 import BoxDamageMap, { DamageMap, emptyDamageMap, countDamages, DAMAGE_SURFACES } from '@/src/components/BoxDamageMap';
@@ -36,6 +36,12 @@ export default function AlmacenNuevo() {
   const sigRef = React.useRef<any>(null);
   const [sigTarget, setSigTarget] = useState<'almacenista' | 'supervisor' | null>(null);
 
+  // --- Vínculo con registro de caseta (precarga entre módulos) ---
+  const [recordId, setRecordId] = useState<string>(params.record_id || '');
+  const [unitPickerVisible, setUnitPickerVisible] = useState(false);
+  const [patioUnits, setPatioUnits] = useState<any[]>([]);
+  const [loadingPatio, setLoadingPatio] = useState(false);
+
   const [form, setForm] = useState({
     almacenista: '', area: '', cliente: params.cliente || '',
     operador: params.operador || '', linea_transporte: params.compania || '',
@@ -57,35 +63,82 @@ export default function AlmacenNuevo() {
 
   const set = (k: string, v: any) => setForm({ ...form, [k]: v });
 
-  // Pre-llenar desde el registro de caseta si viene por vínculo
-  useEffect(() => {
-    const fetchRecord = async () => {
-      if (params.record_id && !form.placas_unidad) {
+  // Precarga desde otros módulos: registro de entrada (caseta) + ticket de embarque
+  const applyRecordPrefill = useCallback(async (rid: string) => {
+    try {
+      const { data: rec, error } = await supabase
+        .from('vehicle_records')
+        .select('*')
+        .eq('id', rid)
+        .single();
+      if (error) throw error;
+      if (rec && rec.entry_data) {
+        const entry = rec.entry_data;
+        setForm(prev => ({
+          ...prev,
+          operador: entry.chofer_nombre || prev.operador,
+          linea_transporte: entry.compania_transporte || prev.linea_transporte,
+          placas_unidad: sanitizePlate(entry.placas_unidad || '') || prev.placas_unidad,
+          numero_caja: entry.numero_caja || prev.numero_caja,
+          placas_caja: entry.placas_caja || prev.placas_caja || '',
+        }));
+
+        // Ticket de embarque vinculado → cliente y sello
         try {
-          const { data: rec, error } = await supabase
-            .from('vehicle_records')
-            .select('*')
-            .eq('id', params.record_id)
-            .single();
-          if (error) throw error;
-          if (rec && rec.entry_data) {
-            const entry = rec.entry_data;
+          const { data: tickets } = await supabase
+            .from('shipping_tickets')
+            .select('data')
+            .eq('record_id', rid)
+            .limit(1);
+          if (tickets && tickets.length > 0) {
+            const td = tickets[0].data || {};
             setForm(prev => ({
               ...prev,
-              operador: entry.chofer_nombre || prev.operador,
-              linea_transporte: entry.compania_transporte || prev.linea_transporte,
-              placas_unidad: entry.placas_unidad || prev.placas_unidad,
-              numero_caja: entry.numero_caja || prev.numero_caja,
-              placas_caja: entry.placas_caja || prev.placas_caja || '',
+              cliente: prev.cliente || td.cliente || '',
+              sello_numero: prev.sello_numero || td.numero_sello || '',
             }));
           }
         } catch (e) {
-          console.error('Error cargando record para almacén:', e);
+          // sin ticket: seguir sin precargar cliente/sello
         }
       }
-    };
-    fetchRecord();
-  }, [params.record_id, token]);
+    } catch (e) {
+      console.error('Error cargando record para almacén:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (recordId) applyRecordPrefill(recordId);
+  }, [recordId, token, applyRecordPrefill]);
+
+  // Cargar unidades en patio para el selector (cuando no hay vínculo)
+  const loadPatioUnits = useCallback(async () => {
+    if (!token) return;
+    setLoadingPatio(true);
+    try {
+      const { data, error } = await supabase
+        .from('vehicle_records')
+        .select('id, plates, entry_data, exit_data, created_at')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      setPatioUnits((data || []).filter((r: any) => !r.exit_data));
+    } catch (e) {
+      console.error('Error cargando unidades en patio:', e);
+    } finally {
+      setLoadingPatio(false);
+    }
+  }, [token]);
+
+  const openUnitPicker = () => {
+    loadPatioUnits();
+    setUnitPickerVisible(true);
+  };
+
+  const pickUnit = (u: any) => {
+    setRecordId(u.id);
+    setUnitPickerVisible(false);
+  };
 
   const pickPhoto = async (field: string) => {
     try {
@@ -167,7 +220,7 @@ export default function AlmacenNuevo() {
         ...form,
         almacenista: finalAlmacenista,
         cliente: finalCliente,
-        record_id: params.record_id || '',
+        record_id: recordId || '',
         damage_map: damageMap,
         damage_notes: damageNotes,
         materiales,
@@ -200,6 +253,17 @@ export default function AlmacenNuevo() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Section title="DATOS DE ALMACÉN">
+            {!recordId ? (
+              <Pressable style={styles.prefillBtn} onPress={openUnitPicker}>
+                <Ionicons name="download" size={18} color="#FFF" />
+                <Text style={styles.prefillBtnText}>CARGAR DATOS DE UNIDAD EN PATIO</Text>
+              </Pressable>
+            ) : (
+              <View style={styles.prefillBadge}>
+                <Ionicons name="link" size={16} color={colors.success} />
+                <Text style={styles.prefillBadgeText}>Registro vinculado a la unidad de caseta</Text>
+              </View>
+            )}
             <Text style={styles.label}>ALMACENISTA *</Text>
             <View style={[styles.optionsRow, { marginBottom: spacing.md }]}>
               {(['CARLOS CANIZALES', 'CYNTHIA SAUCEDA', 'OTRO'] as const).map((o) => (
@@ -372,6 +436,44 @@ export default function AlmacenNuevo() {
         </ScrollView>
       </KeyboardAvoidingView>
 
+      {/* Modal selector de unidad en patio (precarga) */}
+      <Modal visible={unitPickerVisible} transparent animationType="slide" onRequestClose={() => setUnitPickerVisible(false)}>
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerCard}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>SELECCIONA LA UNIDAD</Text>
+              <Pressable onPress={() => setUnitPickerVisible(false)} hitSlop={8}>
+                <Ionicons name="close" size={24} color={colors.muted} />
+              </Pressable>
+            </View>
+            <FlatList
+              data={patioUnits}
+              keyExtractor={(u: any) => u.id}
+              style={{ flex: 1 }}
+              contentContainerStyle={{ padding: spacing.md }}
+              renderItem={({ item: u }: any) => (
+                <Pressable style={styles.pickerItem} onPress={() => pickUnit(u)}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.pickerItemTitle}>{u.plates || u.entry_data?.placas_unidad || '—'}</Text>
+                    <Text style={styles.pickerItemSub}>
+                      {u.entry_data?.chofer_nombre || ''} · {u.entry_data?.compania_transporte || ''}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+                </Pressable>
+              )}
+              ListEmptyComponent={
+                loadingPatio ? (
+                  <ActivityIndicator color={colors.brandPrimary} style={{ marginTop: 24 }} />
+                ) : (
+                  <Text style={styles.pickerEmpty}>No hay unidades en patio.</Text>
+                )
+              }
+            />
+          </View>
+        </View>
+      </Modal>
+
       {/* Modal de firma */}
       {sigTarget && (
         <View style={styles.modalOverlay}>
@@ -533,4 +635,33 @@ const styles = StyleSheet.create({
   materialPhotoRemove: { position: 'absolute', top: -6, right: -6, backgroundColor: '#FFF', borderRadius: 10 },
   materialPhotoAdd: { width: 72, height: 72, borderWidth: 1, borderColor: colors.borderStrong, borderStyle: 'dashed', backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 2 },
   materialPhotoAddText: { fontSize: 8, fontWeight: '900', color: colors.brandPrimary, letterSpacing: 0.3 },
+
+  // Precarga entre módulos
+  prefillBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: colors.brandPrimary, borderRadius: radius.md, paddingVertical: 14,
+    marginBottom: spacing.md,
+  },
+  prefillBtnText: { color: colors.onBrandPrimary, fontWeight: '900', fontSize: 11, letterSpacing: 1 },
+  prefillBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: colors.successSurface, borderRadius: radius.md, padding: 12,
+    marginBottom: spacing.md,
+  },
+  prefillBadgeText: { color: colors.onSuccess, fontSize: 11, fontWeight: '700', flex: 1 },
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  pickerCard: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '75%' },
+  pickerHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    padding: spacing.md + 4, borderBottomWidth: 1, borderBottomColor: colors.divider,
+  },
+  pickerTitle: { fontSize: 13, fontWeight: '900', color: colors.onSurface, letterSpacing: 1 },
+  pickerItem: {
+    flexDirection: 'row', alignItems: 'center', padding: 14, marginBottom: 8,
+    backgroundColor: colors.surfaceSecondary, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  pickerItemTitle: { fontSize: 15, fontWeight: '900', color: colors.onSurface },
+  pickerItemSub: { fontSize: 11, color: colors.muted, marginTop: 2 },
+  pickerEmpty: { textAlign: 'center', color: colors.muted, marginTop: 24, fontSize: 13 },
 });
