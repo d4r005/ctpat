@@ -85,6 +85,13 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="almacen/index"
+        options={{
+          title: t('almacen'),
+          tabBarIcon: ({ color }) => <MaterialCommunityIcons name="warehouse" size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="supervisor"
         options={{
           title: t('maestro').toUpperCase(),
@@ -95,6 +102,8 @@ export default function AppLayout() {
       <Tabs.Screen name="caseta/nuevo" options={{ href: null }} />
       <Tabs.Screen name="caseta/[id]"  options={{ href: null }} />
       <Tabs.Screen name="embarque/nuevo" options={{ href: null }} />
+      <Tabs.Screen name="almacen/nuevo" options={{ href: null }} />
+      <Tabs.Screen name="almacen/[id]" options={{ href: null }} />
       <Tabs.Screen name="embarque/[id]"  options={{ href: null }} />
       <Tabs.Screen name="chat"       options={{ href: null }} />
       <Tabs.Screen name="usuarios"   options={{ href: null }} />

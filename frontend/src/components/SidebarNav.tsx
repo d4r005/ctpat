@@ -33,6 +33,7 @@ export default function SidebarNav() {
     { key: 'caseta', route: '/(app)/caseta', match: '/caseta', label: t('caseta'), render: (c, s) => <Ionicons name="business" size={s} color={c} /> },
     { key: 'nueva', route: '/(app)/nueva', match: '/nueva', label: t('inspeccion'), render: (c, s) => <Ionicons name="clipboard" size={s} color={c} /> },
     { key: 'embarque', route: '/(app)/embarque', match: '/embarque', label: t('embarque'), render: (c, s) => <MaterialCommunityIcons name="truck-fast" size={s} color={c} /> },
+    { key: 'almacen', route: '/(app)/almacen', match: '/almacen', label: t('almacen'), render: (c, s) => <MaterialCommunityIcons name="warehouse" size={s} color={c} /> },
   ];
 
   const adminItems: NavItem[] = isAdminOrSup ? [

@@ -182,7 +182,7 @@ export interface Inspection extends InspectionPayload {
 
 interface SyncItem {
   id: string;
-  type: 'inspection' | 'vehicle_record' | 'shipping_ticket' | 'vehicle_exit';
+  type: 'inspection' | 'vehicle_record' | 'shipping_ticket' | 'vehicle_exit' | 'warehouse_record';
   method: 'POST' | 'PATCH' | 'PUT';
   endpoint: string;
   payload: any;
@@ -208,6 +208,7 @@ interface InspectionContextValue {
   saveInspection: (payload: InspectionPayload) => Promise<any>;
   saveVehicleRecord: (payload: any) => Promise<any>;
   saveShippingTicket: (payload: any) => Promise<any>;
+  saveWarehouseRecord: (payload: any) => Promise<any>;
   patchVehicleExit: (id: string, payload: any) => Promise<any>;
   getById: (id: string) => Inspection | undefined;
   syncQueue: () => Promise<void>;
@@ -333,6 +334,8 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
           await saveVehicleRecord(item.payload);
         } else if (item.type === 'shipping_ticket') {
           await saveShippingTicket(item.payload);
+        } else if (item.type === 'warehouse_record') {
+          await saveWarehouseRecord(item.payload);
         } else if (item.type === 'vehicle_exit') {
           await patchVehicleExit(item.id, item.payload);
         }
@@ -562,6 +565,43 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     return { id: tempId, _offline: true, ...payload };
   }, [token, isOnline, addToQueue, user]);
 
+
+  const saveWarehouseRecord = useCallback(async (payload: any, isFromSync: boolean = false): Promise<any> => {
+    const tempId = uuid();
+    if (isOnline) {
+      try {
+        const processedPayload = { ...payload };
+        for (const key in processedPayload) {
+          if (typeof processedPayload[key] === 'string' && processedPayload[key].startsWith('data:image')) {
+            const bucket = key.startsWith('firma') ? 'signatures' : 'evidence';
+            processedPayload[key] = await uploadImage(bucket, processedPayload[key]);
+          }
+        }
+
+        const { data, error } = await supabase
+          .from('warehouse_records')
+          .insert({
+            id: tempId,
+            plates: payload.placas_unidad || payload.plates || '',
+            data: processedPayload,
+            user_id: user?.id,
+            record_id: payload.record_id || null
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        return data;
+      } catch (err: any) {
+        const isNetworkError = err.message?.includes('network') || err.name === 'TypeError';
+        if (!isNetworkError) throw err;
+      }
+    }
+    const offlineWRPayload = await offlineizeImages(payload);
+    await addToQueue({ id: tempId, type: 'warehouse_record', method: 'POST', endpoint: '/warehouse-records', payload: offlineWRPayload });
+    return { id: tempId, _offline: true, ...payload };
+  }, [token, isOnline, addToQueue, user]);
+
   const patchVehicleExit = useCallback(async (id: string, payload: any, isFromSync: boolean = false): Promise<any> => {
     if (isOnline) {
       try {
@@ -741,7 +781,7 @@ export function InspectionProvider({ children }: { children: ReactNode }) {
     <InspectionContext.Provider
       value={{
         inspections, allInspections, pendingCount, isOnline, loading, offlineRecords, isSyncing,
-        refresh, refreshAll, saveInspection, saveVehicleRecord, saveShippingTicket, patchVehicleExit, getById, syncQueue,
+        refresh, refreshAll, saveInspection, saveVehicleRecord, saveShippingTicket, saveWarehouseRecord, patchVehicleExit, getById, syncQueue,
         approveInspection, rejectInspection, updateInspection, updateVehicleRecord, updateShippingTicket, sendManualReport, exportCsvUrl,
         token
       }}
