@@ -1,5 +1,6 @@
 import { Inspection } from '../context/InspectionContext';
 import { INSPECTION_POINTS_19, INSPECTION_POINTS_9 } from '../constants/inspectionPoints';
+import { mtyDateTime } from './datetime';
 
 interface ReportData {
   inspection: Inspection;
@@ -35,15 +36,7 @@ const safeDate = (d: any): string => {
 
     // Forzamos el ajuste de zona horaria si detectamos que viene en UTC o sin zona
     // Mexico Central es UTC-6.
-    return date.toLocaleString('es-MX', {
-      timeZone: 'America/Mexico_City',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
+    return mtyDateTime(date);
   } catch {
     return String(d);
   }
@@ -406,7 +399,7 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
     </div>
     <div style="text-align:right;">
       <h1 style="margin:0;font-size:15px;color:#0A2540;font-weight:900;">${labels.title}</h1>
-      <p style="margin:3px 0 0 0;color:#666;font-size:9px;">${labels.generated}: ${new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}</p>
+      <p style="margin:3px 0 0 0;color:#666;font-size:9px;">${labels.generated}: ${mtyDateTime()}</p>
       ${caseta ? `<p style="margin:2px 0 0 0;color:#0A2540;font-size:9px;font-weight:bold;">Placas: ${caseta.entry?.placas_unidad || '-'} &nbsp;|&nbsp; Chofer: ${caseta.entry?.chofer_nombre || '-'}</p>` : ''}
     </div>
   </div>
@@ -443,7 +436,7 @@ export const generateConsolidatedReportHtml = (data: ReportData, _lang?: string)
 
   <!-- FOOTER -->
   <div style="margin-top:30px;border-top:1px solid #eee;padding-top:10px;text-align:center;color:#aaa;font-size:8px;">
-    © ${new Date().getFullYear()} Branco Industries — Sistema SRIUC / SRIUC 系统 &nbsp;|&nbsp; Documento generado el ${new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}
+    © ${new Date().getFullYear()} Branco Industries — Sistema SRIUC / SRIUC 系统 &nbsp;|&nbsp; Documento generado el ${mtyDateTime()}
   </div>
 
 </body>

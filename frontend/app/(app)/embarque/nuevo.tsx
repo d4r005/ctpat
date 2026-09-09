@@ -16,6 +16,7 @@ import { sanitizePlate } from '@/src/utils/text';
 import { compressImage } from '@/src/utils/image';
 import RoleGate from '@/src/components/RoleGate';
 import { canAccessSecurity } from '@/src/utils/permissions';
+import { mtyTimeFromISO } from '@/src/utils/datetime';
 
 function EmbarqueNuevo() {
   const router = useRouter();
@@ -78,7 +79,7 @@ function EmbarqueNuevo() {
           numero_caja: entry.numero_caja || prev.numero_caja,
           placas_caja: entry.placas_caja || prev.placas_caja || '',
           numero_economico: entry.numero_tractor || prev.numero_economico || '',
-          hora_llegada: entry.hora_llegada || (rec.created_at ? new Date(rec.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : prev.hora_llegada),
+          hora_llegada: entry.hora_llegada || (rec.created_at ? mtyTimeFromISO(rec.created_at) : prev.hora_llegada),
           numero_orden_compra: entry.numero_orden_compra || prev.numero_orden_compra,
           observaciones: entry.destino ? `${t('destino_caps')}: ${entry.destino}` : prev.observaciones,
         }));

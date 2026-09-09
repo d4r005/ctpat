@@ -46,8 +46,9 @@ const safeDate = (d: any): string => {
   try {
     const date = new Date(d);
     if (isNaN(date.getTime())) return String(d);
+    // Zona fija Monterrey UTC-6 — a prueba de DST/tzdata viejo
     return date.toLocaleString('es-MX', {
-      timeZone: 'America/Mexico_City',
+      timeZone: 'America/Monterrey',
       day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit', hour12: false
     });

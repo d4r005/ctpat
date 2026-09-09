@@ -18,6 +18,7 @@ import { compressImage } from '@/src/utils/image';
 import { useTranslation } from 'react-i18next';
 import RoleGate from '@/src/components/RoleGate';
 import { canAccessSecurity } from '@/src/utils/permissions';
+import { mtyTime } from '@/src/utils/datetime';
 
 const TOTAL_STEPS = 4;
 
@@ -129,7 +130,7 @@ function CasetaNuevo() {
   const [ordenCompra, setOrdenCompra] = useState(false);
   const [numOrdenCompra, setNumOrdenCompra] = useState('');
   const [destino, setDestino] = useState('');
-  const [horaLlegada, setHoraLlegada] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }));
+  const [horaLlegada, setHoraLlegada] = useState(mtyTime());
 
   // Step 3 — Declaraciones + firma
   const [aceptaTerminos, setAceptaTerminos] = useState(false);
@@ -174,7 +175,7 @@ function CasetaNuevo() {
     setOrdenCompra(false);
     setNumOrdenCompra('');
     setDestino('');
-    setHoraLlegada(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }));
+    setHoraLlegada(mtyTime());
     setAceptaTerminos(false);
     setFirmaOperador('');
   }, [t]);
@@ -320,6 +321,7 @@ function CasetaNuevo() {
         orden_compra: ordenCompra,
         numero_orden_compra: ordenCompra ? numOrdenCompra.trim().toUpperCase() : '',
         destino: destino.trim().toUpperCase(),
+        fecha_llegada: new Date().toISOString(), // momento exacto de llegada (UTC) para reportes
         hora_llegada: horaLlegada,
         firma_operador: firmaOperador, declaraciones_aceptadas: aceptaTerminos,
       };
