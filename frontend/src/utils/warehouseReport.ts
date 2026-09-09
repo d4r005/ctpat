@@ -210,7 +210,7 @@ const surfacePanelHtml = (key: string, zones: boolean[], wide: boolean, paddingB
   `).join('');
 
   return `
-  <div style="width:100%; margin-bottom:8px;">
+  <div style="width:100%; margin-bottom:5px;">
     <div style="background:${damaged > 0 ? SURF.labelBadBg : SURF.labelBg}; border:1px solid ${SURF.borderStrong}; border-bottom:none; padding:4px 8px; display:flex; justify-content:space-between; align-items:center;">
       <span style="font-size:9px; font-weight:900; letter-spacing:0.5px; color:${damaged > 0 ? SURF.labelBadText : SURF.labelText};">${label}</span>
       ${damaged > 0 ? `<span style="font-size:8px; font-weight:900; color:${SURF.labelBadText};">${damaged} DAÑO(S) / ${damaged}处损坏</span>` : ''}
@@ -234,13 +234,13 @@ const getDamageMapHtml = (map: DamageMap | undefined, notes: Record<string, stri
 
   return `
     <div style="display:flex; gap:8px;">
-      <div style="flex:1;">${surfacePanelHtml('frente', zonas('frente'), false, 85)}</div>
-      <div style="flex:1;">${surfacePanelHtml('puertas', zonas('puertas'), false, 85)}</div>
+      <div style="flex:1;">${surfacePanelHtml('frente', zonas('frente'), false, 60)}</div>
+      <div style="flex:1;">${surfacePanelHtml('puertas', zonas('puertas'), false, 60)}</div>
     </div>
-    ${surfacePanelHtml('pared_izq', zonas('pared_izq'), true, 27.5)}
-    ${surfacePanelHtml('pared_der', zonas('pared_der'), true, 27.5)}
-    ${surfacePanelHtml('techo', zonas('techo'), true, 25)}
-    ${surfacePanelHtml('piso', zonas('piso'), true, 25)}
+    ${surfacePanelHtml('pared_izq', zonas('pared_izq'), true, 19.5)}
+    ${surfacePanelHtml('pared_der', zonas('pared_der'), true, 19.5)}
+    ${surfacePanelHtml('techo', zonas('techo'), true, 18)}
+    ${surfacePanelHtml('piso', zonas('piso'), true, 18)}
     <div style="display:flex; gap:16px; margin:6px 2px; font-size:8px; color:#64748B; font-weight:700;">
       <span>■ ZONA OK / 正常区域</span><span style="color:#EF4444;">■ ZONA DAÑADA / 损坏区域</span>
     </div>

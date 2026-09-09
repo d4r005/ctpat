@@ -253,20 +253,20 @@ export default function BoxDamageMap({ value, onChange, readOnly }: Props) {
       {/* Frente + Puertas (vistas cuadradas, como el mockup de referencia) */}
       <View style={styles.row}>
         <View style={styles.narrowPanel}>
-          <SurfacePanel surfaceKey="frente" label="FRENTE" zones={zonas('frente')} onToggleZone={toggleZone} readOnly={readOnly} aspectRatio={200 / 170} />
+          <SurfacePanel surfaceKey="frente" label="FRENTE" zones={zonas('frente')} onToggleZone={toggleZone} readOnly={readOnly} aspectRatio={200 / 120} />
         </View>
         <View style={styles.narrowPanel}>
-          <SurfacePanel surfaceKey="puertas" label="PUERTAS" zones={zonas('puertas')} onToggleZone={toggleZone} readOnly={readOnly} aspectRatio={200 / 170} />
+          <SurfacePanel surfaceKey="puertas" label="PUERTAS" zones={zonas('puertas')} onToggleZone={toggleZone} readOnly={readOnly} aspectRatio={200 / 120} />
         </View>
       </View>
 
       {/* Laterales (vistas de perfil, anchas) */}
-      <SurfacePanel surfaceKey="pared_izq" label="PARED IZQ." zones={zonas('pared_izq')} onToggleZone={toggleZone} readOnly={readOnly} aspectRatio={400 / 110} />
-      <SurfacePanel surfaceKey="pared_der" label="PARED DER." zones={zonas('pared_der')} onToggleZone={toggleZone} readOnly={readOnly} aspectRatio={400 / 110} />
+      <SurfacePanel surfaceKey="pared_izq" label="PARED IZQ." zones={zonas('pared_izq')} onToggleZone={toggleZone} readOnly={readOnly} aspectRatio={400 / 78} />
+      <SurfacePanel surfaceKey="pared_der" label="PARED DER." zones={zonas('pared_der')} onToggleZone={toggleZone} readOnly={readOnly} aspectRatio={400 / 78} />
 
       {/* Techo y Piso (vistas superior/inferior, anchas) */}
-      <SurfacePanel surfaceKey="techo" label="TECHO" zones={zonas('techo')} onToggleZone={toggleZone} readOnly={readOnly} aspectRatio={400 / 100} />
-      <SurfacePanel surfaceKey="piso" label="PISO" zones={zonas('piso')} onToggleZone={toggleZone} readOnly={readOnly} aspectRatio={400 / 100} />
+      <SurfacePanel surfaceKey="techo" label="TECHO" zones={zonas('techo')} onToggleZone={toggleZone} readOnly={readOnly} aspectRatio={400 / 72} />
+      <SurfacePanel surfaceKey="piso" label="PISO" zones={zonas('piso')} onToggleZone={toggleZone} readOnly={readOnly} aspectRatio={400 / 72} />
 
       <View style={styles.legendRow}>
         <View style={styles.legendItem}>
@@ -284,8 +284,8 @@ export default function BoxDamageMap({ value, onChange, readOnly }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary, padding: spacing.sm, gap: spacing.sm },
-  row: { flexDirection: 'row', gap: spacing.sm },
+  container: { borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surfaceSecondary, padding: spacing.xs, gap: spacing.xs },
+  row: { flexDirection: 'row', gap: spacing.xs },
   narrowPanel: { flex: 1 },
   panelWrap: { width: '100%' },
   panelLabel: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surfaceTertiary, paddingHorizontal: spacing.sm, paddingVertical: 4, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.borderStrong },
