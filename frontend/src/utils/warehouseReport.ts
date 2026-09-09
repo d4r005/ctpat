@@ -174,7 +174,7 @@ export const generateWarehouseReportHtml = (d: WarehouseReportData): string => {
     </tr>
   `).join('');
 
-  const emptyRow = `<tr><td colspan="5" style="border:1px solid #cbd5e1; padding:6px; font-size:9px; text-align:center; color:#94A3B8;">SIN MATERIALES REGISTRADOS</td></tr>`;
+  const emptyRow = `<tr><td colspan="5" style="border:1px solid #cbd5e1; padding:6px; font-size:9px; text-align:center; color:#94A3B8;">SIN MATERIALES REGISTRADOS / 无材料记录</td></tr>`;
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -195,79 +195,79 @@ export const generateWarehouseReportHtml = (d: WarehouseReportData): string => {
       <h2 style="margin:2px 0 0 0; font-size:12px; color:#0A2540; font-weight:normal;">Sistema de Registro e Inspección de Unidades de Carga</h2>
     </div>
     <div style="text-align:right;">
-      <p style="margin:0; font-size:11px; font-weight:bold; color:#0A2540;">REPORTE DE ALMACÉN</p>
-      <p style="margin:2px 0 0 0; font-size:8px; color:#555;">Generado: ${safeDate(new Date().toISOString())}</p>
-      ${d.created_at ? `<p style="margin:1px 0 0 0; font-size:8px; color:#555;">Registro: ${safeDate(d.created_at)}</p>` : ''}
+      <p style="margin:0; font-size:11px; font-weight:bold; color:#0A2540;">REPORTE DE ALMACÉN / 仓库报告</p>
+      <p style="margin:2px 0 0 0; font-size:8px; color:#555;">Generado / 生成日期: ${safeDate(new Date().toISOString())}</p>
+      ${d.created_at ? `<p style="margin:1px 0 0 0; font-size:8px; color:#555;">Registro / 记录时间: ${safeDate(d.created_at)}</p>` : ''}
     </div>
   </div>
 
   <!-- 1. Datos de la unidad -->
-  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">1. DATOS DE UNIDAD Y ALMACÉN</h3>
+  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">1. DATOS DE UNIDAD Y ALMACÉN / 车辆及仓库信息</h3>
   <table style="width:100%; border-collapse:collapse; table-layout:fixed;">
-    <tr>${infoCell('PLACAS UNIDAD', (d.placas_unidad || '-').toUpperCase())}${infoCell('NO. CAJA', (d.numero_caja || '-').toUpperCase())}${infoCell('PLACAS CAJA', (d.placas_caja || '-').toUpperCase())}</tr>
-    <tr>${infoCell('OPERADOR', (d.operador || '-').toUpperCase())}${infoCell('LÍNEA TRANSP.', (d.linea_transporte || '-').toUpperCase())}${infoCell('CLIENTE', (d.cliente || '-').toUpperCase())}</tr>
-    <tr>${infoCell('ALMACENISTA', (d.almacenista || '-').toUpperCase())}${infoCell('ÁREA', (d.area || '-').toUpperCase())}${infoCell('DAÑOS TOTALES', totalDanos > 0 ? `<span style="color:#B91C1C; font-weight:900;">${totalDanos} ZONA(S)</span>` : '0')}</tr>
-    <tr>${infoCell('HORA INICIO', d.hora_inicio || '-')}${infoCell('HORA FIN', d.hora_fin || '-')}${infoCell('MATERIALES', `${materiales.length}`)}</tr>
+    <tr>${infoCell('PLACAS UNIDAD / 车牌号', (d.placas_unidad || '-').toUpperCase())}${infoCell('NO. CAJA / 货箱号', (d.numero_caja || '-').toUpperCase())}${infoCell('PLACAS CAJA / 货箱车牌', (d.placas_caja || '-').toUpperCase())}</tr>
+    <tr>${infoCell('OPERADOR / 操作员', (d.operador || '-').toUpperCase())}${infoCell('LÍNEA TRANSP. / 运输线路', (d.linea_transporte || '-').toUpperCase())}${infoCell('CLIENTE / 客户', (d.cliente || '-').toUpperCase())}</tr>
+    <tr>${infoCell('ALMACENISTA / 仓管员', (d.almacenista || '-').toUpperCase())}${infoCell('ÁREA / 区域', (d.area || '-').toUpperCase())}${infoCell('DAÑOS TOTALES / 总损坏数', totalDanos > 0 ? `<span style="color:#B91C1C; font-weight:900;">${totalDanos} ZONA(S) / 处损坏</span>` : '0')}</tr>
+    <tr>${infoCell('HORA INICIO / 开始时间', d.hora_inicio || '-')}${infoCell('HORA FIN / 结束时间', d.hora_fin || '-')}${infoCell('MATERIALES / 材料数量', `${materiales.length}`)}</tr>
   </table>
 
   <!-- 2. Evidencia fotográfica -->
-  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">2. EVIDENCIA FOTOGRÁFICA DE LA CAJA</h3>
+  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">2. EVIDENCIA FOTOGRÁFICA DE LA CAJA / 货箱照片证据</h3>
   <div style="text-align:center;">
-    ${getPhotoHtml(d.foto_techo, 'TECHO')}
-    ${getPhotoHtml(d.foto_piso, 'PISO')}
-    ${getPhotoHtml(d.foto_pared_izq, 'PARED IZQUIERDA')}
-    ${getPhotoHtml(d.foto_pared_der, 'PARED DERECHA')}
+    ${getPhotoHtml(d.foto_techo, 'TECHO / 顶棚')}
+    ${getPhotoHtml(d.foto_piso, 'PISO / 地板')}
+    ${getPhotoHtml(d.foto_pared_izq, 'PARED IZQUIERDA / 左侧壁')}
+    ${getPhotoHtml(d.foto_pared_der, 'PARED DERECHA / 右侧壁')}
     ${!validImg(d.foto_techo) && !validImg(d.foto_piso) && !validImg(d.foto_pared_izq) && !validImg(d.foto_pared_der)
-      ? '<p style="font-size:9px; color:#94A3B8; margin:8px 0;">SIN FOTOGRAFÍAS REGISTRADAS</p>' : ''}
+      ? '<p style="font-size:9px; color:#94A3B8; margin:8px 0;">SIN FOTOGRAFÍAS REGISTRADAS / 无照片记录</p>' : ''}
   </div>
 
   <!-- 3. Mapa de daños -->
-  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">3. MAPA DE DAÑOS DE LA CAJA ${totalDanos > 0 ? `<span style="background:#EF4444; padding:1px 6px; font-size:8px;">${totalDanos} ZONA(S) DAÑADA(S)</span>` : '<span style="background:#10B981; padding:1px 6px; font-size:8px;">SIN DAÑOS</span>'}</h3>
+  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">3. MAPA DE DAÑOS DE LA CAJA / 货箱损坏图 ${totalDanos > 0 ? `<span style="background:#EF4444; padding:1px 6px; font-size:8px;">${totalDanos} ZONA(S) DAÑADA(S) / 处损坏区域</span>` : '<span style="background:#10B981; padding:1px 6px; font-size:8px;">SIN DAÑOS / 无损坏</span>'}</h3>
   <div style="padding:6px 0;">
     ${getDamageMapHtml(d.damage_map, d.damage_notes)}
   </div>
 
   <!-- 4. Inspección físico-mecánica -->
-  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">4. INSPECCIÓN FÍSICO-MECÁNICA CONTENEDOR/CAJA</h3>
+  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">4. INSPECCIÓN FÍSICO-MECÁNICA CONTENEDOR/CAJA / 集装箱/货箱机械检查</h3>
   ${getChecklistHtml(CHECKLIST_FISICO_MECANICO, d.checklist_fisico_mecanico)}
 
   <!-- 5. Verificación del cuidado de la mercancía -->
-  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">5. VERIFICACIÓN DEL CUIDADO DE LA MERCANCÍA</h3>
+  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">5. VERIFICACIÓN DEL CUIDADO DE LA MERCANCÍA / 货物保管检查</h3>
   ${getChecklistHtml(CHECKLIST_CUIDADO_MERCANCIA, d.checklist_cuidado_mercancia)}
 
   <!-- 6. Aseguramiento y sujeción de la carga -->
-  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">6. ASEGURAMIENTO Y SUJECIÓN DE LA CARGA</h3>
+  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">6. ASEGURAMIENTO Y SUJECIÓN DE LA CARGA / 货物固定与紧固</h3>
   ${getChecklistHtml(CHECKLIST_ASEGURAMIENTO_CARGA, d.checklist_aseguramiento_carga)}
-  ${d.sello_numero ? `<table style="width:100%; border-collapse:collapse; margin-top:4px;"><tr>${infoCell('NO. DE SELLO', d.sello_numero.toUpperCase())}<td style="border:1px solid #cbd5e1;"></td></tr></table>` : ''}
+  ${d.sello_numero ? `<table style="width:100%; border-collapse:collapse; margin-top:4px;"><tr>${infoCell('NO. DE SELLO / 封条编号', d.sello_numero.toUpperCase())}<td style="border:1px solid #cbd5e1;"></td></tr></table>` : ''}
 
   <!-- 7. Lista de verificación de material -->
-  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">7. LISTA DE VERIFICACIÓN DE MATERIAL CARGADO</h3>
+  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">7. LISTA DE VERIFICACIÓN DE MATERIAL CARGADO / 装载材料核对清单</h3>
   <table style="width:100%; border-collapse:collapse; table-layout:fixed;">
     <tr>
       <th style="border:1px solid #cbd5e1; background:#F1F5F9; padding:4px 6px; font-size:8px; width:5%;">#</th>
-      <th style="border:1px solid #cbd5e1; background:#F1F5F9; padding:4px 6px; font-size:8px; width:35%;">DESCRIPCIÓN</th>
-      <th style="border:1px solid #cbd5e1; background:#F1F5F9; padding:4px 6px; font-size:8px; width:12%;">TIPO</th>
-      <th style="border:1px solid #cbd5e1; background:#F1F5F9; padding:4px 6px; font-size:8px; width:10%;">CANTIDAD</th>
-      <th style="border:1px solid #cbd5e1; background:#F1F5F9; padding:4px 6px; font-size:8px; width:38%;">OBSERVACIONES</th>
+      <th style="border:1px solid #cbd5e1; background:#F1F5F9; padding:4px 6px; font-size:8px; width:35%;">DESCRIPCIÓN / 描述</th>
+      <th style="border:1px solid #cbd5e1; background:#F1F5F9; padding:4px 6px; font-size:8px; width:12%;">TIPO / 类型</th>
+      <th style="border:1px solid #cbd5e1; background:#F1F5F9; padding:4px 6px; font-size:8px; width:10%;">CANTIDAD / 数量</th>
+      <th style="border:1px solid #cbd5e1; background:#F1F5F9; padding:4px 6px; font-size:8px; width:38%;">OBSERVACIONES / 备注</th>
     </tr>
     ${materialRows || emptyRow}
   </table>
   ${getMaterialPhotosHtml(materiales)}
 
   <!-- 8. Observaciones generales -->
-  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">8. OBSERVACIONES GENERALES</h3>
+  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">8. OBSERVACIONES GENERALES / 总体备注</h3>
   <table style="width:100%; border-collapse:collapse;">
-    <tr><td style="border:1px solid #cbd5e1; padding:6px 8px; font-size:9px; min-height:40px;">${(d.observaciones || 'SIN OBSERVACIONES').toUpperCase()}</td></tr>
+    <tr><td style="border:1px solid #cbd5e1; padding:6px 8px; font-size:9px; min-height:40px;">${(d.observaciones || 'SIN OBSERVACIONES / 无备注').toUpperCase()}</td></tr>
   </table>
 
   <!-- 9. Firmas -->
-  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">9. VALIDACIÓN Y FIRMAS</h3>
+  <h3 style="font-size:10px; background:#0A2540; color:#FFF; padding:5px 8px; margin:10px 0 0 0; letter-spacing:1px;">9. VALIDACIÓN Y FIRMAS / 验证与签字</h3>
   <div style="display:flex; justify-content:space-around; border:1px solid #cbd5e1; padding:8px 4px; margin-top:4px;">
-    ${inlineSig(d.firma_almacenista, 'Firma Almacenista', d.almacenista)}
-    ${inlineSig(d.firma_supervisor, 'Firma Supervisor', d.supervisor_nombre)}
+    ${inlineSig(d.firma_almacenista, 'Firma Almacenista / 仓管员签字', d.almacenista)}
+    ${inlineSig(d.firma_supervisor, 'Firma Supervisor / 主管签字', d.supervisor_nombre)}
   </div>
 
-  <p style="text-align:center; font-size:7px; color:#94A3B8; margin-top:10px;">SRIUC System — Branco Industries © 2026 · Reporte de Almacén</p>
+  <p style="text-align:center; font-size:7px; color:#94A3B8; margin-top:10px;">SRIUC System — Branco Industries © 2026 · Reporte de Almacén / 仓库报告</p>
 </body>
 </html>`;
 };
