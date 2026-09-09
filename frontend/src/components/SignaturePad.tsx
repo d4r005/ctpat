@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useImperativeHandle, useRef } from 'react';
 import { View, Platform, StyleSheet } from 'react-native';
 import SignatureScreen from 'react-native-signature-canvas';
 import i18n from '@/src/i18n';

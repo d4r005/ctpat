@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import { Platform } from 'react-native';
@@ -167,6 +167,8 @@ export interface InspectionPayload {
 export interface Inspection extends InspectionPayload {
   id: string;
   user_id: string;
+  /** Placa normalizada (alias de placas_unidad usado en búsquedas/filtros) */
+  plates?: string;
   inspector_email?: string;
   created_at: string;
   status_general: string;

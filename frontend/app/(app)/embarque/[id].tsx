@@ -39,7 +39,6 @@ export default function EmbarqueDetail() {
     try {
       if (!id) return;
       setLoading(true);
-      console.log(`[EmbarqueDetail] Loading ticket ID: ${id}`);
       const { data, error } = await supabase
         .from('shipping_tickets')
         .select('*')

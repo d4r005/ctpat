@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useWindowDimensions } from 'react-native';
 import { useIsTablet } from '@/src/hooks/useIsTablet';
 import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl, Platform, FlatList, ActivityIndicator } from 'react-native';
@@ -315,9 +315,8 @@ export default function Inicio() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.surface },
-  mainScroll: { flex: 1 },
-  desktopLayout: { flexDirection: 'row', padding: 32, gap: 32 },
-  mobileLayout: { padding: 20 },
+  container: { padding: 20 },
+  containerWeb: { padding: 32 },
 
   contentArea: { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 },

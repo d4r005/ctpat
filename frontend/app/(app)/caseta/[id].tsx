@@ -115,7 +115,6 @@ export default function CasetaDetail() {
             ticketData = tickets[0].data;
           }
         } catch (e) {
-          console.log("No se encontró ticket de embarque para autollenado");
         }
 
         if (mappedRec.exit) {

@@ -322,9 +322,7 @@ export default function CasetaNuevo() {
         firma_operador: firmaOperador, declaraciones_aceptadas: aceptaTerminos,
       };
 
-      console.log('Enviando registro de caseta...');
       const created = await saveVehicleRecord(body);
-      console.log('Registro procesado:', created.id);
 
       const nextParams = new URLSearchParams({
         record_id: created.id,

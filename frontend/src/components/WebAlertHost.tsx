@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, View, Text, Pressable, TextInput, StyleSheet, Platform } from 'react-native';
 import { Alert } from 'react-native';
 import { webAlertBridge, AlertButton } from '@/src/utils/webAlertBridge';
