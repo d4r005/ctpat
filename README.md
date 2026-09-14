@@ -44,5 +44,5 @@ El control maestro del sistema (Gestión de Usuarios y KPIs) está restringido a
 *SRIUC System - Branco Industries © 2026*
 
 ## Despliegue
-Este backend corre sobre Docker en Hugging Face Spaces.
-Ruta de salud: `/api/health`
+- **Web (Torre de Control):** Cloudflare Pages
+- **Base de datos, autenticación y storage:** Supabase
