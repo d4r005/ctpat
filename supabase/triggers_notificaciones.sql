@@ -19,6 +19,18 @@
 -- ============================================================================
 
 -- ─────────────────────────────────────────────────────────────────────────
+-- 0) Columnas de aprobación que faltan en inspections
+--    (la app escribe approval_note/approved_by/... pero la tabla desplegada
+--     no las tiene — por eso el botón de autorizar fallaba)
+-- ─────────────────────────────────────────────────────────────────────────
+ALTER TABLE public.inspections
+  ADD COLUMN IF NOT EXISTS approval_note TEXT,
+  ADD COLUMN IF NOT EXISTS approved_by UUID,
+  ADD COLUMN IF NOT EXISTS approved_by_name TEXT,
+  ADD COLUMN IF NOT EXISTS approved_by_signature TEXT,
+  ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+
+-- ─────────────────────────────────────────────────────────────────────────
 -- 1) Función que crea las notificaciones (una por usuario activo, bilingüe ES/中文)
 -- ─────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.notify_event_to_all_users()
